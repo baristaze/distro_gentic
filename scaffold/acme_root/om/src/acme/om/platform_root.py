@@ -81,7 +81,7 @@ from acme.om.exceptions import NotFound, Unavailable
 from acme.om.exec_relay import ExecRelayManagerInterface
 from acme.om.exec_relay.impl.instances import PlacedInstancesRelayedImpl
 from acme.om.exec_relay.impl.manager import ExecRelayManagerImpl, ExecRelayOptions
-from acme.om.exec_relay.impl.placement import ItemTreesImpl, PlacementClaimsRelayedImpl
+from acme.om.exec_relay.impl.placement import ItemTreesSessionsImpl, PlacementClaimsRelayedImpl
 from acme.om.exec_relay.impl.transport import TransportRelayImpl
 from acme.om.exec_relay.impl.workspaces import PlacedWorkspacesRelayedImpl
 from acme.om.hosts import HostsManagerInterface
@@ -1181,7 +1181,7 @@ class RootHooksPlatformImpl(RootHooksInterface):
             placing,
             self._work_kinds,
             self._claimant_kinds,
-            tree_of=ItemTreesImpl(
+            trees=ItemTreesSessionsImpl(
                 storage.get_agent_session_storage(), storage.get_exec_relay_storage()
             ),
         )

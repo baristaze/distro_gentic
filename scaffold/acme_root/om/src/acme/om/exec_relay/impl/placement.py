@@ -14,6 +14,7 @@ from acme.om.exec_relay.manager import ExecRelayManagerInterface
 from acme.om.exec_relay.storage import ExecRelayStorageInterface
 from acme.om.placement.kinds import PlacementWorkKind
 from acme.om.placement.manager import PlacementManagerInterface
+from acme.om.placement.trees import ItemTreesInterface
 from acme.om.placement.types.claimant import Claimant, ClaimantReport, Holding
 from acme.om.trust.placement import PlacementInterface
 from acme.om.trust.types.identities import Executor, ExecutorKind
@@ -104,13 +105,13 @@ class PlacementClaimsRelayedImpl(PlacementManagerInterface):
         return await self._inner.purge_tenant(ctx)
 
 
-class ItemTreesImpl:
-    """The root of the session tree an item serves (`placement`'s `TreeOf`),
-    which a claim reads for a person's own client: the session the item
-    names, read up to its tree's root. An instance a run made for a session
-    under an id of its own is no session: the session it is made for is the
-    one its prepare names, or the one its binding keeps. None when the item
-    names no session either reads."""
+class ItemTreesSessionsImpl(ItemTreesInterface):
+    """The root of the session tree an item serves, which a claim reads for
+    a person's own client: the session the item names, read up to its
+    tree's root. An instance a run made for a session under an id of its
+    own is no session: the session it is made for is the one its prepare
+    names, or the one its binding keeps. None when the item names no
+    session either reads."""
 
     def __init__(
         self, sessions: AgentSessionStorageInterface, storage: ExecRelayStorageInterface
@@ -118,7 +119,7 @@ class ItemTreesImpl:
         self._sessions = sessions
         self._storage = storage
 
-    async def __call__(self, org_id: UUID, item: WorkItem) -> UUID | None:
+    async def root_of(self, org_id: UUID, item: WorkItem) -> UUID | None:
         named = _named(item.payload.get("agent_session_id"))
         if named is None:
             return None

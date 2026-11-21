@@ -1,5 +1,5 @@
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from datetime import datetime, timedelta
 from uuid import UUID
 
@@ -21,6 +21,7 @@ from acme.om.placement.kinds import (
 from acme.om.placement.manager import PlacementManagerInterface
 from acme.om.placement.rules import DEFAULT_TIER, another_session, lane_cap, loop_lane
 from acme.om.placement.storage import PlacementStorageInterface
+from acme.om.placement.trees import ItemTreesInterface
 from acme.om.placement.types.claimant import (
     HOLDING_MAX,
     Claimant,
@@ -56,16 +57,10 @@ class PlacementOptions(OmBase):
         return lane_cap(lane, self.tier_shares, self.default_share)
 
 
-TreeOf = Callable[[UUID, WorkItem], Awaitable[UUID | None]]
-"""The root of the session tree an item serves, by its tenant: what a claim
-reads for a claimant that serves a session's tree. None when the item names
-no session it can read."""
-
-
 class PlacementManagerImpl(PlacementManagerInterface):
-    """`tree_of` reads an item's session tree for a claimant that serves
-    one (`Claimant.serves_tree`); without it, such a claimant is handed its
-    own session's work alone."""
+    """`trees` reads an item's session tree for a claimant that serves one
+    (`Claimant.serves_tree`); without it, such a claimant is handed its own
+    session's work alone."""
 
     def __init__(
         self,
@@ -77,7 +72,7 @@ class PlacementManagerImpl(PlacementManagerInterface):
         claimants: ClaimantKinds,
         clock: Callable[[], datetime] = utcnow,
         *,
-        tree_of: TreeOf | None = None,
+        trees: ItemTreesInterface | None = None,
     ) -> None:
         held_to(claimants, kinds)
         self._storage = storage
@@ -87,7 +82,7 @@ class PlacementManagerImpl(PlacementManagerInterface):
         self._kinds = kinds
         self._claimants = claimants
         self._clock = clock
-        self._tree_of = tree_of
+        self._trees = trees
 
     async def lane_for(self, org_id: UUID, item: WorkItem) -> str:
         if item.kind == AgentSessionWorkKind.LOOP:
@@ -130,11 +125,11 @@ class PlacementManagerImpl(PlacementManagerInterface):
     async def _root(self, org_id: UUID, claimant: Claimant, item: WorkItem) -> UUID | None:
         """The root of the item's session tree, read only for a claimant
         that serves a tree, and an item not of its session itself."""
-        if self._tree_of is None or not claimant.serves_tree:
+        if self._trees is None or not claimant.serves_tree:
             return None
         if not another_session(claimant, item):
             return None
-        return await self._tree_of(org_id, item)
+        return await self._trees.root_of(org_id, item)
 
     async def holding_for(self, claimant: Claimant, org_id: UUID) -> Holding:
         claims = claims_of(self._claimants, self._kinds, claimant)
