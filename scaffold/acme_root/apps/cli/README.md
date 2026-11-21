@@ -1,7 +1,8 @@
 # Acme CLI
 
 Acme from the terminal. A command does one thing and returns; `listen`
-stays and prints every change in the org as it happens.
+stays and prints every change in the org as it happens, and a session
+whose workspace is local is served from this machine until stopped.
 
 ```bash
 uv run acme login --org ajax        # confirm the code in the browser, on every stack
@@ -16,6 +17,8 @@ uv run acme agent-session control <id> pause     # resume, cancel, compact, unlo
 uv run acme agent-session control <id> interrupt --call <seq>   # stops the one call it names
 uv run acme agent-session decide <id> <seq> --approve
 uv run acme agent-session steps <id> --follow    # until the loop stops
+uv run acme agent-session start coder "fix the export" --workspace local   # served from here
+uv run acme agent-session attach <id>            # serve your own local session, or follow any other
 uv run acme agent-project create "the reports" github.com/octo/reports
 uv run acme agent-project credential <id> --username reader   # the token is asked for, never echoed
 uv run acme agent-project list
@@ -37,6 +40,15 @@ uv run acme logout
   API is unreachable, 5 a followed loop stopped without succeeding: it
   parked, or ended any other way. A setting the environment got wrong is
   usage.
+- `--workspace local` and `attach` serve your own session's workspace from
+  this machine through the workspace host's own claim loop, which the
+  `serve` extra installs (`acme-cli[serve]`), held to the host's
+  `ceilings.toml` in its home (`ACME_HOST_HOME`). It serves that session
+  alone, on a one-use key the API issues you, never your own credential,
+  and prints the session's steps beside. Stopping it ends its host, and
+  the session waits for the next client. Any other session, whose
+  workspace a VM, a host, or another person's client holds, is followed
+  as `steps --follow` follows it, and nothing is served.
 - The auth session lives in `$ACME_HOME/auth_session.json` (default `~/.config/acme`,
   mode 600) and goes only to the API that issued it. `ACME_TOKEN` wins over
   it. `ACME_API_URL` or `--api` names the API. `ACME_HTTP_TIMEOUT_SECONDS`,

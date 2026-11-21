@@ -8,7 +8,8 @@ This group judges where each part of a session runs and how its work
 reaches it: the kinds of work and their lanes, the session runner that
 hosts the brain, placement, the workspace host and what it holds, the
 exec relay transport that carries a tool call into a customer's wall,
-and the cloud pool's VM per session. It leaves a workspace's
+the cloud pool's VM per session, and a person's own client that serves
+their session's local workspace. It leaves a workspace's
 isolation and egress to `workspaces`, a person's commands on a workspace
 to `watch`, the four identities and how a secret is resolved to `wall`,
 and the sweep's duties to `agent-fleet`.
@@ -183,7 +184,8 @@ customer's host pool (one or more hosts inside their wall that share
 labels), in a region. A session pinned to a host pool waits, visibly,
 while no host in the pool is online. It never moves to the cloud unless
 a principal changes its placement, because a team pins a machine for a
-reason.
+reason. A local session is pinned to its own pool of one, and waits so
+while no client of its person serves it.
 
 **Source.** Placement and Workspace Hosts, Placement.
 
@@ -192,8 +194,9 @@ in its pool is online; every path that changes a session's placement.
 
 **Violation.** A session with no placement, or one placed anew at each
 loop; a pinned session that falls back to the cloud or another pool when
-its hosts are offline; a wait the session's status does not show; a
-placement changed by anything but a principal.
+its hosts are offline, a local one included while no client serves it; a
+wait the session's status does not show; a placement changed by anything
+but a principal, or by the session's start for a local one.
 
 **Severity.** medium
 
@@ -336,21 +339,27 @@ names in its request; a host handed work pinned to another pool.
 
 **Principle.** A host enforces limits its owner sets and the platform
 cannot raise: the agent projects it serves, its minimum isolation, its
-egress, the paths it lets a result read, whether it accepts people's
-commands, and the MCP servers it starts, each named whole. A compromised
-control plane still cannot widen what a host does.
+egress, the paths it lets a result read, the programs a command may
+start, whether it accepts people's commands, and the MCP servers it
+starts, each named whole. A refusal names the ceiling that refused. A
+compromised control plane still cannot widen what a host does.
 
 **Source.** Placement and Workspace Hosts, Workspace Hosts (Owner's
 ceilings); Deviations from the Guideline.
 
 **Look for.** Where the owner's ceilings are kept and checked on the
-host; every message from the control plane that could change one.
+host, a command's program among them, before anything starts; what a
+refusal says; every message from the control plane that could change
+one.
 
 **Violation.** A ceiling kept or checked only in the control plane; a
 work item, a policy, or a setting from the control plane that serves
 another agent project, lowers the minimum isolation, widens egress or
-the readable paths, turns on people's commands, or names a program, an
-argument, or a variable for a server the host starts.
+the readable paths, adds a program a command may start, turns on
+people's commands, or names a program, an argument, or a variable for a
+server the host starts; a command that starts before its program is held
+to `commands`, or that sets the search path a named program is found
+on; a refusal that does not name its ceiling.
 
 **Severity.** high
 
@@ -539,6 +548,40 @@ than one object, or with no expiry; bytes written into a workspace, or
 handed to the runner, before their digest matched; a file left in the
 store after its item settled. (A holder's call that carries bulk bytes
 is the guideline's NET-37.)
+
+**Severity.** high
+
+**Check.** review
+
+## PLC-23 A person's own client serves their local session, and follows others
+
+**Principle.** A session's workspace is local when the person who started
+it serves it from their own machine. The session is pinned to a pool of
+one of its own. Its person's client trades a one-use key, which the
+platform issues that person alone, for a host's credential of that pool,
+never the person's own, and runs the host program's claim loop, held to
+the machine's ceilings. One client serves the session at a time, and a
+client ends its host as it stops. A client attached to a session whose
+workspace a VM, a host, or another person's client holds follows it and
+serves nothing.
+
+**Source.** Placement and Workspace Hosts, Placement; Placement and
+Workspace Hosts, Workspace Hosts (A person's own client).
+
+**Look for.** How a local session is pinned, and to which pool; what
+issues a client key, to whom, for how long, and how many times it is
+traded; what a client's host carries in its identity and what its claims
+are held to; what ends an earlier client; what a client does when told
+the session is held elsewhere.
+
+**Violation.** A client that serves on the person's own credential; a key
+that enrolls twice, outlives its few minutes, or is issued for another
+person's session or one that is not local; a client's host handed
+another session's work; a local session's pool shared with the cloud
+pool's, a tenant's, or another session's; two clients serving one
+session; a client that serves a session whose workspace a VM or a host
+holds; a client that claims through a loop of its own beside the host
+program's, so a ceiling holds on one and not the other.
 
 **Severity.** high
 
