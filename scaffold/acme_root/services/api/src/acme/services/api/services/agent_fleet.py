@@ -1,5 +1,6 @@
 """The agent fleet service: the platform's operator routes, in views. An operator
-writes a tenant's fair share, reads where one of its sessions' work stands
+writes a tenant's fair share and the cloud pool's limits, and a tenant's
+own maximum of its VMs, reads where one of its sessions' work stands
 and what one of its hosts is handed, reads a session's shape, and reads which
 levers its sessions reached before they stalled; opening a session's
 content takes a grant of its own in that tenant. Every call takes
@@ -11,6 +12,12 @@ from uuid import UUID
 
 from acme.om.context import OperatorContext
 from acme.services.api.types.agent_sessions import AgentStepPageView
+from acme.services.api.types.cloud_pool import (
+    PoolLimitsView,
+    SetPoolLimitsRequest,
+    SetTenantPoolLimitRequest,
+    TenantPoolLimitView,
+)
 from acme.services.api.types.hosts import HostStandingView
 from acme.services.api.types.levers import LeverReadingView
 from acme.services.api.types.placement import AgentSessionStandingView, SetShareRequest, ShareView
@@ -22,6 +29,24 @@ class AgentFleetServiceInterface(ABC):
     async def set_share(
         self, admin: OperatorContext, org_id: UUID, body: SetShareRequest
     ) -> ShareView: ...
+
+    @abstractmethod
+    async def get_pool_limits(self, admin: OperatorContext) -> PoolLimitsView: ...
+
+    @abstractmethod
+    async def set_pool_limits(
+        self, admin: OperatorContext, body: SetPoolLimitsRequest
+    ) -> PoolLimitsView: ...
+
+    @abstractmethod
+    async def set_tenant_pool_limit(
+        self, admin: OperatorContext, org_id: UUID, body: SetTenantPoolLimitRequest
+    ) -> TenantPoolLimitView: ...
+
+    @abstractmethod
+    async def clear_tenant_pool_limit(
+        self, admin: OperatorContext, org_id: UUID
+    ) -> TenantPoolLimitView: ...
 
     @abstractmethod
     async def get_session_standing(
