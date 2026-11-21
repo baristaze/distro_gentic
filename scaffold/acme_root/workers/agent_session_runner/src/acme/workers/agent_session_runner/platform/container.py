@@ -137,7 +137,7 @@ def build_runner_platform(
         storage,
         options=MatrixOptions(environment=settings.environment),
         clients=lambda: trust.managers.provider_clients,
-        kinds=ports.kinds.agents,
+        kinds=ports.kinds.agent_kinds,
     )
     agent_playbooks = AgentPlaybooksLayer(storage)
     agent_knowledge = AgentKnowledgeLayer(storage)

@@ -315,7 +315,7 @@ def seed_platform_of(args: argparse.Namespace) -> int:
                 container.storage,
                 container.managers,
                 owner,
-                PRODUCT_KINDS.agents,
+                PRODUCT_KINDS.agent_kinds,
                 forge=container.integrations.get_integration(FORGE),
             )
         finally:

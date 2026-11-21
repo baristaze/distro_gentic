@@ -1,8 +1,9 @@
 """A product's parts, declared once in `PRODUCT_KINDS`, reach every process
 that builds the managers, each built as its binary builds it: the API's
-container starts a session of the product's own kind, the session runner
-runs it, its tool reading a manager the runner built, and the maintenance
-worker knows the kind too. An agent playbook a person invokes into that session
+container starts a session of the product's own kind, declared alone or
+as its folder, the session runner runs it, its tool reading a manager the
+runner built, and the maintenance worker knows the kind too. A folder's
+manual reaches the model, first in the session's standing text. An agent playbook a person invokes into that session
 through the API holds in the runner: its brief reaches the model, and its
 gate refuses the product's tool. The roots are memory and the local infra,
 the model is scripted, and nothing is passed to any `build` but its
@@ -35,6 +36,7 @@ from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.services.api import container as api_container
 from acme.services.api.app import create_app
 from acme.services.api.container import AppContainer
+from acme.services.api.kinds.assistant.kind import ASSISTANT
 from acme.services.api.seed import seed_platform
 from acme.services.api.settings import ApiSettings
 from acme.workers.agent_session_runner import container as runner_container
@@ -45,7 +47,7 @@ from acme.workers.maintenance import container as maintenance_container
 from acme.workers.maintenance.container import WorkerContainer
 from acme.workers.maintenance.settings import MaintenanceSettings
 
-from contracts.product import LEDGER, ReadTitleImpl, ledger_product
+from contracts.product import LEDGER, LEDGER_MANUAL, ReadTitleImpl, ledger_folder, ledger_product
 
 TITLE = "the ledger that will not balance"
 PURGE = "postgresql+asyncpg://acme_purge@127.0.0.1:1/acme"
@@ -60,16 +62,20 @@ class Processes:
     runner: RunnerContainer
     maintenance: WorkerContainer
     read: list[str]
+    folder: bool
 
 
-@pytest.fixture
-def processes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Processes:
+@pytest.fixture(params=["alone", "folder"])
+def processes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest
+) -> Processes:
     """Each process's container from its `build`, as its binary calls it,
-    with `PRODUCT_KINDS` the product's and the database, the infra, and
-    the providers swapped for memory, the local infra, and the scripted
-    models, each one root the processes share, as they share the
-    deployment's."""
+    with `PRODUCT_KINDS` the product's, its kind declared alone or as its
+    folder, and the database, the infra, and the providers swapped for
+    memory, the local infra, and the scripted models, each one root the
+    processes share, as they share the deployment's."""
     read: list[str] = []
+    folder = ledger_folder(tmp_path / "kinds") if request.param == "folder" else None
     storage = StorageMemoryImpl()
     infra = InfraLocalImpl(tmp_path)
     providers = IntegrationsOverImpl(IdentityProviderTwinImpl(), scripted_model_providers())
@@ -78,7 +84,7 @@ def processes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Processes:
         return providers
 
     for module in (api_container, runner_container, maintenance_container):
-        monkeypatch.setattr(module, "PRODUCT_KINDS", ledger_product(read))
+        monkeypatch.setattr(module, "PRODUCT_KINDS", ledger_product(read, folder))
         monkeypatch.setattr(module, "InfraConfiguredImpl", lambda _: infra)
         monkeypatch.setattr(module, "IntegrationsConfiguredImpl", integrations)
     monkeypatch.setattr(api_container, "postgres_storage", lambda _: storage)
@@ -99,6 +105,7 @@ def processes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Processes:
             )
         ),
         read=read,
+        folder=folder is not None,
     )
 
 
@@ -123,6 +130,9 @@ async def test_a_products_kind_starts_through_the_api_and_runs_in_the_runner(
     processes: Processes, client: httpx.AsyncClient
 ) -> None:
     api = processes.api
+    # A product that declares a kind of its own, alone or as its folder, is
+    # offered none of the example's.
+    assert ASSISTANT.name not in {kind.name for kind in api.managers.kinds.kinds}
     owner, org = await api.managers.tenancy.bootstrap(
         seed_request(), "Ajax", "ajax", "ann@example.test", "Ann"
     )
@@ -176,6 +186,8 @@ async def test_a_products_kind_starts_through_the_api_and_runs_in_the_runner(
 
     assert processes.read == [TITLE], "the product's tool ran in the runner, reading its manager"
     assert status == AgentSessionStatus.IDLE.value
+    standing = [block.text for block in twin.calls[0].system if LEDGER_MANUAL in block.text]  # pyright: ignore[reportAttributeAccessIssue]
+    assert len(standing) == (1 if processes.folder else 0), "a folder's manual reaches the model"
 
 
 async def run_until_idle(

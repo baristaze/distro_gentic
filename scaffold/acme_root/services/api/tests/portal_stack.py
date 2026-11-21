@@ -61,7 +61,9 @@ def scene_kinds() -> ProductKinds:
             "tools": (*ANALYSIS_KIND.tools, ASK_PERSON),
         }
     )
-    return ProductKinds(agents=(*PRODUCT_KINDS.agents, software_engineer, analysis))
+    return ProductKinds(
+        agents=(*PRODUCT_KINDS.agents, software_engineer, analysis), folders=PRODUCT_KINDS.folders
+    )
 
 
 def scene_container(settings: ApiSettings) -> AppContainer:

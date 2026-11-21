@@ -2,13 +2,18 @@
 `PRODUCT_KINDS`: an agent kind of its own, a tool that reads a manager,
 and the authorization class that tool declares beside the platform's."""
 
+import json
 from collections.abc import Callable
 from datetime import timedelta
+from pathlib import Path
+from types import ModuleType
 
+from acme.om.agents.prompts import LOCK, PROMPTS, digest
 from acme.om.agents.types.kind import NO_AGENT_WORKSPACE, AgentKind, DoneRule, TreeLimits
 from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.base import OmBase
 from acme.om.context import TenantContext
+from acme.om.platform_agents.folders import MANUALS, KindFolder, folder_of
 from acme.om.platform_agents.tools.base import NativeToolImpl
 from acme.om.platform_root import PlatformManagers, ProductKinds
 from acme.om.tools.tool import ToolInterface, ToolRuntime
@@ -77,10 +82,33 @@ LEDGER = AgentKind(
 """The product's own kind: it reads through its tool and answers."""
 
 
-def ledger_product(read: list[str]) -> ProductKinds:
-    """The product's parts, its tool keeping each title it read in `read`."""
+LEDGER_MANUAL = "Name the ledger's account for every total you give."
+"""The manual the product's kind ships in its folder."""
+
+
+def ledger_folder(where: Path) -> KindFolder:
+    """The product's kind as a product keeps it, a folder of its own under
+    `where`: its prompt pinned in its lock, and one manual."""
+    folder = where / LEDGER.name
+    (folder / PROMPTS).mkdir(parents=True)
+    (prompt,) = LEDGER.prompts
+    (folder / PROMPTS / "v1.md").write_text(prompt + "\n", encoding="utf-8")
+    (folder / PROMPTS / LOCK).write_text(json.dumps({"v1.md": digest(prompt)}), encoding="utf-8")
+    (folder / MANUALS).mkdir()
+    (folder / MANUALS / "answers.md").write_text(LEDGER_MANUAL + "\n", encoding="utf-8")
+    module = ModuleType(LEDGER.name)
+    module.__file__ = str(folder / "kind.py")
+    module.VERSIONS = (LEDGER,)  # pyright: ignore[reportAttributeAccessIssue]
+    return folder_of(module)
+
+
+def ledger_product(read: list[str], folder: KindFolder | None = None) -> ProductKinds:
+    """The product's parts, its tool keeping each title it read in `read`;
+    its kind declared alone, or as `folder` when one is given."""
 
     def tools(managers: Callable[[], PlatformManagers]) -> tuple[ToolInterface, ...]:
         return (ReadTitleImpl(managers, read),)
 
-    return ProductKinds(agents=(LEDGER,), tools=tools, classes=(LEDGER_CLASS,))
+    if folder is None:
+        return ProductKinds(agents=(LEDGER,), tools=tools, classes=(LEDGER_CLASS,))
+    return ProductKinds(folders=(folder,), tools=tools, classes=(LEDGER_CLASS,))
