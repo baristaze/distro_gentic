@@ -118,11 +118,11 @@ def run() -> None:
 
 def host_agent(settings: Settings, client_for: ClientFactory | None = None) -> HostAgent:
     """The host `settings` and its owner's ceilings make, not yet started:
-    the executor of the relay over its own transports and workspaces, held
-    to its owner's commands, and the agent that claims for it, which calls
-    through `client_for`, or the platform `settings` name. A VM of the
-    cloud pool, and a client that serves one session, are made here as
-    any host is, so its ceilings and every wall stay one."""
+    the executor of the relay over its own transports and workspaces, and
+    the agent that claims for it, which calls through `client_for`, or the
+    platform `settings` name. A VM of the cloud pool, and a client that
+    serves one session's tree, are made here as any host is, so its
+    ceilings and every wall stay one."""
     agents: list[HostAgent] = []
     workspaces = host_workspaces(settings)
     # A VM of the cloud pool keeps no snapshot store: its pool keeps
@@ -145,7 +145,6 @@ def host_agent(settings: Settings, client_for: ClientFactory | None = None) -> H
         # The servers the owner names, each started for one call with a
         # credential from the host's own store.
         servers=HostServers(owner.mcp_servers, SecretsLocalImpl(settings.secrets_path)),
-        commands=owner.commands,
     )
     agent = HostAgent(
         settings,

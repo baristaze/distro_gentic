@@ -9,14 +9,7 @@ from uuid import uuid4
 
 import pytest
 
-from acme.apps.host.ceilings import (
-    Ceilings,
-    HostServer,
-    ask_of,
-    command_refusal,
-    load,
-    refusals,
-)
+from acme.apps.host.ceilings import Ceilings, HostServer, ask_of, load, refusals
 from acme.apps.host.config import BadSetting
 from acme.client.types.hosts import ClaimedWorkView, IsolationMode
 
@@ -84,36 +77,6 @@ def test_the_owners_file_is_read_and_a_missing_one_starts_nothing(tmp_path: Path
         path.write_text(wrong)
         with pytest.raises(BadSetting):
             load(path)
-
-
-def test_the_owner_names_the_programs_a_command_starts_and_none_runs_unless_named(
-    tmp_path: Path,
-) -> None:
-    path = tmp_path / "ceilings.toml"
-    path.write_text("")
-    assert load(path).commands == frozenset(), "none unless the owner names them"
-    path.write_text('commands = ["git", "/usr/bin/python3"]\n')
-    assert load(path).commands == frozenset({"git", "/usr/bin/python3"})
-    path.write_text('commands = "all"\n')
-    assert load(path).commands is None
-    for wrong in ('commands = "git"\n', 'commands = ["bin/git"]\n', 'commands = [""]\n'):
-        path.write_text(wrong)
-        with pytest.raises(BadSetting):
-            load(path)
-    request = {"argv": ["git", "status"], "env": [], "secrets": []}
-    assert command_refusal(None, request) is None
-    assert command_refusal(frozenset({"git"}), request) is None
-    assert command_refusal(frozenset(), request) == (
-        "commands: 'git' is not among this host's commands"
-    )
-    for unreadable in ({}, {"argv": []}, {"argv": "git"}):
-        assert command_refusal(frozenset({"git"}), unreadable) == (
-            "commands: a command that names no program"
-        )
-    by_secret = {**request, "secrets": [{"name": "token", "env": "PATH"}]}
-    assert command_refusal(frozenset({"git"}), by_secret) == (
-        "commands: a command that sets PATH, where 'git' is found"
-    )
 
 
 def test_the_owner_names_each_mcp_server_whole_and_nothing_else_starts(tmp_path: Path) -> None:

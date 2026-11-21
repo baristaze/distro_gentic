@@ -115,8 +115,8 @@ async def relay_to(
     flush_seconds: float = 0.0,
     servers: HostServers | None = None,
     window_chars: int = 32_000,
-    commands: frozenset[str] | None = None,
     readable: tuple[str, ...] | None = None,
+    min_isolation: HostMode = HostMode.directory,
 ) -> Relayed:
     """A host of the tenant's pool that holds a session's workspace, a
     directory it runs commands in through the engine's local transport, and
@@ -125,9 +125,8 @@ async def relay_to(
     host reaches the platform through it, and with `now` it reads its time.
     It sends what a command prints at once, or `flush_seconds` apart or
     `window_chars` at a time, and starts the MCP servers `servers` names.
-    Its owner names the programs a command may start in `commands`, any
-    with None, and the paths it reads in `readable`, its workspace's
-    directory unless named."""
+    Its owner names the paths it reads in `readable`, its workspace's
+    directory unless named, and its minimum isolation in `min_isolation`."""
     pool = await api.pool()
     where = tmp_path / "workspace"
     where.mkdir()
@@ -143,16 +142,14 @@ async def relay_to(
         window_chars=window_chars,
         renew_seconds=0.2,
         servers=servers,
-        commands=commands,
     )
     host = HostAgent(
         api.settings(tmp_path / "home", await api.token(pool.id)),
         Ceilings(
             agent_projects=None if serves is None else frozenset({serves}),
-            min_isolation=HostMode.directory,
+            min_isolation=min_isolation,
             egress=frozenset(),
             readable=(str(where),) if readable is None else readable,
-            commands=commands,
         ),
         probes(HostMode.directory),
         lambda token: ApiClient(
@@ -434,14 +431,13 @@ async def test_an_item_past_the_hosts_ceilings_is_refused_at_once(relayed: Relay
     assert getattr(refused.value, "code", None) == "refused_by_host"
 
 
-async def test_a_command_past_the_owners_commands_or_paths_is_refused_by_name_before_it_runs(
+async def test_a_command_past_the_owners_paths_or_isolation_is_refused_by_name_before_it_runs(
     api: Stack, tmp_path: Path
 ) -> None:
-    relayed = await relay_to(api, tmp_path, commands=frozenset({"echo", "sh"}))
-    marker = tmp_path / "workspace" / "ran"
+    marker = tmp_path / "ran"
 
-    async def refused(argv: tuple[str, ...], env: tuple[tuple[str, str], ...] = ()) -> str:
-        spec = command(relayed.epoch, *argv).model_copy(update={"env": env})
+    async def refused(relayed: Relayed) -> str:
+        spec = command(relayed.epoch, "sh", "-c", f"touch {marker}")
         waiting = asyncio.ensure_future(relayed.runner.run(relayed.workspace, spec, seal=NO_SEAL))
         await claims(relayed.host, waiting)
         with pytest.raises(Exception) as refusal:
@@ -449,34 +445,17 @@ async def test_a_command_past_the_owners_commands_or_paths_is_refused_by_name_be
         assert getattr(refusal.value, "code", None) == "refused_by_host"
         return str(refusal.value)
 
-    # A program its owner does not name never starts, and the refusal names
-    # the ceiling; a path to a named one is no name it holds.
-    assert "commands: 'touch' is not among this host's commands" in await refused(
-        ("touch", str(marker))
-    )
-    assert "commands: '/bin/sh' is not among this host's commands" in await refused(
-        ("/bin/sh", "-c", f"touch {marker}")
-    )
-    # A named program found on a search path the command sets is refused.
-    assert "commands: a command that sets PATH" in await refused(
-        ("sh", "-c", f"touch {marker}"), env=(("PATH", str(tmp_path)),)
-    )
-    assert not marker.exists()
-    # One it names runs.
-    ran = await run_on(relayed.host, api, relayed.workspace.id, DIRECTORY, "echo", "named")
-    assert (ran.exit_code, ran.stdout) == (0, "named\n")
-
     # A workspace whose directory its owner does not let a result read: its
     # call is refused at the claim, by the ceiling's name, and runs nothing.
-    (tmp_path / "other").mkdir()
-    elsewhere = await relay_to(
-        api, tmp_path / "other", commands=frozenset({"sh"}), readable=("/srv/work",)
+    (tmp_path / "paths").mkdir()
+    elsewhere = await relay_to(api, tmp_path / "paths", readable=("/srv/work",))
+    assert "readable: a read outside this host's readable paths" in await refused(elsewhere)
+    # A directory, on a host whose owner asks a container at the least.
+    (tmp_path / "isolation").mkdir()
+    weaker = await relay_to(api, tmp_path / "isolation", min_isolation=HostMode.container)
+    assert "min_isolation: isolation directory below this host's minimum" in await refused(
+        weaker
     )
-    spec = command(elsewhere.epoch, "sh", "-c", f"touch {marker}")
-    waiting = asyncio.ensure_future(elsewhere.runner.run(elsewhere.workspace, spec, seal=NO_SEAL))
-    await claims(elsewhere.host, waiting)
-    with pytest.raises(Exception, match="readable: a read outside this host's readable paths"):
-        await waiting
     assert not marker.exists()
 
 

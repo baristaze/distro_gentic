@@ -1,9 +1,8 @@
 """The owner's ceilings: limits the host's owner sets in a file on the host
 and the platform cannot raise. The agent projects it serves, its minimum
-isolation, its egress, the paths it lets a result read, the programs a
-command may start, whether it accepts people's commands, how many items
-it runs at once, and the MCP servers it starts, each by the name a
-tenant's connector calls it. They
+isolation, its egress, the paths it lets a result read, whether it
+accepts people's commands, how many items it runs at once, and the MCP
+servers it starts, each by the name a tenant's connector calls it. They
 are read from `ceilings.toml` at startup,
 held frozen, and changed by nothing the platform sends: no call answers
 with them and no item carries them, so a compromised control plane still
@@ -13,16 +12,13 @@ Every item a host claims is read as an ask (`ask_of`) and held to them
 before anything runs. A field an item leaves out is read as the widest
 ask it could make: no agent project, no isolation, open egress, a person's
 command. So an item is refused unless it says what it needs and that fits.
-A command is held to `commands` once the host reads what it runs
-(`command_refusal`), still before anything runs. Each refusal names the
-ceiling that refused, as the file names it.
+Each refusal names the ceiling that refused, as the file names it.
 
 ```toml
 agent_projects = ["0192f1a4-6c1e-7a51-9b0c-2f8e5d4c3b2a"]   # or "all"
 min_isolation = "container"                           # vm, container, or directory
 egress = ["github.com:443", "pypi.org:443"]           # or "open"
 readable = ["/srv/work"]
-commands = ["git", "python3", "pytest"]                # or "all"
 people_commands = false
 items_at_once = 4
 
@@ -35,9 +31,7 @@ credential_env = "TRACKER_TOKEN"
 ```
 
 A server is named here whole, its program, its arguments, and its
-environment, so an item names a server and nothing it runs. A program in
-`commands` is a name the host's search path finds, or a path, and a
-command starts only a program the list names as the command names it.
+environment, so an item names a server and nothing it runs.
 """
 
 import posixpath
@@ -72,12 +66,6 @@ host, so only the tenant fence applies."""
 
 
 SERVER_NAME = re.compile(r"^[a-z][a-z0-9_-]{0,63}$")
-PROGRAM = re.compile(r"^(/[^/\0]+)+$|^[^/\0]+$")
-"""A program `commands` names: a name the search path finds, or an
-absolute path to it."""
-SEARCH_PATH = "PATH"
-"""The variable a name is found on, which a command may not set while
-the owner names its programs."""
 ENV_NAME = re.compile(r"^[A-Z_][A-Z0-9_]*$")
 SERVER_KEYS = frozenset({"command", "args", "env", "cwd", "credential", "credential_env"})
 
@@ -106,7 +94,6 @@ class Ceilings:
     min_isolation: IsolationMode = IsolationMode.container
     egress: frozenset[str] | None = frozenset()
     readable: tuple[str, ...] = ()
-    commands: frozenset[str] | None = frozenset()
     people_commands: bool = False
     items_at_once: int = 4
     mcp_servers: Mapping[str, HostServer] = field(default_factory=lambda: MappingProxyType({}))
@@ -145,7 +132,6 @@ def load(path: Path) -> Ceilings:
         "min_isolation",
         "egress",
         "readable",
-        "commands",
         "people_commands",
         "items_at_once",
         "mcp_servers",
@@ -168,10 +154,6 @@ def load(path: Path) -> Ceilings:
     readable = tuple(_strings(raw.get("readable", []), "readable"))
     if not all(posixpath.isabs(path) for path in readable):
         raise BadSetting("ceilings: every readable path is absolute")
-    commands_raw = raw.get("commands", [])
-    commands = None if commands_raw == ALL else frozenset(_strings(commands_raw, "commands"))
-    if commands is not None and not all(PROGRAM.fullmatch(program) for program in commands):
-        raise BadSetting("ceilings: each of commands is a program's name or its absolute path")
     people = raw.get("people_commands", False)
     if not isinstance(people, bool):
         raise BadSetting("ceilings: people_commands is true or false")
@@ -185,7 +167,6 @@ def load(path: Path) -> Ceilings:
         min_isolation=min_isolation,
         egress=egress,
         readable=tuple(posixpath.normpath(path) for path in readable),
-        commands=commands,
         people_commands=people,
         items_at_once=at_once,
         mcp_servers=_servers(raw.get("mcp_servers", {})),
@@ -319,41 +300,3 @@ def refusals(
     if ask.by_person and not ceilings.people_commands:
         found.append("people_commands: a person's command, which this host does not accept")
     return found
-
-
-def command_refusal(commands: frozenset[str] | None, request: Mapping[str, Any]) -> str | None:
-    """Why the host will not start the command `request` runs, led by the
-    ceiling's name; None when `commands` lets it start, or names no list
-    (None, the owner's "all"). Its program is `argv`'s first word, taken as
-    the command names it: a name the list holds, found on the host's search
-    path, which the command may not set, or a path the list holds. Read
-    before anything runs, and widest where the request is unreadable."""
-    if commands is None:
-        return None
-    argv = request.get("argv")
-    if not isinstance(argv, list) or not argv or not isinstance(argv[0], str):
-        return "commands: a command that names no program"
-    program = argv[0]
-    if program not in commands:
-        return f"commands: {program!r} is not among this host's commands"
-    if "/" not in program and SEARCH_PATH in _variables(request):
-        return f"commands: a command that sets {SEARCH_PATH}, where {program!r} is found"
-    return None
-
-
-def _variables(request: Mapping[str, Any]) -> set[str]:
-    """The variables a command sets: its own pairs, and the ones its
-    secrets land in. One it names unreadably reads as the search path."""
-    names: set[str] = set()
-    env, secrets = request.get("env", []), request.get("secrets", [])
-    if not isinstance(env, list) or not isinstance(secrets, list):
-        return {SEARCH_PATH}
-    for pair in env:
-        names.add(
-            pair[0] if isinstance(pair, list) and pair and isinstance(pair[0], str) else SEARCH_PATH
-        )
-    for use in secrets:
-        landed = use.get("env") if isinstance(use, Mapping) else SEARCH_PATH
-        if landed is not None:
-            names.add(landed if isinstance(landed, str) else SEARCH_PATH)
-    return names

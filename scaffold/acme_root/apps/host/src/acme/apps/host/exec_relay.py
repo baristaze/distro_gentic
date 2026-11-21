@@ -53,7 +53,7 @@ from pydantic import ValidationError
 
 from acme.apps.host.agent import ExecutorInterface
 from acme.apps.host.bases import BaseUnbuilt, HostBases
-from acme.apps.host.ceilings import Ask, command_refusal
+from acme.apps.host.ceilings import Ask
 from acme.apps.host.mcp import HostServers
 from acme.apps.host.objects import HostObjects, PartRefused, Spooled, removed
 from acme.apps.host.snapshots import HostSnapshots, SnapshotHeldSecret, SnapshotLost
@@ -208,10 +208,7 @@ class ExecutorRelayImpl(ExecutorInterface):
     fails to take is tried again within the lease, after a wait that starts
     at a quarter of a renewal's period and doubles, never past the lease, as
     a transfer of an object is. A transfer spools under `spool`, the host's
-    own folder for it, or a temporary one made as it is first needed.
-    `commands` is its owner's list of the programs a command may start,
-    None for any: a command past it is refused once its detail is read,
-    before anything runs (`ceilings.command_refusal`)."""
+    own folder for it, or a temporary one made as it is first needed."""
 
     def __init__(
         self,
@@ -224,7 +221,6 @@ class ExecutorRelayImpl(ExecutorInterface):
         kept_whole: frozenset[IsolationMode] = frozenset(),
         broker: CredentialBrokerInterface | None = None,
         servers: HostServers | None = None,
-        commands: frozenset[str] | None = None,
         base_options: Mapping[str, Any] | None = None,
         spool: Path | None = None,
         flush_seconds: float = 0.25,
@@ -247,7 +243,6 @@ class ExecutorRelayImpl(ExecutorInterface):
         self._kept_whole = kept_whole
         self._broker = broker
         self._servers = servers
-        self._commands = commands
         self._flush_seconds = flush_seconds
         self._window_chars = window_chars
         self._renew_seconds = renew_seconds
@@ -339,11 +334,6 @@ class ExecutorRelayImpl(ExecutorInterface):
         if differs is not None:
             why = "this host refused it: " + differs
             return detail, Ended(_result(refused=("refused_by_host", 403), detail=why))
-        if detail.request.get("operation") == "run":
-            past = command_refusal(self._commands, detail.request)
-            if past is not None:
-                why = "this host refused it: " + past
-                return detail, Ended(_result(refused=("refused_by_host", 403), detail=why))
         if detail.request.get("operation") == MCP_CALL:
             return detail, await self._call_server(running, detail)
         transport = self._transports.get(spec.mode)

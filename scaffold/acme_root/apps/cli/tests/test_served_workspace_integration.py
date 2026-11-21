@@ -145,7 +145,6 @@ def machine(
             {IsolationMode.HOST: AgentWorkspaceHostImpl(root)},
             flush_seconds=0.0,
             renew_seconds=0.2,
-            commands=frozenset({"pwd"}),
         )
         agent = HostAgent(
             settings,
@@ -154,7 +153,6 @@ def machine(
                 min_isolation=HostMode.directory,
                 egress=None,
                 readable=(str(root),),
-                commands=frozenset({"pwd"}),
             ),
             probes(HostMode.directory),
             api.client,
