@@ -450,7 +450,9 @@ def test_a_kind_names_who_starts_it_and_a_person_alone_by_default() -> None:
     )
 
 
-async def test_a_person_never_starts_a_kind_only_an_agent_starts(managers: Managers) -> None:
+async def test_a_person_never_starts_a_kind_only_an_agent_starts(
+    managers: PlatformManagers,
+) -> None:
     ctx = context(Role.MEMBER)
     asked = Start(id=new_id(), kind="underling", title="reproduce it")
 
@@ -465,7 +467,9 @@ async def test_a_person_never_starts_a_kind_only_an_agent_starts(managers: Manag
     assert (await managers.agents.spawn(ctx, root.id, spawn("underling"))).kind == "underling"
 
 
-async def test_a_handoff_never_starts_a_kind_only_an_agent_starts(managers: Managers) -> None:
+async def test_a_handoff_never_starts_a_kind_only_an_agent_starts(
+    managers: PlatformManagers,
+) -> None:
     ctx = context(Role.MEMBER)
     source = await start(managers, ctx, "assistant")
     handoff = Handoff(id=new_id(), kind="underling", title="fix it", objective="fix the total")
@@ -477,7 +481,7 @@ async def test_a_handoff_never_starts_a_kind_only_an_agent_starts(managers: Mana
         await managers.agent_sessions.get_agent_session(ctx, handoff.id)
 
 
-async def test_a_spawn_never_starts_a_kind_only_a_person_starts(managers: Managers) -> None:
+async def test_a_spawn_never_starts_a_kind_only_a_person_starts(managers: PlatformManagers) -> None:
     ctx = context(Role.MEMBER)
     root = await start(managers, ctx)
 
