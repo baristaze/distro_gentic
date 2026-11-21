@@ -29,7 +29,8 @@ from acme.om.agent_root import LOCAL
 from acme.om.agent_workspaces.impl.executor import ExecutorOptions
 from acme.om.agent_workspaces.impl.manager import AgentWorkspacesOptions
 from acme.om.base import new_id
-from acme.om.cloud_pool.impl.manager import SIZES, CloudPoolOptions
+from acme.om.cloud_pool.impl.manager import CloudPoolOptions
+from acme.om.cloud_pool.types.sizes import SIZES, PoolSizes
 from acme.om.connectors.impl.manager import ConnectorsOptions
 from acme.om.connectors.root import build_connectors
 from acme.om.context import AppContext, AppType, RequestContext
@@ -92,7 +93,7 @@ def cloud_pool_options(settings: InfraSettings) -> CloudPoolOptions:
         prefix=settings.vm_prefix,
         image=settings.cloud_pool_image,
         vm_image=settings.vm_image,
-        sizes=settings.cloud_pool_sizes or dict(SIZES),
+        sizes=PoolSizes.model_validate(sizes) if (sizes := settings.cloud_pool_sizes) else SIZES,
         api_url=settings.cloud_pool_api_url,
         boot=timedelta(seconds=settings.vm_boot_timeout_seconds),
     )

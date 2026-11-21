@@ -58,6 +58,7 @@ from acme.om.cloud_pool.exceptions import VmUnbound
 from acme.om.cloud_pool.impl.manager import CloudPoolManagerImpl, CloudPoolOptions
 from acme.om.cloud_pool.rules import new_key, seed, snapshots_of
 from acme.om.cloud_pool.storage.impl.memory import CloudPoolStorageMemoryImpl
+from acme.om.cloud_pool.types.sizes import PoolSizes
 from acme.om.cloud_pool.types.vm import PoolVm
 from acme.om.context import AppContext, AppType, RequestContext, Role, TenantContext
 from acme.om.exceptions import InvalidCredential
@@ -191,7 +192,7 @@ class Pool:
         page: int = 1000,
         most: int | None = None,
         tenant_most: int | None = None,
-        sizes: dict[VmSize, MachineType] | None = None,
+        sizes: PoolSizes | None = None,
     ) -> None:
         # Only the limits a test names, so the options' own stand otherwise.
         named = {"most": most, "tenant_most": tenant_most, "sizes": sizes}
@@ -389,7 +390,7 @@ async def test_a_spec_asking_m_gets_a_vm_of_the_type_its_deployment_maps_m_to(
     await pool.manager.sweep(stage())
     await pool.manager.close()
     (warm,) = await pool.rows()
-    small = pool.options.sizes[VmSize.S]
+    small = pool.options.sizes.s
     assert pool.vms.vms[warm.name].spec.machine_type == small.name, "warm at the default size"
 
     agent_session_id = new_id()
@@ -397,7 +398,8 @@ async def test_a_spec_asking_m_gets_a_vm_of_the_type_its_deployment_maps_m_to(
     (row,) = [row for row in await pool.rows() if row.agent_session_id == agent_session_id]
     assert row.id != warm.id, "a warm VM serves the default size alone"
     started = pool.vms.vms[row.name].spec
-    medium = pool.options.sizes[VmSize.M]
+    medium = pool.options.sizes.m
+    assert medium is not None
     assert (started.machine_type, started.cpus, started.memory_mb) == (
         medium.name,
         medium.cpus,
@@ -409,7 +411,7 @@ async def test_a_spec_asking_m_gets_a_vm_of_the_type_its_deployment_maps_m_to(
 async def test_a_size_the_deployment_does_not_allow_is_refused_for_good_before_any_start(
     tmp_path: Path, ctx: TenantContext
 ) -> None:
-    pool = Pool(tmp_path, sizes={VmSize.S: MachineType(name="m7g.large", cpus=2, memory_mb=8192)})
+    pool = Pool(tmp_path, sizes=PoolSizes(s=MachineType(name="m7g.large", cpus=2, memory_mb=8192)))
     await pool.image()
     made = len(pool.vms.calls)
     with pytest.raises(IsolationRefused) as refused:

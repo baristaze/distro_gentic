@@ -46,7 +46,7 @@ from acme.infra.agent_workspaces import (
 )
 from acme.infra.exceptions import InfraException
 from acme.infra.observability import CLOUD_POOL_BOOT_SECONDS
-from acme.infra.vms import MachineType, SeedsInterface, VmsInterface, VmSpec, VmState
+from acme.infra.vms import SeedsInterface, VmsInterface, VmSpec, VmState
 from acme.om.agent_workspaces.placed import PlacedWorkspacesInterface
 from acme.om.agent_workspaces.types.snapshot import KeptSnapshot
 from acme.om.base import EMPTY_UUID, OmBase, new_id, utcnow
@@ -70,6 +70,7 @@ from acme.om.cloud_pool.rules import (
 from acme.om.cloud_pool.storage import CloudPoolStorageInterface
 from acme.om.cloud_pool.types.erasure import PoolErasure
 from acme.om.cloud_pool.types.limits import MOST_VMS, Full, PoolLimits
+from acme.om.cloud_pool.types.sizes import SIZES, PoolSizes
 from acme.om.cloud_pool.types.vm import PoolVm, VmSnapshot
 from acme.om.context import Permission, RequestContext, TenantContext
 from acme.om.exceptions import InvalidCredential
@@ -90,14 +91,6 @@ FULL_CAUSES = {
 }
 """What a session's park says when a maximum holds its claim: never a
 count, and never another tenant's use."""
-
-SIZES = {
-    VmSize.XS: MachineType(name="m7g.medium", cpus=1, memory_mb=4096),
-    VmSize.S: MachineType(name="m7g.large", cpus=2, memory_mb=8192),
-    VmSize.M: MachineType(name="m7g.xlarge", cpus=4, memory_mb=16384),
-}
-"""The sizes a deployment allows where it names none: the cloud pool
-module's own map."""
 
 SessionGone = Callable[[UUID, UUID], Awaitable[bool]]
 """Whether a tenant's session is gone, deleted or purged, or its tenant is:
@@ -122,7 +115,7 @@ class CloudPoolOptions(OmBase):
     # Each size a session's spec may ask by name, and the machine it starts:
     # the deployment's map, whose types are the only ones its role may
     # launch. A size it does not name is refused for good.
-    sizes: dict[VmSize, MachineType] = Field(default_factory=lambda: dict(SIZES))
+    sizes: PoolSizes = SIZES
     # How long a VM serves its session across runs: past it, its run's end
     # lets it go, its work kept, and the next loop starts another.
     max_age: timedelta = Field(default=timedelta(hours=72), gt=timedelta(0))
@@ -148,15 +141,6 @@ class CloudPoolOptions(OmBase):
     def _warm_below_most(self) -> Self:
         if self.warm and self.warm >= self.most:
             raise ValueError("the warm VMs stand below the most the pool holds")
-        return self
-
-    @model_validator(mode="after")
-    def _the_default_size_is_allowed(self) -> Self:
-        if DEFAULT_SIZE not in self.sizes:
-            raise ValueError(
-                f"the sizes name {DEFAULT_SIZE.value}, which a spec that asks none, "
-                "and every warm VM, starts"
-            )
         return self
 
 
@@ -229,7 +213,9 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         spec: IsolationSpec,
         restore: KeptSnapshot | None = None,
     ) -> AgentWorkspace:
-        why = refusal(spec, closes_egress=self._vms.closes_egress(), sizes=self._options.sizes)
+        why = refusal(
+            spec, closes_egress=self._vms.closes_egress(), sizes=self._options.sizes.allowed()
+        )
         if why is not None:
             # Composed from what the spec declares: the session reads it.
             raise IsolationRefused(why, cause=why)
@@ -756,7 +742,8 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         """A VM of `size`, as the deployment's map names it: its machine
         type for a cloud that starts types, its cpus and its memory for one
         that holds them."""
-        machine = self._options.sizes[size]
+        machine = self._options.sizes.of(size)
+        assert machine is not None  # a size not allowed is refused before
         return VmSpec(
             image=self._options.vm_image,
             cpus=machine.cpus,
