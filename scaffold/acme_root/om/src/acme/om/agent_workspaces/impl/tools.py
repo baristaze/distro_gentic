@@ -98,7 +98,7 @@ class PinnedToolsOptions(OmBase):
     # keep a snapshot of it.
     snapshot_wait: timedelta = Field(default=timedelta(minutes=10), gt=timedelta(0))
     # How long a VM of the cloud pool may take to pack its workspace's
-    # directory, or to unpack one into it.
+    # directory, or to unpack one into it once its parts are written.
     pack_within: timedelta = Field(default=timedelta(minutes=10), gt=timedelta(0))
 
 
@@ -737,7 +737,7 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface, PinnedWorkspacesInt
                 snapshots.parts(ctx, agent_session_id, manifest),
                 epoch=epoch,
                 within=self._pack_within,
-                now=self._clock(),
+                clock=self._clock,
             )
         except BaseException:
             try:

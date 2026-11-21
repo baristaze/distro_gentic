@@ -9,12 +9,14 @@ starts from the pool's image and holds the same files, and nothing of what
 was written outside the directory. A directory past the bound is refused
 before it is packed. An archive that fails part way keeps no part, the
 snapshot before stays the latest, and its VM stays; a restore that fails
-part way lets its new VM go and touches nothing kept. The sweep removes
+part way lets its new VM go and touches nothing kept. A restore whose
+parts take longer to move than the pack's bound still unpacks, its bound
+counted from the unpack's start. The sweep removes
 the archives of a session idle past 30 days, by its last activity, and
 keeps a newer one's."""
 
 import asyncio
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -44,7 +46,10 @@ from acme.infra.vms import VmState
 from acme.om.agent_steps.types.agent_step import AgentStep, AgentStepType
 from acme.om.agent_steps.types.header import AgentWorkspaceSnapshot, SnapshotHeader, SnapshotHolds
 from acme.om.agent_workspaces.impl.pool_directory import KEPT as PACKS
-from acme.om.agent_workspaces.impl.tools import ToolsManagerAgentWorkspacesImpl
+from acme.om.agent_workspaces.impl.tools import (
+    PinnedToolsOptions,
+    ToolsManagerAgentWorkspacesImpl,
+)
 from acme.om.agent_workspaces.types.host import HostOffer
 from acme.om.base import new_id, utcnow
 from acme.om.cloud_pool.impl.manager import CloudPoolOptions
@@ -143,7 +148,13 @@ class Kept:
     """A platform's loop whose sessions of a VM run on the cloud pool, over
     the twin, and the platform's tools over it, as the runner wires them."""
 
-    def __init__(self, tmp_path: Path, *, bound: int | None = None) -> None:
+    def __init__(
+        self,
+        tmp_path: Path,
+        *,
+        bound: int | None = None,
+        clock: Callable[[], datetime] = utcnow,
+    ) -> None:
         self.infra = FlakyInfra(tmp_path / "infra")
         options = ToolsOptions(snapshot_part_bytes=PART)
         if bound is not None:
@@ -181,6 +192,7 @@ class Kept:
             cloud=self.pool.manager,
             transport=self.transport,
             record_seal=Plain(),
+            clock=clock,
         )
 
     @property
@@ -223,6 +235,16 @@ class Kept:
     async def history(self, agent_session_id: UUID) -> list[AgentWorkspaceSnapshot]:
         steps = await self.loop.history(agent_session_id)
         return [named(step) for step in steps if step.type is AgentStepType.SNAPSHOTTED]
+
+
+class Ahead:
+    """The real clock, moved ahead by the time a case says has passed."""
+
+    def __init__(self) -> None:
+        self.by = timedelta(0)
+
+    def __call__(self) -> datetime:
+        return utcnow() + self.by
 
 
 def named(step: AgentStep) -> AgentWorkspaceSnapshot:
@@ -368,6 +390,38 @@ async def test_a_restore_that_fails_part_way_lets_its_vm_go_and_touches_nothing_
 
     restored, _ = await kept.prepared(agent_session_id, restore=snapshot)
     assert (Path(restored.location) / "notes.txt").read_text() == PLAIN
+
+
+async def test_a_restore_whose_parts_move_longer_than_the_bound_still_unpacks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clock = Ahead()
+    kept = Kept(tmp_path, clock=clock)
+    await kept.pool.image()
+    agent_session_id = await kept.loop.start(KEEPER.name)
+    workspace, epoch = await kept.prepared(agent_session_id)
+    written(workspace, PLAIN)
+    snapshot = await kept.kept(workspace, epoch)
+    # The relay's commands read the same clock, and each part's write moves
+    # it by a quarter of the bound.
+    monkeypatch.setattr("acme.infra.transports.local.utcnow", clock)
+    monkeypatch.setattr("acme.infra.transports.processes.utcnow", clock)
+    within = PinnedToolsOptions().pack_within
+    write = kept.transport.write_file
+
+    async def slow(workspace: AgentWorkspace, path: str, data: bytes, epoch: int) -> None:
+        await write(workspace, path, data, epoch)
+        clock.by += within / 4
+
+    monkeypatch.setattr(kept.transport, "write_file", slow)
+
+    restored, _ = await kept.prepared(agent_session_id, restore=snapshot)
+
+    assert clock.by > within, "the parts took longer to move than the bound"
+    directory = Path(restored.location)
+    assert (directory / "notes.txt").read_text() == PLAIN
+    assert (directory / "deep" / "more.txt").read_text() == PLAIN[::-1]
+    assert not (directory / PACKS).exists(), "no part left in the directory"
 
 
 # The sweep removes a session's archives once it is idle past 30 days.

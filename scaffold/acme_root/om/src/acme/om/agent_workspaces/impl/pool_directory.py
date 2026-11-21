@@ -15,12 +15,14 @@ A pack measures the directory by the bytes its files hold and refuses one
 past the bound before tar starts, naming both. It is one tar archive,
 measured before any byte of it leaves, and read out in parts, one relayed
 read each, from its offset. A restore writes the parts into `KEPT`, one
-relayed write each, then empties the directory around them and unpacks
-them into it in order. Each runs as the VM's root where its user may
+relayed write each, each bounded as any relayed write is, then empties
+the directory around them and unpacks them into it in order: the
+unpack's bound counts from its own start, so a large archive's move
+never spends it. Each runs as the VM's root where its user may
 become root without a password; elsewhere, as its user, and a file that
 user cannot read refuses the pack."""
 
-from collections.abc import AsyncGenerator, AsyncIterable
+from collections.abc import AsyncGenerator, AsyncIterable, Callable
 from datetime import datetime, timedelta
 
 from acme.infra.agent_workspaces import AgentWorkspace, DirectoryPack, SnapshotRefused
@@ -156,18 +158,19 @@ async def unpack(
     *,
     epoch: int,
     within: timedelta,
-    now: datetime,
+    clock: Callable[[], datetime],
 ) -> None:
     """The workspace's directory emptied and filled from the archive whose
     bytes `parts` hold in order: each part written into `KEPT`, then
-    unpacked. An error `parts` raises ends it and is raised as it is; what
-    it wrote stays for its caller, whose VM goes with it."""
+    unpacked within `within` of the time `clock` reads once the last part
+    is written. An error `parts` raises ends it and is raised as it is;
+    what it wrote stays for its caller, whose VM goes with it."""
     count = 0
     async for part in parts:
         await transport.write_file(workspace, part_path(count), part, epoch)
         count += 1
     ended = await _run(
-        ctx, transport, record_seal, workspace, UNPACK, str(count), epoch, within, now
+        ctx, transport, record_seal, workspace, UNPACK, str(count), epoch, within, clock()
     )
     _completed(ended, "unpack", within)
 
