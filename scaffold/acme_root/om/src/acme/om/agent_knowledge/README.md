@@ -30,9 +30,10 @@ of](../../../../README.md).
   is written again instead.
 - **Recall.** The reviewed entries whose every trigger word appears in
   what a session is about arrive in it, once each, at its next model
-  call, and the version of each is recorded. A session recalls as it starts: when its first loop prepares the
-  workspace, its title and what its principals said so far are what it
-  is about, and its first model call reads what they trigger.
+  call, and the version of each is recorded. A session recalls as it
+  starts: before its first loop's first model call, its title and what
+  its principals said so far are what it is about, and that call reads
+  what they trigger.
 - **Search and read.** An agent searches the entries its session reaches
   by the words they share with a query, and reads one by its slug, when
   it needs to (the [agents' tools](../platform_agents/README.md)); the
@@ -52,10 +53,11 @@ of](../../../../README.md).
 - **Every row belongs to one org,** and goes with the org.
 
 <!-- agents-only
-The recall at start is the tools layer `root.AgentKnowledgeLayer`,
-around `prepare_agent_workspace`, for a session with no model request yet
-(`AgentSession.speaker` is None). A root that runs loops wraps its tools
-in it, and hands `AgentKnowledgeLayer.manager` to `PlatformRootOptions` as
+The recall at start is the loop's hooks `root.AgentKnowledgeLayer`
+builds, in `before_first_call`, for a session with no model request yet
+(`AgentSession.speaker` is None). A root that runs loops wraps its loop's
+hooks in them (`AgentKnowledgeLayer.loop_hooks`), and hands
+`AgentKnowledgeLayer.manager` to `PlatformRootOptions` as
 `agent_knowledge`, for the agents' tools. A session's agent project is
 read from the agent projects' rows (`SessionAgentProjectsInterface`),
 never from a call's input; storage bounds every read to it
