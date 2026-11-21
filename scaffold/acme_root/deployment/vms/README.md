@@ -22,7 +22,7 @@ The files here make the image every such VM starts from.
   the hypervisor's channel; in the cloud it is the instance's first-boot
   data, which [`acme-vm-seed`](acme-vm-seed) reads at each boot.
 - **Its home**, on `/run/acme-host`: its credential lives in memory, so
-  the disk the pool snapshots holds none.
+  the VM's disk holds none.
 
 No database login, no model key, no credential of the platform's, and no
 instance role.

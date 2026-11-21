@@ -1026,7 +1026,7 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
         )
 
     async def purge_tenant(self, ctx: TenantContext) -> int:
-        # A deleted tenant's VMs, and every disk the pool kept of them,
-        # go with it.
+        # A deleted tenant's VMs, and the pool's records of its sessions'
+        # archives, go with it.
         vms = 0 if self._cloud is None else await self._cloud.purge_tenant(ctx)
         return vms + await self._inner.purge_tenant(ctx)

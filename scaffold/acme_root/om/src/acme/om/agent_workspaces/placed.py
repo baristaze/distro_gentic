@@ -40,7 +40,7 @@ class PlacedWorkspacesInterface(ABC):
         pool that holds it; None for a session of the cloud, which this
         process prepares itself. With `pooled`, the session's pool of one in
         the cloud pool, it is the workspace the host of the session's
-        VM holds: the pool keeps the VM's snapshots, never its
+        VM holds: the platform keeps the VM's snapshots, never its
         host, so no host of it is asked to advertise any. `IsolationRefused` while no live host of
         its pool holds it: a host of the pool is asked to prepare it, and
         the loop waits on the resource with the call that reached the

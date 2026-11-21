@@ -489,31 +489,37 @@ host other than the one that holds its workspace.
 of its own, which runs the host program and pulls its work through the
 exec relay. Its host trades a one-use key for a credential of the
 session's own pool, and is handed that session's work alone. It holds no
-database credential, no model key, no history, and no cloud role, and
-its key and its credential never reach its disk. Its egress is closed
-outside its guest, to the gateway and what its session's egress allows.
-Its whole disk is the session's snapshot, kept while the session lives;
-a VM with no host stops. Every path that starts a VM has the
-one that lets it go.
+database credential, model key, history, or cloud role, and its key and
+credential never reach its disk. Its egress is closed outside its guest.
+A session kept by snapshots keeps its directory sealed under its key in
+the object store, 30 days by default past its last activity, and no
+disk is imaged. A VM with no host stops; every path that starts a VM
+lets it go.
 
 **Source.** Placement and Workspace Hosts, The Cloud Pool.
 
 **Look for.** How a VM's host gets its credential and what its
 claims are held to; what a VM's image, its settings, its seed, and
-its role hold; the network rules a VM starts in; what ends before a
-VM's disk is kept; each path that starts a VM and the one that
+its role hold; the network rules a VM starts in; what a run's end
+keeps of a VM, where, and under whose key, and what the pool's role
+may copy of a disk; what a restore starts its VM from, and what it
+lets go when it fails; each path that starts a VM and the one that
 lets it go, the sweep's among them; what a VM with no host to work
-for comes to; where a revocation's erasure runs.
+for comes to; what removes a session's archives, and when.
 
 **Violation.** A VM's host enrolled with a tenant's token, or handed
 another session's work; a database credential, a model key, a platform
 secret, or a cloud role in a VM; a key or a live credential on a
-disk the pool keeps; egress closed by a rule inside the guest, or open
-to more than the gateway and the session's egress; the platform calling
-into a VM; a VM that nothing lets go, warm or bound; a VM
-that runs with no host; a disk a live session's VM ran on destroyed
-by the sweep; an erasure asked where no VM is reached and never
-finished.
+disk; egress closed by a rule inside the guest, or open to more than
+the gateway and the session's egress; the platform calling into a VM;
+an image or a volume snapshot of a VM's disk, made by the pool or
+allowed by its role; a session's files kept outside its key's seal, or
+sent before their size was checked; a failed archive whose parts
+remain, or a failed restore that changes what is kept or leaves its VM
+half-restored; a VM that nothing lets go, warm or bound; a VM that runs
+with no host; a disk a live session's VM ran on destroyed by the
+sweep; a session's archives kept past their bound after its last
+activity, or removed while it is active.
 
 **Severity.** high
 
@@ -634,7 +640,7 @@ for good, with its cause, before the loop's first model call. Warm VMs
 are the default size. A VM past its maximum age goes at its run's end
 once its work is kept, never under a running loop; a warm one goes at
 the sweep.
-Each cold start records its time from its start to its host's
+Each cold start, of the pool's image, records its time to its host's
 enrollment; a warm claim records none.
 
 **Source.** Placement and Workspace Hosts, The Cloud Pool.

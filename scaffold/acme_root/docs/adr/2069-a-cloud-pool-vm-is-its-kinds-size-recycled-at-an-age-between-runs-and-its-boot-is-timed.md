@@ -65,8 +65,9 @@ its loops a busy one.
 
 **A cold start's boot is a metric.** When a VM's host enrolls, a VM that
 its session's claim started records `acme_cloud_pool_boot_seconds`, from
-its row's start to the enrollment, labelled by what it booted: `image`
-or `snapshot`. A warm claim records none, since its boot was over before
+its row's start to the enrollment; every VM boots the pool's image
+([ADR 2070](2070-the-cloud-pool-keeps-a-sessions-files-sealed-never-a-disk.md)).
+A warm claim records none, since its boot was over before
 the claim, and so does a VM started again on its own disk. The row
 tells them apart: a cold start is bound to its session as its row is
 written, a warm VM at its claim, and a start again at its new start. The
