@@ -583,6 +583,10 @@ record still holds a place; an idle warm VM that keeps a claim that
 cannot take it waiting at the maximum; a host handed its session's work
 before it holds the workspace.
 
+**Severity.** high
+
+**Check.** review
+
 ## PLC-24 A person's own client serves their local session, and follows others
 
 **Principle.** A session's workspace is local when the person who
