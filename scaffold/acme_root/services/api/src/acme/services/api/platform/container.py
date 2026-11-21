@@ -33,6 +33,7 @@ from acme.om.matrix.impl.resolver import MatrixOptions
 from acme.om.matrix.root import MatrixLayer
 from acme.om.park_alerts.root import build_park_alerts
 from acme.om.platform_agents.catalog import PlatformAgents
+from acme.om.platform_agents.shipped import SHIPPED
 from acme.om.platform_root import (
     PlatformManagers,
     PlatformPorts,
@@ -113,11 +114,14 @@ def build_platform_api(
     ports = ports or PlatformPorts()
     held: list[IntakeManagerInterface] = []
     streams = QuestionStreamsImpl()
-    # The example assistant, where the environment offers it and the product
-    # declares no kind; its tool reads the media manager the root below builds.
-    example_kinds, example_tools = offered(
-        settings.environment, ports.kinds.agent_kinds, lambda: managers.media
+    # The example assistant, where the environment offers it and neither the
+    # product's kinds nor the platform's agents take its place: the platform
+    # ships a kind of its own that answers in the request, and a tool of the
+    # example's name. Its tool reads the media manager the root below builds.
+    declared = (
+        ports.kinds.agent_kinds if platform_agents is None else (*SHIPPED, *ports.kinds.agent_kinds)
     )
+    example_kinds, example_tools = offered(settings.environment, declared, lambda: managers.media)
     # A start makes each session with its kind manual.
     agent_playbooks = AgentPlaybooksLayer(storage)
     agent_knowledge = AgentKnowledgeLayer(storage)

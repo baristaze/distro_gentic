@@ -86,3 +86,6 @@ in place, inside `/v1`, as ADR 2063 moves a route.
   tenant asks to cap support by project.
 - A request that dies mid-loop leaves its session pending, and nothing
   wakes it until its person asks again.
+- A local or staging stack that ships the platform's agents offers the
+  support assistant in place of the example assistant of ADR 1044, whose
+  read tool shares a name with the platform's own.

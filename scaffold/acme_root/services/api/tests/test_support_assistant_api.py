@@ -3,8 +3,10 @@ in the request that asks it. A question starts its session, the loop runs
 here, its readers read the tenant's agent knowledge and agent automations,
 and the answer streams back as it is written; no work item is written. Its
 model call holds the kind's own tools and nothing a loop hook attached.
-A park ends the stream with its cause, and the next question runs. The
-loop runs in-process, over the memory storage and the scripted model."""
+A local stack that ships the platform's agents offers the support
+assistant in place of the example assistant, whose tool shares a name with
+the platform's. The loop runs in-process, over the memory storage and the
+scripted model."""
 
 import json
 from pathlib import Path
@@ -27,6 +29,7 @@ from acme.om.platform_agents.kinds.support_assistant.kind import SUPPORT_ASSISTA
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.work.storage.impl.memory import WorkStorageMemoryImpl
 from acme.services.api.container import AppContainer
+from acme.services.api.kinds.assistant.kind import ASSISTANT as EXAMPLE
 from acme.services.api.settings import ApiSettings
 
 from contracts.loops import call, reply, said
@@ -118,3 +121,27 @@ async def test_a_question_to_the_support_assistant_reads_and_streams_its_answer_
     assert sorted(tool.name for tool in first.tools) == sorted(SUPPORT_ASSISTANT_KIND.tools)
     session = await client.get(f"/v1/agent-sessions/{agent_session_id}", headers=owner)
     assert session.json()["kind"] == kinds.SUPPORT_ASSISTANT
+
+
+def test_a_local_stack_that_ships_the_platforms_agents_offers_no_example_beside_them(
+    tmp_path: Path,
+) -> None:
+    settings = ApiSettings.model_validate({"_env_file": None, "environment": "local"})
+
+    shipped = AppContainer.over(
+        settings,
+        StorageMemoryImpl(),
+        InfraLocalImpl(tmp_path),
+        IntegrationsOverImpl(IdentityProviderTwinImpl(), scripted_model_providers()),
+        platform_agents=PlatformAgents(corpus=CORPUS),
+    )
+    bare = AppContainer.over(
+        settings,
+        StorageMemoryImpl(),
+        InfraLocalImpl(tmp_path),
+        IntegrationsOverImpl(IdentityProviderTwinImpl(), scripted_model_providers()),
+    )
+
+    names = {kind.name for kind in shipped.managers.kinds.kinds}
+    assert kinds.SUPPORT_ASSISTANT in names and EXAMPLE.name not in names
+    assert EXAMPLE.name in {kind.name for kind in bare.managers.kinds.kinds}
