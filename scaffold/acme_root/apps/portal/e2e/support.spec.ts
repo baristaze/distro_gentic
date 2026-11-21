@@ -1,8 +1,8 @@
 // The support dock beside a parked session, on the stack the timeline check
 // runs (`portal_stack.py`), with the scripted provider playing the support
-// scene (`portal_check.py script <path> --scene support`): the support
-// assistant searches its corpus, then answers with a link to a page of the
-// portal and a link to another site, in the request that asks it.
+// scene (`portal_check.py script <path> --scene support`), paced: the
+// support assistant searches its corpus, then answers with a link to a page
+// of the portal and a link to another site, in the request that asks it.
 // `portal_check.py tree` writes the parked session. "?" opens the dock, the
 // session's pane folds to its rail, the answer streams in while Send waits
 // for it, the answer's portal link is a chip that opens its page in the main
@@ -86,6 +86,13 @@ test("support beside a parked session: the pane folds first, the answer streams 
   await field.fill("Why is this session parked?");
   await send.click();
   await expect(field).toHaveValue("");
+  const streamed = dock.locator(".acme-prose[data-live]");
+  await expect(streamed).toBeVisible({ timeout: 30_000 });
+  await expect(dock.getByText("Answering")).toBeVisible();
+  await expect(send).toBeDisabled();
+  console.log(`streaming: ${(await streamed.innerText()).slice(0, 60)}`);
+  await shoot(owner, "dock-streaming");
+  await expect(streamed).toHaveCount(0, { timeout: 30_000 });
   await expect(dock).toContainText(ANSWER);
   await expect(dock.getByText("Answering")).toHaveCount(0);
   await expect(dock.locator(".acme-dock-stopped")).toHaveCount(0);
