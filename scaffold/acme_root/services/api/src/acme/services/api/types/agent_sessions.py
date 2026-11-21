@@ -360,14 +360,15 @@ class WorkspacePlace(StrEnum):
 class StartAgentSessionRequest(RequestBody):
     """A session to start on the latest version of a kind the product runs,
     in an agent project of the caller's tenant. Outside a local stack a session
-    starts in an agent project or not at all. `local` pins it to a pool of
-    one of its own, which only its person's client serves; a kind that asks
-    for no workspace is refused it."""
+    starts in an agent project or not at all. Its workspace is the cloud's
+    unless `workspace` says `local`, which pins it to a pool of one of its
+    own that only its person's client serves; a kind that asks for no
+    workspace is refused it."""
 
     kind: str = Field(min_length=1, max_length=MAX_KIND)
     title: str = Field(min_length=1, max_length=MAX_TITLE)
     agent_project_id: UUID | None = None
-    workspace: WorkspacePlace = WorkspacePlace.CLOUD
+    workspace: WorkspacePlace | None = None
 
 
 class MessageRequest(RequestBody):

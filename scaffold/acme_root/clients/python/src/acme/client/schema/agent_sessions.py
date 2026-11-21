@@ -444,9 +444,10 @@ class StartAgentSessionRequest(BaseModel):
     """
     A session to start on the latest version of a kind the product runs,
     in an agent project of the caller's tenant. Outside a local stack a session
-    starts in an agent project or not at all. `local` pins it to a pool of
-    one of its own, which only its person's client serves; a kind that asks
-    for no workspace is refused it.
+    starts in an agent project or not at all. Its workspace is the cloud's
+    unless `workspace` says `local`, which pins it to a pool of one of its
+    own that only its person's client serves; a kind that asks for no
+    workspace is refused it.
     """
 
     model_config = ConfigDict(
@@ -455,7 +456,7 @@ class StartAgentSessionRequest(BaseModel):
     agent_project_id: Annotated[UUID | None, Field(title='Agent Project Id')] = None
     kind: Annotated[str, Field(max_length=200, min_length=1, title='Kind')]
     title: Annotated[str, Field(max_length=200, min_length=1, title='Title')]
-    workspace: WorkspacePlace | None = WorkspacePlace.cloud
+    workspace: WorkspacePlace | None = None
 
 
 class ToolCallView(BaseModel):

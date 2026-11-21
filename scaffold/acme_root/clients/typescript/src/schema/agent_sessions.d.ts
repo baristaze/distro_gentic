@@ -1045,9 +1045,10 @@ export interface components {
          * StartAgentSessionRequest
          * @description A session to start on the latest version of a kind the product runs,
          *     in an agent project of the caller's tenant. Outside a local stack a session
-         *     starts in an agent project or not at all. `local` pins it to a pool of
-         *     one of its own, which only its person's client serves; a kind that asks
-         *     for no workspace is refused it.
+         *     starts in an agent project or not at all. Its workspace is the cloud's
+         *     unless `workspace` says `local`, which pins it to a pool of one of its
+         *     own that only its person's client serves; a kind that asks for no
+         *     workspace is refused it.
          */
         StartAgentSessionRequest: {
             /** Agent Project Id */
@@ -1056,8 +1057,7 @@ export interface components {
             kind: string;
             /** Title */
             title: string;
-            /** @default cloud */
-            workspace: components["schemas"]["WorkspacePlace"];
+            workspace?: components["schemas"]["WorkspacePlace"] | null;
         };
         /**
          * StopReason

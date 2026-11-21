@@ -1123,7 +1123,7 @@
       },
       "StartAgentSessionRequest": {
         "additionalProperties": false,
-        "description": "A session to start on the latest version of a kind the product runs,\nin an agent project of the caller's tenant. Outside a local stack a session\nstarts in an agent project or not at all. `local` pins it to a pool of\none of its own, which only its person's client serves; a kind that asks\nfor no workspace is refused it.",
+        "description": "A session to start on the latest version of a kind the product runs,\nin an agent project of the caller's tenant. Outside a local stack a session\nstarts in an agent project or not at all. Its workspace is the cloud's\nunless `workspace` says `local`, which pins it to a pool of one of its\nown that only its person's client serves; a kind that asks for no\nworkspace is refused it.",
         "properties": {
           "agent_project_id": {
             "anyOf": [
@@ -1150,8 +1150,14 @@
             "type": "string"
           },
           "workspace": {
-            "$ref": "#/components/schemas/WorkspacePlace",
-            "default": "cloud"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkspacePlace"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
