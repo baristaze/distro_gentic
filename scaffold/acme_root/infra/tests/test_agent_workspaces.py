@@ -30,6 +30,7 @@ from datetime import timedelta
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from acme.infra.agent_workspaces import (
     AgentWorkspace,
@@ -41,6 +42,7 @@ from acme.infra.agent_workspaces import (
     IsolationRefused,
     IsolationSpec,
     ResourceLimits,
+    VmSize,
 )
 from acme.infra.agent_workspaces import account as accounts
 from acme.infra.agent_workspaces.account import AgentWorkspaceAccountImpl, Switch, switch_to
@@ -55,7 +57,7 @@ from acme.infra.agent_workspaces.container import (
 from acme.infra.agent_workspaces.host import AgentWorkspaceHostImpl
 from acme.infra.agent_workspaces.network import CAFileUnreadable, HostNetwork
 from acme.infra.agent_workspaces.twin import AgentWorkspaceNullImpl, AgentWorkspaceTwinImpl
-from acme.infra.base import new_id, utcnow
+from acme.infra.base import InfraModel, new_id, utcnow
 from acme.infra.docker import DockerReply
 from acme.infra.docker import docker as docker_cli
 from acme.infra.exceptions import BackendFailed
@@ -689,6 +691,30 @@ def test_an_allowlist_names_its_hosts_and_no_other_egress_does() -> None:
         EgressPolicy(mode=EgressMode.ALLOWLIST)
     with pytest.raises(ValueError):
         EgressPolicy(mode=EgressMode.OPEN, hosts=("pypi.org",))
+
+
+class LimitsWithNoSize(InfraModel):
+    """The limits as a host reads them when its model has no size: the
+    three limits, and a refusal of any field it does not know."""
+
+    cpus: float | None = None
+    memory_mb: int | None = None
+    processes: int | None = None
+
+
+def test_a_size_crosses_the_wire_only_when_a_spec_asks_one() -> None:
+    unsized = spec(IsolationMode.CONTAINER, NONE, cpus=1)
+    wire = unsized.model_dump(mode="json")
+    assert "size" not in wire["limits"] and '"size"' not in unsized.model_dump_json()
+    assert LimitsWithNoSize.model_validate(wire["limits"]).cpus == 1
+    assert IsolationSpec.model_validate(wire) == unsized
+
+    sized = IsolationSpec(mode=IsolationMode.VM, egress=NONE, limits=ResourceLimits(size=VmSize.M))
+    wire = sized.model_dump(mode="json")
+    assert wire["limits"]["size"] == "m"
+    assert IsolationSpec.model_validate(wire).limits.size is VmSize.M
+    with pytest.raises(ValidationError, match="size"):
+        LimitsWithNoSize.model_validate(wire["limits"])
 
 
 def test_the_absent_workspace_is_the_none_mode() -> None:
