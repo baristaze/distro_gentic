@@ -101,13 +101,13 @@ module, as step 3 says.
 
 | File | Change |
 |------|--------|
-| `om/src/<name>/om/platform_agents/kinds/__init__.py` | `<KIND>`, any tool name constant it adds, and its line in the module docstring |
+| `om/src/<name>/om/platform_agents/kinds/__init__.py` | `<KIND>`, any tool name constant it adds, and its line in the module docstring; and each new version whose workspace starts from its agent project's workspace base, by its name and version, in `WORKSPACE_BASE_KINDS` (step 2) |
 | `om/src/<name>/om/platform_agents/shipped.py` | the kind's module imported, `from <name>.om.platform_agents.kinds.<kind> import kind as <kind>`, and named in `FOLDERS`, after the platform's others, so `SHIPPED` holds its versions |
-| `om/src/<name>/om/platform_agents/kinds/<parent>/kind.py` and its `prompts/` (a kind a spawn starts, whose parent lacks what step 4 says) | the parent's next version, holding the kind's tools and any paragraph of its prompt step 4 asks for, beside its last in `VERSIONS`, with its prompt file and its lock entry (step 2); the tests below take that version as they take the kind's |
+| `om/src/<name>/om/platform_agents/kinds/<parent>/kind.py` and its `prompts/` (a kind a spawn starts, whose parent lacks what step 4 says) | the parent's next version, holding the kind's tools and any paragraph of its prompt step 4 asks for, beside its last in `VERSIONS`, with its prompt file and its lock entry, and in `WORKSPACE_BASE_KINDS` when its last version is (step 2); the tests below take that version as they take the kind's |
 | `om/src/<name>/om/platform_agents/tools/<toolset>.py` (a tool of its own) | `<Tool>Impl(NativeToolImpl)`, its input, and its output, in the module of its toolset |
 | `om/src/<name>/om/platform_agents/catalog.py` (a tool of its own) | the tool in `with_shipped`, in `own_specs` and in `own` |
-| `om/tests/unit/test_platform_agents.py` | the kind in `test_every_shipped_agent_is_a_profile_that_sets_its_powers`, the cases of step 5, each of its versions in `NAMED_ONE_BY_ONE` with the tools it names one by one, since `test_each_shipped_kind_built_from_toolsets_renders_the_tool_block_it_named_one_by_one` holds that set equal to `SHIPPED`, and its latest version in `RENDERED`, the digest of its request's tools, with its profile in the loop of `test_each_shipped_kind_renders_its_versions_bytes_with_a_break_after_its_prompt`: run that test once with `-vv`, since a shorter report cuts the digest short, and pin the digest its failure prints |
-| `om/tests/unit/test_kind_folders.py` | each new version in `SETTINGS`, the digest of its settings: run `test_each_shipped_version_keeps_the_settings_it_was_released_with` once with `-vv`, and pin the digest its failure prints for the version |
+| `om/tests/unit/test_platform_agents.py` | the kind in `test_every_shipped_agent_is_a_profile_that_sets_its_powers`, the cases of step 5, each of its versions in `NAMED_ONE_BY_ONE` with the tools it names one by one, since `test_each_shipped_kind_built_from_toolsets_renders_the_tool_block_it_named_one_by_one` holds that set equal to `SHIPPED`, and its latest version in `RENDERED`, the digest of its request's tools, with its profile in the loop of `test_each_shipped_kind_renders_its_versions_bytes_with_a_break_after_its_prompt`. That test renders each kind's latest version alone, so a parent's next version takes its last version's entry, and it stops at the first kind whose entry is missing or differs: give each new entry a placeholder digest, `"pending"`, run the test with `-vv`, since a shorter report cuts the digest short, pin the digest its failure prints, and run it again until it passes |
+| `om/tests/unit/test_kind_folders.py` | each new version in `SETTINGS`, the digest of its settings, the kind's and a parent's next version alike; a released version's entry never changes: run `test_each_shipped_version_keeps_the_settings_it_was_released_with` once with `-vv`, and pin the digest its failure prints for each new version |
 | `om/tests/unit/test_platform_agents.py` (a kind a spawn starts) | its name in `SPAWNED_KINDS`, and its profile and its share in the list of kinds that name one in `test_every_shipped_kind_a_spawn_can_start_names_a_share`, which holds every other latest version to name none |
 | `om/tests/unit/test_matrix.py` (with `--roles`) | the case of step 5 for its roles |
 | `om/tests/contracts/matrix.py` (with `--roles`) | `CATCH_ALL` and the default roles of `publish` serve the kind's roles, since a role added to a shipped kind joins the required set of every version, and the unit and integration matrix suites refuse a default publish that lacks it |
@@ -189,22 +189,54 @@ module, as step 3 says.
    paragraph, and its own lock entry (step 7). The last version's prompt
    file and lock entry never change, and both versions stay in
    `VERSIONS` while a session may run the last. A kind only this work
-   wrote changes in place, its prompt file and its lock entry with it,
-   and so does who may start a kind, which only a start of its latest
-   version reads.
+   wrote changes in place, its prompt file and its lock entry with it.
+   Who may start a released kind is no exception: `SETTINGS`, in
+   `om/tests/unit/test_kind_folders.py`, holds every field a version
+   sets but its prompt, `started_by` among them, and a released
+   version's entry there never changes, so a kind whose starters change
+   takes its next version, and `SETTINGS` gains that version's digest.
+   A next version of a kind whose last version is in
+   `WORKSPACE_BASE_KINDS` (`kinds/__init__.py`) joins it, by its name
+   and version: the workspaces manager looks a session's kind up there
+   to start its workspace from its agent project's workspace base, and
+   the gate passes with a version left out.
 3. A kind names its tools by name and holds no more power than they and
-   its policy layer give. A tool the tree has is named by its constant.
+   its policy layer give. `--tools` names tools, and the profile takes
+   them two ways. A toolset of the platform's (`TOOLSETS` in
+   `kinds/__init__.py`) whose every tool the kind may call goes in its
+   `toolsets`, as the reviewer takes `AGENT_KNOWLEDGE_TOOLSET` for
+   `search_agent_knowledge` and `read_agent_knowledge`. A tool whose
+   toolset the kind does not take whole, and a tool of its own, go in
+   its `tools` alone, each by its constant, as the reviewer names
+   `COMMENT`. A kind that calls tools also takes `TOOL_OUTPUTS_TOOLSET`,
+   whether or not `--tools` names `read_tool_output`: a result too long
+   for its window, or one elided once read, is kept outside it under a
+   notice that names that tool. The latest software engineer, analysis,
+   reviewer, and ops analyst hold it.
    A tool the platform ships for it is a `NativeToolImpl` in the module
    of its toolset under `tools/`, or of the toolset it is closest to
    when it is in none, shape `ReadSessionImpl` (`tools/records.py`) for
    a read and `HandOffToSoftwareEngineerImpl` (`tools/handoff.py`) for a
-   spawn, registered in `with_shipped`. The engine's
-   `agentic-scaffold-tool` holds what a tool's spec, target, and
-   failures must be; follow it where it is installed, and the shapes in
-   `tools/` either way, except that a
-   product's class takes its ceiling in `PRODUCT_KINDS.ceilings` (step
-   1). Its test goes in its toolset's
-   `om/tests/unit/test_platform_tools_<toolset>.py`.
+   spawn, registered in `with_shipped`. Closest is by what the tool
+   reads or changes, never by which tool wrote it: a reader of the
+   tenant's records (its sessions and what each holds, what they wait
+   on, its agent projects, its agent automations) goes in
+   `tools/records.py`, even of the validation runs `validate` writes; a
+   reader of a workspace's files in `tools/files.py`; of a pull request
+   in `tools/review.py`; of hosts and spend in `tools/operations.py`.
+   The new tool joins no toolset, so the kind names it alone.
+   The engine's `agentic-scaffold-tool` holds what a tool's reach, spec,
+   target, preflight, and failures must be, and its test's cases: follow
+   its steps 1 to 6 where it is installed, and the shapes in `tools/`
+   either way. Of its step 6's cases, the outward one is for an outward
+   call alone, and the crash one for an `idempotent` or `unsafe` effect
+   alone. This skill's paths stand in for its tables: the tool goes in
+   `tools/<toolset>.py`, never `tools/native/`, and its test in
+   `om/tests/unit/test_platform_tools_<toolset>.py`, made when its
+   toolset has none yet, never `test_tool_<tool>.py`. This skill's
+   steps stand in for its steps 7 and 8: the kinds name the tool as
+   above, and a product's class takes its ceiling in
+   `PRODUCT_KINDS.ceilings` (step 1).
    A `result_tool` kind names its result tool among its tools.
 4. The profile sets its powers: `isolation` is `WORKSPACE` or
    `NO_AGENT_WORKSPACE`, and its `policy` is `allowing(...)` the classes
@@ -225,7 +257,9 @@ module, as step 3 says.
    and, when its prompt must say when to start the kind, a paragraph
    that says it.
    A parent that lacks any of them gets its next version holding them,
-   as step 2 says. Ask for that version; unattended, write it and name
+   as step 2 says: with its own prompt file, lock entry, and `SETTINGS`
+   entry, and in `WORKSPACE_BASE_KINDS` when its last version is, as
+   the software engineer's is. Ask for that version; unattended, write it and name
    it in the output. When no shipped kind is named its parent, none
    changes: a product's lead starts it, as one starts the reviewer.
 5. The tests hold, over `SHIPPED`, with the helpers of
@@ -264,10 +298,16 @@ module, as step 3 says.
    - What a session should not have to rediscover goes in
      `wiki/<slug>.md`, `<slug>` lowercase words joined by hyphens: a
      header between two `---` lines, `title: <one line>` and
-     `trigger: <word>, <word>`, every word one that must appear in what
-     a session is about for it to be recalled, then a blank line and
-     the text, at most `MAX_TEXT` characters. Its sessions read it by
-     `<kind>/<slug>`, and a session of another kind never reaches it.
+     `trigger: <word>, <word>`, then a blank line and the text, at most
+     `MAX_TEXT` characters. A session recalls the entry only when every
+     word of its trigger appears in what it is about, each word of a
+     phrase included: `flaky, check` recalls a session about a flaky
+     check, and not one about a flaky test. The field has no way to say
+     either word: words that are alternatives, as `flaky` and
+     `intermittent` are, each take an entry of their own, under a slug
+     of its own, with that one word as its trigger. Its sessions read
+     it by `<kind>/<slug>`, and a session of another kind never reaches
+     it.
    - Neither names a tool the kind's latest version does not hold, nor
      says to retry with no bound: the lever checks read both, and a
      finding fails the gate.
