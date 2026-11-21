@@ -33,9 +33,10 @@ never the setup's.
 
 What a workspace is rebuilt from may be gone for good, such as the branch a
 checkout tracks. A layer that prepares one then raises `AgentWorkspaceLost`, and
-the loop parks, loudly, for a person; and what changed under the model since its last loop
-rides on the workspace it prepares (`Workspace.changed`), which the loop
-tells the model before its first call."""
+the loop parks, loudly, for a person; and what changed under the model
+since its last loop rides on the workspace it prepares
+(`AgentWorkspace.changed`), which the model is told before the call that
+reached the workspace runs."""
 
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator, AsyncIterable, AsyncIterator, Collection
@@ -157,8 +158,9 @@ class AgentWorkspace(InfraModel):
     spec: IsolationSpec
     location: str
     # What changed under the model since its last loop, in words it reads:
-    # the loop writes it as an `environment_changed` step before its first
-    # call. None when nothing did.
+    # the loop's hooks write it as an `environment_changed` step once the
+    # workspace is prepared, before the call that reached it runs. None when
+    # nothing did.
     changed: str | None = None
 
     @classmethod

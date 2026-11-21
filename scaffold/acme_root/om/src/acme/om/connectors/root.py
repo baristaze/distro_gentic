@@ -17,6 +17,7 @@ A session's agent project is read from the agent projects' rows."""
 from collections.abc import Callable, Sequence
 from datetime import datetime
 
+from acme.infra.agent_workspaces import AgentWorkspace
 from acme.infra.root import InfraInterface
 from acme.integrations.mcp import McpClientInterface
 from acme.om.agent_projects.impl.policies import SessionAgentProjectsBoundImpl
@@ -75,6 +76,11 @@ class LoopHooksLateImpl(LoopHooksInterface):
 
     async def before_first_call(self, ctx: TenantContext, start: LoopStart) -> Sequence[AgentStep]:
         return await self._late().before_first_call(ctx, start)
+
+    async def workspace_prepared(
+        self, ctx: TenantContext, start: LoopStart, workspace: AgentWorkspace
+    ) -> Sequence[AgentStep]:
+        return await self._late().workspace_prepared(ctx, start, workspace)
 
 
 class ConnectorsLayer:

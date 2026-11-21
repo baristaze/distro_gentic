@@ -3,12 +3,16 @@
 own connector say, is answered by the hooks the process wires (`inner`).
 Before the run's first model call, a new loop renews its session's fill
 set, so a fill gone since the last loop switches between loops and never
-inside one, and what changed under the model since its last loop is told
-as a step: the workspace was prepared over what that loop left."""
+inside one. Once the run's first call that reaches the workspace has
+prepared it, and before that call runs, what changed under the model since
+its last loop is told as a step: the workspace was prepared over what that
+loop left. A run that reaches no workspace tells nothing, and the next run
+that reaches it tells it then."""
 
 from collections.abc import Callable, Sequence
 from datetime import datetime
 
+from acme.infra.agent_workspaces import AgentWorkspace
 from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.agent_steps.types.agent_step import Actor, AgentStep, AgentStepType, Origin
 from acme.om.agent_steps.types.content import Content, TextBlock
@@ -63,7 +67,12 @@ class PlatformLoopHooksImpl(LoopHooksInterface):
             await self._language_models().renew_fill_set(
                 ctx, start.agent_session.id, start.epoch, start.loop_id
             )
-        steps = list(await self._inner.before_first_call(ctx, start))
-        if start.workspace.changed is not None:
-            steps.append(changed_step(start, start.workspace.changed, self._clock()))
+        return await self._inner.before_first_call(ctx, start)
+
+    async def workspace_prepared(
+        self, ctx: TenantContext, start: LoopStart, workspace: AgentWorkspace
+    ) -> Sequence[AgentStep]:
+        steps = list(await self._inner.workspace_prepared(ctx, start, workspace))
+        if workspace.changed is not None:
+            steps.append(changed_step(start, workspace.changed, self._clock()))
         return steps

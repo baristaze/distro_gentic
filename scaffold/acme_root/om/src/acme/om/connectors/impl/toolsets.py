@@ -280,3 +280,9 @@ class ConnectorToolsetsImpl(LoopHooksInterface):
     async def before_first_call(self, ctx: TenantContext, start: LoopStart) -> Sequence[AgentStep]:
         """The connectors append nothing before a run's first call."""
         return ()
+
+    async def workspace_prepared(
+        self, ctx: TenantContext, start: LoopStart, workspace: AgentWorkspace
+    ) -> Sequence[AgentStep]:
+        """Nor once its workspace is prepared."""
+        return ()
