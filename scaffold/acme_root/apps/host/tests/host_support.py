@@ -38,12 +38,14 @@ from acme.infra.secrets.local import SecretsLocalImpl
 from acme.infra.transports import TransportInterface
 from acme.infra.transports.broker import BrokerNullImpl
 from acme.infra.transports.local import TransportLocalImpl
+from acme.om.agents.types.kind import AgentKind
 from acme.om.base import new_id, utcnow
 from acme.om.context import TenantContext
 from acme.om.hosts.types.pool import HostPool
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.root import StorageInterface
 from acme.om.storage.settings import MigrationSettings
+from acme.om.tools.tool import ToolInterface
 from acme.services.api.app import create_app
 from acme.services.api.container import AppContainer
 
@@ -202,6 +204,8 @@ class Stack:
     # The store a URL the platform signs names: the local impl's, in-process,
     # or, over the compose stack, the network's.
     store: httpx.AsyncBaseTransport | None = None
+    # The address the owner signs in with.
+    email: str = ""
 
     def client(self, token: str | None) -> ApiClient:
         return ApiClient(
@@ -242,11 +246,25 @@ class Stack:
 
 @asynccontextmanager
 async def stack(
-    tmp_path: Path, storage: StorageInterface | None = None, infra: InfraInterface | None = None
+    tmp_path: Path,
+    storage: StorageInterface | None = None,
+    infra: InfraInterface | None = None,
+    *,
+    agent_kinds: tuple[AgentKind, ...] = (),
+    tools: tuple[ToolInterface, ...] = SESSION_TOOLS,
+    **overrides: object,
 ) -> AsyncIterator[Stack]:
     """Over the memory storage, or over `storage`, where a tenant of its own
-    is bootstrapped under a fresh slug, and over the local infra or `infra`."""
-    container = build_container(tmp_path, storage, tool_catalog=SESSION_TOOLS, infra=infra)
+    is bootstrapped under a fresh slug, and over the local infra or `infra`,
+    running `agent_kinds` and `tools` with the settings `overrides` names."""
+    container = build_container(
+        tmp_path,
+        storage,
+        tool_catalog=tools,
+        infra=infra,
+        agent_kinds=agent_kinds,
+        **overrides,
+    )
     app: FastAPI = create_app(container)
     async with app.router.lifespan_context(app):
         slug = "ajax" if storage is None else f"ajax-{new_id().hex[-8:]}"
@@ -261,7 +279,7 @@ async def stack(
             if isinstance(buckets, BucketsLocalImpl)
             else None
         )
-        yield Stack(container=container, transport=transport, owner=owner, store=store)
+        yield Stack(container=container, transport=transport, owner=owner, store=store, email=email)
 
 
 def postgres() -> StoragePostgresImpl:
