@@ -1434,7 +1434,7 @@
           }
         ],
         "responses": {
-          "201": {
+          "200": {
             "content": {
               "application/json": {
                 "schema": {
@@ -3130,81 +3130,6 @@
         ]
       }
     },
-    "/v1/hosts/me": {
-      "delete": {
-        "description": "The host ends itself as it stops: its credentials end at once, and\nits pool waits for another. A person's client that served a session's\nworkspace ends so.",
-        "operationId": "end_host",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "x-app",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-App"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-app-version",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-App-Version"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "common.json#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "End Host",
-        "tags": [
-          "hosts"
-        ]
-      }
-    },
     "/v1/hosts/me/claims": {
       "post": {
         "description": "The next item pinned to this host or its pool, or none. The body\nstates the version the host reads, and nothing it is handed.",
@@ -3298,6 +3223,79 @@
       }
     },
     "/v1/hosts/me/credentials": {
+      "delete": {
+        "description": "The host ends itself as it stops: its credentials end at once, and\nits pool waits for another. A person's client that served a session's\nworkspace ends so.",
+        "operationId": "end_host",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "common.json#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "End Host",
+        "tags": [
+          "hosts"
+        ]
+      },
       "post": {
         "description": "The host's next credential; the one it called with ends after a short\ngrace.",
         "operationId": "rotate",

@@ -125,9 +125,7 @@ async def place_session(
 
 
 @router.post(
-    "/agent-sessions/{agent_session_id}/workspace-keys",
-    response_model=IssuedClientKeyView,
-    status_code=201,
+    "/agent-sessions/{agent_session_id}/workspace-keys", response_model=IssuedClientKeyView
 )
 async def issue_client_key(
     ctx: Ctx, hosts: HostsService, agent_session_id: UUID
@@ -180,12 +178,11 @@ async def rotate(rctx: Rctx, hosts: HostsService, host: Host) -> IssuedHostCrede
 
 
 @router.delete("/hosts/me/credentials", status_code=204)
-async def end_host(rctx: Rctx, hosts: HostsService, host: Host) -> Response:
+async def end_host(rctx: Rctx, hosts: HostsService, host: Host) -> None:
     """The host ends itself as it stops: its credentials end at once, and
     its pool waits for another. A person's client that served a session's
     workspace ends so."""
     await hosts.end_host(rctx, host)
-    return Response(status_code=204)
 
 
 @router.post("/hosts/me/heartbeats", response_model=HostView, dependencies=[HOLDER_CALL])

@@ -402,28 +402,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/hosts/me": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /**
-         * End Host
-         * @description The host ends itself as it stops: its credentials end at once, and
-         *     its pool waits for another. A person's client that served a session's
-         *     workspace ends so.
-         */
-        delete: operations["end_host"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/hosts/me/claims": {
         parameters: {
             query?: never;
@@ -460,7 +438,13 @@ export interface paths {
          *     grace.
          */
         post: operations["rotate"];
-        delete?: never;
+        /**
+         * End Host
+         * @description The host ends itself as it stops: its credentials end at once, and
+         *     its pool waits for another. A person's client that served a session's
+         *     workspace ends so.
+         */
+        delete: operations["end_host"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1306,7 +1290,7 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Successful Response */
-            201: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1942,37 +1926,6 @@ export interface operations {
             };
         };
     };
-    end_host: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-                authorization?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     claim: {
         parameters: {
             query?: never;
@@ -2031,6 +1984,37 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["IssuedHostCredentialView"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    end_host: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
