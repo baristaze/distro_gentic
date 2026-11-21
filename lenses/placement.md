@@ -552,16 +552,16 @@ is the guideline's NET-37.)
 
 ## PLC-23 A person's own client serves their local session, and follows others
 
-**Principle.** A session's workspace is local when the person who started
-it serves it from their own machine. The session is pinned to a pool of
-one of its own. Its person's client trades a one-use key, which the
-platform issues that person alone, for a host's credential of that pool,
-never the person's own, and runs the host program's claim loop, held to
-the machine's ceilings. It serves the session's tree: the session, its
-sub-agents, and the instances their checks ask for, and no other
-session. One client serves the session at a time, and a client ends its
-host as it stops. A client attached to a session whose workspace a VM, a
-host, or another person's client holds follows it and serves nothing.
+**Principle.** A session's workspace is local when the person who
+started it serves it from their own machine. The session is pinned to a
+pool of one of its own. Its person's client trades a one-use key, which
+the platform issues that person alone, for a host's credential of that
+pool, never the person's own, and runs the host program's claim loop,
+held to the machine's ceilings. It serves the session, its sub-agents,
+and their checks' instances, and no other session. One client serves the
+session at a time, and a client ends its host as it stops. A client
+attached to a session whose workspace a VM, a host, or another person's
+client holds follows it and serves nothing.
 
 **Source.** Placement and Workspace Hosts, Placement; Placement and
 Workspace Hosts, Workspace Hosts (A person's own client).
