@@ -11,3 +11,8 @@ output "container_name" {
 output "log_group_name" {
   value = aws_cloudwatch_log_group.this.name
 }
+
+output "task_policy_arns" {
+  description = "The policies the task role attaches, as attached: what the task itself may reach."
+  value       = aws_iam_role_policy_attachment.task[*].policy_arn
+}
