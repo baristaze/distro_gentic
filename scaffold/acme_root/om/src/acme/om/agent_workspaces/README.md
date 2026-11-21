@@ -56,11 +56,13 @@ rebuilt from.
   the sessions created after it, and the first of them builds it where
   its workspace runs ([ADR
   2051](../../../../../docs/adr/2051-an-agent-projects-workspace-base-is-built-once-where-its-workspaces-run.md)).
-- **Prepare.** Before a loop's first model call, the workspace is
-  prepared to the pin, whatever the loop asks. The host refuses what it
-  cannot give before its provider is reached, and the provider refuses
-  what it cannot meet: either way the loop parks on `resource` and asks
-  again after a wait, and no weaker workspace is made ([ADR
+- **Prepare.** Before a loop's first model call, a spec the cloud pool's
+  VMs can never hold is refused, and nothing is made. The workspace is
+  prepared to the pin, whatever the loop asks, at the first call that
+  reaches it. The host refuses what it cannot give before its provider is
+  reached, and the provider refuses what it cannot meet: either way the
+  loop parks on `resource` with that call open and asks again after a
+  wait, and no weaker workspace is made ([ADR
   2005](../../../../../docs/adr/2005-a-workspace-no-host-can-give-parks-the-loop-and-a-lost-one-waits-for-a-person.md)).
   Then the checkout is brought up to the session's branch on the
   repository its agent project binds, from a bundle the platform reads
@@ -157,8 +159,9 @@ rebuilt from.
 ## The rules
 
 - **Isolation is pinned, probed, and refused; never weakened.** A
-  prepare is held to the pin, and the host that cannot give it refuses
-  before the first model call.
+  prepare is held to the pin, a spec the cloud pool's VMs can never hold
+  is refused before the first model call, and a host that cannot give it
+  now refuses at the first call that reaches the workspace.
 - **The cloud never runs a session on a shared host.** A bare directory
   runs only on a host inside a customer's wall, as a dedicated,
   unprivileged user, with its egress enforced. A host that offers only a

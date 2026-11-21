@@ -6,8 +6,10 @@
 
 A session's isolation is pinned when it is created, and the host that
 prepares its workspace enforces it. The engine refuses a spec its
-provider cannot meet before the loop's first model call, never falls
-back to something weaker, and ends the loop `errored`.
+provider can never meet before the loop's first model call, prepares
+the workspace at the first call that reaches it, never falls back to
+something weaker, and ends the loop `errored` on a refusal that cannot
+clear.
 
 On the platform a refusal usually means "not now": the session's pool
 may have no host online, none that offers the pinned level, or one that
@@ -24,23 +26,29 @@ next.
 ## Decision
 
 **A refused workspace parks the loop on `resource`.** The loop parks
-with the unlock `workspace` and a retry time its options set, before any
-model call. At the retry time the next run asks again. No weaker
-workspace is made, and nothing is spent while it waits.
+with the unlock `workspace` and a retry time its options set, at the
+first call that reaches the workspace, with that call open. At the retry
+time the next run asks again, and runs the call once the workspace
+comes. No weaker workspace is made, and nothing is spent while it
+waits.
 
 **A lost workspace parks the loop for a person.** A layer that prepares
 a workspace raises `AgentWorkspaceLost` when its durable state is gone and
 nothing says why, such as a branch the remote held and lost with no
 merged or closed pull request behind it, or one that moved on both
 sides. The loop parks on `person` with the unlock `workspace`, loudly,
-before any call, and keeps everything it reached. A person restores the
-branch, or settles its pull request, and resumes it.
+at the call that reached the workspace, and keeps everything it
+reached. A person restores the branch, or settles its pull request, and
+resumes it.
 
-**What changed is told before the first call.** A prepared workspace
-carries what changed under the model since its last loop
-(`Workspace.changed`): a snapshot of work the last loop left, or a
-branch rebuilt after its pull request closed. The loop writes it as an
-`environment_changed` step before its first model call.
+**What changed is told once the workspace is prepared.** A prepared
+workspace carries what changed under the model since its last loop
+(`AgentWorkspace.changed`): a snapshot of work the last loop left, or a
+branch rebuilt after its pull request closed. The platform's loop hooks
+write it as an `environment_changed` step through the engine's
+`workspace_prepared`, before the call that reached the workspace runs. A
+run that reaches no workspace tells nothing, and the next run that
+reaches it tells it.
 
 **The pin is held above the engine.** The platform decorates the
 engine's sessions manager, which pins each session as it is created, and
@@ -72,6 +80,7 @@ alone.
   tells only what was not delivered. A session whose workspace this
   process does not hold, or whose agent project binds no repository,
   reads as nothing and counts no success.
-- The engine's loop gains the two parks and the told change, and its
-  workspace interface gains `changed` and `AgentWorkspaceLost`. The next move
-  of the base merges over all four.
+- The engine's workspace interface gains `changed` and
+  `AgentWorkspaceLost`, and the told change rides on the engine's loop
+  hooks, never an edit to its loop. The next move of the base merges
+  over both.

@@ -558,9 +558,10 @@ class PlatformRootOptions:
     None takes each manager as it is. `loop_hooks` answers the toolsets a
     session holds beyond its kind, a tenant's own, which the loop folds
     into the session's kind at each run, and the steps a layer above the
-    platform appends before a run's first call; the platform's own hooks
-    renew a new loop's fill set and tell what changed under the model
-    around them (`platform_loop_hooks`). None attaches and appends nothing.
+    platform appends before a run's first call and once its workspace is
+    prepared; the platform's own hooks renew a new loop's fill set and tell
+    what changed under the model around them (`platform_loop_hooks`). None
+    attaches and appends nothing.
 
     The evidence takes the platform's two ports: `executor`, the fresh
     executor validation runs on, and `work_product`, which reads what a

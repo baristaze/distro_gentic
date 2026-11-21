@@ -43,7 +43,8 @@ class PlacedWorkspacesInterface(ABC):
         VM holds: the pool keeps the VM's snapshots, never its
         host, so no host of it is asked to advertise any. `IsolationRefused` while no live host of
         its pool holds it: a host of the pool is asked to prepare it, and
-        the loop waits on the resource with no call spent. A workspace kept
+        the loop waits on the resource with the call that reached the
+        workspace open, no command run. A workspace kept
         by snapshots waits, with the reason, while no live host of its pool
         advertises snapshots at its level, and never runs as a cache. One
         on a base starts from the base its host builds and keeps; one whose

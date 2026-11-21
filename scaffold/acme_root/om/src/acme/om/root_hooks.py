@@ -5,8 +5,9 @@ root (`acme.om.agent_root.build_agent_managers`), the key service its
 sessions' keys are wrapped by, a face over the sessions, the tools, and the
 agents, the gates a model call and a result pass, the transport the tools
 run on, and what goes with a purged session. What a session holds beyond
-its kind, and what a loop appends before its first call, are the loop's
-hooks (`acme.om.agents.hooks`), set on the engine's options.
+its kind, and what a loop appends before its first call and once its
+workspace is prepared, are the loop's hooks (`acme.om.agents.hooks`), set
+on the engine's options.
 
 The roots call each hook once, in the order they build, so an impl may keep
 what an earlier hook handed it for a later one. `RootHooksNullImpl` reaches

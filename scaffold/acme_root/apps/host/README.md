@@ -197,7 +197,7 @@ refused. What the item runs it reads from the gateway while it holds it
   container workspace runs. An image holds Python, for the session's tools,
   and `git`, since a pinned session's repository is checked out and pushed
   inside its workspace: an image without `git` fails a session with a
-  repository before its first model call.
+  repository at the first call that reaches its workspace.
   `ACME_HOST_PULL_TIMEOUT_SECONDS` (default 900) is how long the pull of
   that image may run when a prepare finds it absent; the image is large,
   and a pull cut short leaves nothing.
