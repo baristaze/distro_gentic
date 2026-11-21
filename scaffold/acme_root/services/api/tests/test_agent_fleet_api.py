@@ -1,5 +1,7 @@
 """The platform's operator routes over the live app, in memory: a tenant's
 share written by an operator who may write, and on the tenant's own record;
+the cloud pool's limits and a tenant's own maximum written the same way, the
+pool's own on no tenant's record;
 a session's shape read under `read`, and its content opened only under a
 grant the grant job writes and ends, each on the tenant's record too;
 where a session's work and a host stand, by the tenant named; and the
@@ -20,6 +22,7 @@ from acme.om.agent_sessions.kinds import AgentSessionWorkKind
 from acme.om.agents.types.kind import AgentKind, DoneRule, TreeLimits
 from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.base import new_id, utcnow
+from acme.om.cloud_pool.impl.operator import TENANT_LIMIT_CLEARED_KIND, TENANT_LIMIT_SET_KIND
 from acme.om.context import AppContext, AppType, OperatorRole, RequestContext
 from acme.om.exceptions import NotFound
 from acme.om.levers.types.lever import LeverKind, LeverReading, LeverRef, LeverStanding
@@ -138,6 +141,50 @@ async def test_an_operator_who_writes_sets_a_tenants_share_on_the_tenants_record
     me = (await client.get("/v1/admin/me", headers=writer)).json()
     written = [e for e in await stream(client, reader, org_id) if e["kind"] == SHARE_SET_KIND]
     assert [e["actor_id"] for e in written] == [me["identity_id"]] * 2
+
+
+async def test_an_operator_who_writes_sets_the_cloud_pools_limits_and_a_tenants_own(
+    client: httpx.AsyncClient,
+    owner: dict[str, str],
+    reader: dict[str, str],
+    writer: dict[str, str],
+) -> None:
+    org_id = await org_of(client, owner)
+    limits = "/v1/admin/cloud-pool/limits"
+    standing = await client.get(limits, headers=reader)
+    assert standing.status_code == 200 and standing.json()["version"] == 0, standing.text
+    values = {"warm": 1, "most": 6, "tenant_most": 2}
+    refused = await client.put(limits, headers=reader, json=values)
+    assert refused.status_code == 403 and refused.json()["error"]["code"] == "not_authorized"
+    assert (await client.put(limits, headers=owner, json=values)).status_code == 401
+    written = await client.put(limits, headers=writer, json=values)
+    assert written.status_code == 200, written.text
+    assert {k: written.json()[k] for k in (*values, "version")} == {**values, "version": 1}
+    assert (await client.get(limits, headers=reader)).json() == written.json()
+    for wrong in ({**values, "warm": 6}, {**values, "most": -1}):
+        assert (await client.put(limits, headers=writer, json=wrong)).status_code == 422
+
+    own = f"/v1/admin/orgs/{org_id}/cloud-pool/limit"
+    assert (await client.put(own, headers=reader, json={"most": 1})).status_code == 403
+    set_ = await client.put(own, headers=writer, json={"most": 1})
+    assert set_.status_code == 200, set_.text
+    assert (set_.json()["most"], set_.json()["version"]) == (1, 1)
+    unknown = f"/v1/admin/orgs/{new_id()}/cloud-pool/limit"
+    assert (await client.put(unknown, headers=writer, json={"most": 1})).status_code == 404
+    cleared = await client.delete(own, headers=writer)
+    assert cleared.status_code == 200 and cleared.json()["most"] == 1, cleared.text
+    assert (await client.delete(own, headers=writer)).status_code == 404
+
+    me = (await client.get("/v1/admin/me", headers=writer)).json()
+    entries = [
+        (e["kind"], e["actor_id"])
+        for e in await stream(client, reader, org_id)
+        if e["kind"].startswith("cloud_pool.")
+    ]
+    assert entries == [
+        (TENANT_LIMIT_SET_KIND, me["identity_id"]),
+        (TENANT_LIMIT_CLEARED_KIND, me["identity_id"]),
+    ], "the pool's own limits reach no tenant's stream"
 
 
 async def test_a_tenants_own_cap_set_on_its_share_holds_at_the_claim_in_place_of_its_tiers(

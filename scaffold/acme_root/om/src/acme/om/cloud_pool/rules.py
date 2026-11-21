@@ -118,7 +118,8 @@ def refusal(
     return None
 
 
-def warm_to_start(wanted: int, warm: int) -> int:
+def warm_to_start(wanted: int, warm: int, room: int) -> int:
     """How many warm VMs to start, so `wanted` stand ahead of demand
-    when `warm` stand or start already."""
-    return max(0, wanted - warm)
+    when `warm` stand or start already, and never past the `room` the
+    pool's maximum leaves."""
+    return max(0, min(wanted - warm, room))

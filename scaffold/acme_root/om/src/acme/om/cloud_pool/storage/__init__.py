@@ -1,8 +1,12 @@
 """Storage of the cloud pool swimlane: one row per VM the pool started,
 in the platform's own table, since a warm VM names no tenant. A row is
 written before its VM starts and deleted once its VM is gone, so
-a VM under the pool's names with no row is one nobody holds. Beside
-them, one row per erasure the pool owes, until the sweep has done it."""
+a VM under the pool's names with no row is one nobody holds; a warm
+VM's row goes first, so no claim binds a VM being destroyed. Beside
+them, one row per erasure the pool owes, until the sweep has done it, the
+pool's own limits, and a tenant's own maximum. Every write that adds a VM
+to a count or binds one counts and writes one at a time across
+processes, so no maximum is passed."""
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
@@ -10,7 +14,8 @@ from datetime import datetime
 from uuid import UUID
 
 from acme.om.cloud_pool.types.erasure import PoolErasure
-from acme.om.cloud_pool.types.vm import PoolVm
+from acme.om.cloud_pool.types.limits import Full, PoolLimits, TenantPoolLimit
+from acme.om.cloud_pool.types.vm import PoolClaim, PoolVm
 from acme.om.context import tenantless
 
 
@@ -24,11 +29,38 @@ class CloudPoolStorageInterface(ABC):
 
     @abstractmethod
     @tenantless
-    async def reserve_warm(self, wanted: int, made: Sequence[PoolVm]) -> int:
+    async def claim(
+        self, vm: PoolVm, *, most: int, tenant_most: int, warm: bool
+    ) -> PoolClaim | Full:
+        """Global: the VM that serves `vm`'s session, counted and written
+        one claim at a time across processes. `Full.TENANT` while its
+        tenant holds `tenant_most` VMs; else, with `warm`, a started warm
+        VM of its egress, bound to its session, pool, and person from its
+        `bound_at`; else `vm`'s own row, written before its VM starts.
+        While the pool holds `most`, that row takes the place of the
+        oldest started warm VM no session claimed, whose row goes and
+        which the claim names as displaced, so its VM goes after;
+        `Full.POOL` where none stands. `UniqueKeyTaken` for a name or a
+        key another holds."""
+        ...
+
+    @abstractmethod
+    @tenantless
+    async def reserve_warm(self, wanted: int, most: int, made: Sequence[PoolVm]) -> int:
         """Global: writes the first of `made`, in order, as many as
-        keep `wanted` warm VMs standing or starting, and answers how
-        many it wrote: one process at a time counts and writes, so two
-        sweeps never start one VM twice."""
+        keep `wanted` warm VMs standing or starting and the pool's VMs
+        no more than `most`, and answers how many it wrote: one process at
+        a time counts and writes, so two sweeps never start one VM twice
+        and no claim passes the maximum beside them."""
+        ...
+
+    @abstractmethod
+    @tenantless
+    async def take_warm(self, vm_id: UUID) -> bool:
+        """Global: deletes a warm VM's row, under the lock its claims take,
+        while no session has claimed it: False once one has, or it is gone.
+        Its VM is destroyed only after, so no claim binds a VM being
+        destroyed."""
         ...
 
     @abstractmethod
@@ -71,22 +103,6 @@ class CloudPoolStorageInterface(ABC):
         """Global: the VMs the pool holds, in the order of their
         ids, at most `limit` past `after`: the sweep reads them all, a page
         at a time."""
-        ...
-
-    @abstractmethod
-    @tenantless
-    async def claim_warm(
-        self,
-        tenant_id: UUID,
-        agent_session_id: UUID,
-        pool_id: UUID,
-        bound_by: UUID,
-        egress_open: bool,
-        at: datetime,
-    ) -> PoolVm | None:
-        """Global: binds one started warm VM of the egress
-        asked to the tenant's session from `at`, and answers it; None when
-        none stands. Two claims never take one VM."""
         ...
 
     @abstractmethod
@@ -151,4 +167,37 @@ class CloudPoolStorageInterface(ABC):
     @tenantless
     async def delete_erasure(self, erasure_id: UUID) -> None:
         """Global: an erasure done."""
+        ...
+
+    @abstractmethod
+    @tenantless
+    async def read_limits(self) -> PoolLimits | None:
+        """Global: the pool's own limits; None where no operator wrote
+        them."""
+        ...
+
+    @abstractmethod
+    @tenantless
+    async def write_limits(self, limits: PoolLimits, version: int | None) -> PoolLimits:
+        """Global: the pool's own limits, written over `version`, or first
+        with None. `PreconditionFailed` when another write landed since."""
+        ...
+
+    @abstractmethod
+    async def read_tenant_limit(self, org_id: UUID) -> TenantPoolLimit | None:
+        """The tenant's own maximum; None where no operator set one."""
+        ...
+
+    @abstractmethod
+    async def write_tenant_limit(
+        self, org_id: UUID, limit: TenantPoolLimit, version: int | None
+    ) -> TenantPoolLimit:
+        """The tenant's own maximum, written over `version`, or first with
+        None. `PreconditionFailed` when another write landed since."""
+        ...
+
+    @abstractmethod
+    async def delete_tenant_limit(self, org_id: UUID) -> TenantPoolLimit | None:
+        """The tenant's own maximum gone, which it answers; None where it
+        had none. Its tenant's purge takes it too."""
         ...

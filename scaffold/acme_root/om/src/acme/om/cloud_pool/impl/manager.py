@@ -1,6 +1,16 @@
 """The cloud pool on the VMs' backend. A row is written before its
 VM starts and deleted once the VM is gone, so every VM under
-the pool's names is accounted for by a row, or is let go by the sweep.
+the pool's names is accounted for by a row, or is let go by the sweep;
+a warm VM's row goes first, under the lock its claims take, so no claim
+binds a VM being destroyed.
+
+Every claim and every refill reads the pool's limits, which its operators
+write: the warm VMs, the most VMs the pool holds at once, and the most one
+tenant holds, its own where an operator set one. At the pool's maximum,
+a claim that can take no warm VM takes the place of an idle one, which
+goes first. Otherwise a claim past either maximum starts no VM: the
+session's loop waits on the resource and asks again, told no count and
+no other tenant's use.
 
 A start is inline for a session's prepare, bounded by the VMs' own
 boot bound, as the VM workspace provider's is; a warm VM starts in the
@@ -16,9 +26,10 @@ import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
+from typing import Self
 from uuid import UUID
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from acme.infra.agent_workspaces import (
     AgentWorkspace,
@@ -33,7 +44,7 @@ from acme.infra.exceptions import InfraException
 from acme.infra.vms import SeedsInterface, VmsInterface, VmSpec, VmState
 from acme.om.agent_workspaces.placed import PlacedWorkspacesInterface
 from acme.om.agent_workspaces.types.snapshot import KeptSnapshot
-from acme.om.base import OmBase, new_id, utcnow
+from acme.om.base import EMPTY_UUID, OmBase, new_id, utcnow
 from acme.om.cloud_pool.exceptions import VmUnbound
 from acme.om.cloud_pool.manager import CloudPoolManagerInterface
 from acme.om.cloud_pool.rules import (
@@ -51,6 +62,7 @@ from acme.om.cloud_pool.rules import (
 )
 from acme.om.cloud_pool.storage import CloudPoolStorageInterface
 from acme.om.cloud_pool.types.erasure import PoolErasure
+from acme.om.cloud_pool.types.limits import MOST_VMS, Full, PoolLimits
 from acme.om.cloud_pool.types.vm import PoolVm, VmSnapshot
 from acme.om.context import Permission, RequestContext, TenantContext
 from acme.om.exceptions import InvalidCredential
@@ -64,6 +76,13 @@ from acme.om.tenancy.rules import hash_token
 from acme.timing import Retries, RetryPolicy
 
 log = logging.getLogger(__name__)
+
+FULL_CAUSES = {
+    Full.POOL: "no VM of the cloud pool is free yet",
+    Full.TENANT: "this tenant holds as many VMs of the cloud pool as it may at once",
+}
+"""What a session's park says when a maximum holds its claim: never a
+count, and never another tenant's use."""
 
 SessionGone = Callable[[UUID, UUID], Awaitable[bool]]
 """Whether a tenant's session is gone, deleted or purged, or its tenant is:
@@ -79,8 +98,12 @@ class CloudPoolOptions(OmBase):
     # What a VM made from nothing would boot, in the backend's terms;
     # the pool starts each VM from `image`, so this is the spec's alone.
     vm_image: str = Field(default="template:_images/ubuntu-lts", min_length=1)
-    # The VMs kept started ahead of demand. Autoscaling is not in it.
-    warm: int = Field(default=0, ge=0)
+    # The pool's limits where no operator wrote them: the VMs kept started
+    # ahead of demand, the most VMs the pool holds at once, and the most one
+    # tenant holds. Autoscaling is not in it.
+    warm: int = Field(default=0, ge=0, le=MOST_VMS)
+    most: int = Field(default=20, ge=0, le=MOST_VMS)
+    tenant_most: int = Field(default=5, ge=0, le=MOST_VMS)
     # The region a session's pool of one names.
     region: Region = "cloud"
     # Where the platform answers, as the pool's VMs reach it.
@@ -98,6 +121,32 @@ class CloudPoolOptions(OmBase):
     page: int = Field(default=1000, gt=0)
     first_poll: timedelta = Field(default=timedelta(milliseconds=200), gt=timedelta(0))
     last_poll: timedelta = Field(default=timedelta(seconds=2), gt=timedelta(0))
+
+    @model_validator(mode="after")
+    def _warm_below_most(self) -> Self:
+        if self.warm and self.warm >= self.most:
+            raise ValueError("the warm VMs stand below the most the pool holds")
+        return self
+
+
+def standing_limits(
+    written: PoolLimits | None, options: CloudPoolOptions, at: datetime
+) -> PoolLimits:
+    """The pool's limits as a claim reads them: the operators' last write,
+    else its options', as version 0, which no person wrote."""
+    if written is not None:
+        return written
+    return PoolLimits(
+        id=EMPTY_UUID,
+        created_at=at,
+        updated_at=at,
+        created_by=EMPTY_UUID,
+        updated_by=EMPTY_UUID,
+        warm=options.warm,
+        most=options.most,
+        tenant_most=options.tenant_most,
+        version=0,
+    )
 
 
 class CloudPoolManagerImpl(CloudPoolManagerInterface):
@@ -222,6 +271,8 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
             if is_snapshot(prefix, name):
                 await self._vms.destroy(name)
                 gone += 1
+        if await self._storage.delete_tenant_limit(ctx.org_id) is not None:
+            gone += 1
         return gone
 
     # A VM's host.
@@ -259,11 +310,13 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
     # The sweep.
 
     async def sweep(self, rctx: RequestContext) -> int:
-        if not self._options.image:
+        # A process that reaches no VM reads every one as gone: it sweeps none.
+        if not await self._reaches_vms():
             return 0
         now = self._clock()
         acted = 0
         held: set[str] = set()
+        ran: list[PoolVm] = []
         after: UUID | None = None
         while True:
             page = await self._storage.read_vms(self._options.page, after)
@@ -271,11 +324,19 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
                 held.add(vm.name)
                 if await self._swept(rctx, vm, now):
                     acted += 1
+                elif vm.started_at is not None:
+                    ran.append(vm)
             if len(page) < self._options.page:
                 break
             after = page[-1].id
         prefix = self._options.prefix
-        for name in await self._vms.names(f"{prefix}{MARK}"):
+        named = set(await self._vms.names(f"{prefix}{MARK}"))
+        # Listed after its row was read: a VM that had run by then and is
+        # listed no more died under it, or another path let it go.
+        for vm in ran:
+            if vm.name not in named and await self._died(rctx, vm):
+                acted += 1
+        for name in sorted(named):
             # A snapshot is kept under its session's names; a VM is not.
             if is_snapshot(prefix, name) or name == self._options.image or name in held:
                 continue
@@ -316,17 +377,7 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
             return await self._running(ctx, agent_session_id, spec, current)
         if restore is not None:
             await self._held_to(agent_session_id, restore)
-            return await self._start(ctx, agent_session_id, spec, pool, restore)
-        egress_open = spec.egress.mode is EgressMode.OPEN
-        if self._options.warm and not spec.limits.asked():
-            claimed = await self._storage.claim_warm(
-                ctx.org_id, agent_session_id, pool.id, ctx.user_id, egress_open, self._clock()
-            )
-            if claimed is not None:
-                log.info("session %s claimed warm VM %s", agent_session_id, claimed.name)
-                self._spawn(self._refill())
-                return claimed
-        return await self._start(ctx, agent_session_id, spec, pool, None)
+        return await self._start(ctx, agent_session_id, spec, pool, restore)
 
     async def _running(
         self, ctx: TenantContext, agent_session_id: UUID, spec: IsolationSpec, vm: PoolVm
@@ -376,9 +427,13 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         pool: HostPool,
         restore: KeptSnapshot | None,
     ) -> PoolVm:
-        """A new VM for the session, from its snapshot or the pool's
-        image. Its row is written first, so a start that dies leaves a row
-        the sweep finds; one that fails here leaves nothing."""
+        """The session's VM: a warm one it claims, when it starts from the
+        pool's image and asks no limit, else a new one, from its snapshot or
+        the pool's image, within the pool's limits as they stand now. At the
+        pool's maximum, a new one takes the place of an idle warm VM, which
+        goes first. Its row is written first, so a start that dies leaves a
+        row the sweep finds; one that fails here leaves nothing. Past a
+        maximum, the loop waits on the resource."""
         key = new_key()
         now = self._clock()
         vm = PoolVm(
@@ -394,11 +449,38 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
             restored_from=None if restore is None else restore.id,
             bound_at=now,
         )
-        await self._storage.create_vm(vm)
+        limits = await self._limits()
+        own = await self._storage.read_tenant_limit(ctx.org_id)
+        got = await self._storage.claim(
+            vm,
+            most=limits.most,
+            tenant_most=limits.tenant_most if own is None else own.most,
+            warm=restore is None and not spec.limits.asked(),
+        )
+        if isinstance(got, Full):
+            # The cause is what the tenant reads: no count, and no other
+            # tenant's use.
+            log.info("session %s waits: the cloud pool's %s maximum stands", agent_session_id, got)
+            raise IsolationRefused(
+                f"session {agent_session_id} waits for a VM of the cloud pool",
+                clears=True,
+                cause=FULL_CAUSES[got],
+            )
+        if got.vm.id != vm.id:
+            log.info("session %s claimed warm VM %s", agent_session_id, got.vm.name)
+            self._spawn(self._refill())
+            return got.vm
+        if got.displaced is not None:
+            await self._displace(vm, got.displaced)
         source = self._options.image if restore is None else restore.reference
         await self._launch(vm, self._spec(spec), source, key)
         log.info("session %s: VM %s started from %s", agent_session_id, vm.name, source)
         return vm
+
+    async def _limits(self) -> PoolLimits:
+        """The pool's limits as its operators last wrote them, else as its
+        options name them."""
+        return standing_limits(await self._storage.read_limits(), self._options, self._clock())
 
     async def _launch(self, vm: PoolVm, spec: VmSpec, source: str, key: str) -> None:
         """Starts the VM its row names, handed its key, and marks it
@@ -496,6 +578,8 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         if vm.started_at is None:
             if now - vm.created_at <= self._options.boot:
                 return False
+            if vm.warm:
+                return await self._drop_warm(vm)
             await self._let_go(rctx, vm)
             return True
         if vm.tenant_id is None or vm.agent_session_id is None:
@@ -515,6 +599,41 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         await self._retire(rctx, vm)
         await self._vms.stop(vm.name)
         return True
+
+    async def _died(self, rctx: RequestContext, vm: PoolVm) -> bool:
+        """Whether a VM that ran, and is listed no more, is gone, and was
+        let go: its host's credential ends and its row goes, so it holds no
+        place under a maximum, and its session's next prepare starts
+        another."""
+        if await self._vms.state(vm.name) is not VmState.ABSENT:
+            return False
+        log.warning("VM %s of session %s is gone, and is let go", vm.name, vm.agent_session_id)
+        if vm.warm:
+            return await self._drop_warm(vm)
+        await self._let_go(rctx, vm)
+        return True
+
+    async def _drop_warm(self, vm: PoolVm) -> bool:
+        """A warm VM goes: its row first, under the lock its claims take,
+        then the VM. A session that claimed it meanwhile keeps it."""
+        if not await self._storage.take_warm(vm.id):
+            return False
+        await self._vms.destroy(vm.name)
+        log.info("warm VM %s let go", vm.name)
+        return True
+
+    async def _displace(self, vm: PoolVm, warm: PoolVm) -> None:
+        """The idle warm VM whose place a claim took goes before the claim's
+        own VM starts, so the VMs that run never pass the maximum. Its row
+        went under the claim's lock, so no claim binds it. A destroy that
+        fails takes the claim's row with it, and the sweep lets go of the
+        warm VM, which no row holds."""
+        try:
+            await self._vms.destroy(warm.name)
+        except BaseException:
+            await self._storage.delete_vm(vm.id)
+            raise
+        log.info("warm VM %s let go for session %s", warm.name, vm.agent_session_id)
 
     async def _hostless(self, rctx: RequestContext, vm: PoolVm, now: datetime) -> bool:
         """Whether a session's VM has no host to work for: none enrolled
@@ -546,11 +665,14 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
 
     async def _refill(self) -> None:
         """Starts warm VMs, in the background, until the warm count
-        stands."""
-        wanted = self._options.warm
-        if not wanted or not self._options.image:
+        stands, never past the most the pool holds, as its limits stand
+        now."""
+        if not self._options.image:
             return
-        keys = [new_key() for _ in range(wanted)]
+        limits = await self._limits()
+        if not limits.warm:
+            return
+        keys = [new_key() for _ in range(limits.warm)]
         egress_open = not self._vms.closes_egress()
         made = [
             PoolVm(
@@ -562,7 +684,7 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
             )
             for key in keys
         ]
-        written = await self._storage.reserve_warm(wanted, made)
+        written = await self._storage.reserve_warm(limits.warm, limits.most, made)
         if not written:
             return
         spec = VmSpec(image=self._options.vm_image, egress_open=egress_open)

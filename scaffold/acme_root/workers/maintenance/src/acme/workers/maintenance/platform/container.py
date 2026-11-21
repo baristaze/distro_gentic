@@ -92,7 +92,6 @@ def cloud_pool_options(settings: InfraSettings) -> CloudPoolOptions:
         prefix=settings.vm_prefix,
         image=settings.cloud_pool_image,
         vm_image=settings.vm_image,
-        warm=settings.cloud_pool_warm,
         api_url=settings.cloud_pool_api_url,
         boot=timedelta(seconds=settings.vm_boot_timeout_seconds),
     )

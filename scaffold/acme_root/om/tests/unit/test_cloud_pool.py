@@ -11,7 +11,12 @@ no host to work for, whose disk its session's next prepare starts again; a
 VM started again keeps its disk through a sweep and a failed start. A
 purge, an erase, and a tenant's purge take the session's disks, and no
 other session's; an erase asked where no VM is reached is done by the
-sweep."""
+sweep. The claim and the sweep never race: a claimed VM's host is asked
+for the session's workspace only once it enrolled and its VM is sealed, and
+the session has none until its host holds it; a warm VM a session claims
+while the sweep reads it as a dead start stays the session's; and a VM
+that dies after its host enrolled is let go at the next sweep, as a warm
+one that dies is."""
 
 import asyncio
 import json
@@ -45,7 +50,7 @@ from acme.om.agent_workspaces.types.snapshot import KeptSnapshot
 from acme.om.base import new_id, utcnow
 from acme.om.cloud_pool.exceptions import VmUnbound
 from acme.om.cloud_pool.impl.manager import CloudPoolManagerImpl, CloudPoolOptions
-from acme.om.cloud_pool.rules import snapshots_of
+from acme.om.cloud_pool.rules import new_key, seed, snapshots_of
 from acme.om.cloud_pool.storage.impl.memory import CloudPoolStorageMemoryImpl
 from acme.om.cloud_pool.types.vm import PoolVm
 from acme.om.context import AppContext, AppType, RequestContext, Role, TenantContext
@@ -171,8 +176,18 @@ class Placed:
 
 class Pool:
     def __init__(
-        self, root: Path, *, warm: int = 0, closes_egress: bool = False, page: int = 1000
+        self,
+        root: Path,
+        *,
+        warm: int = 0,
+        closes_egress: bool = False,
+        page: int = 1000,
+        most: int | None = None,
+        tenant_most: int | None = None,
     ) -> None:
+        # Only the limits a test names, so the options' own stand otherwise.
+        named = {"most": most, "tenant_most": tenant_most}
+        limits: dict[str, Any] = {key: value for key, value in named.items() if value is not None}
         self.vms = VmsTwinImpl(root / "vms", closes_egress=closes_egress)
         self.storage = CloudPoolStorageMemoryImpl()
         self.now = utcnow()
@@ -188,6 +203,7 @@ class Pool:
             boot=timedelta(minutes=15),
             silent=timedelta(minutes=15),
             page=page,
+            **limits,
             first_poll=timedelta(milliseconds=5),
             last_poll=timedelta(milliseconds=20),
         )
@@ -639,9 +655,10 @@ async def test_an_erase_asked_where_no_vm_is_reached_is_done_by_the_sweep(
 
 async def test_a_deleted_tenants_vm_goes_at_the_next_sweep(tmp_path: Path) -> None:
     storage = StorageMemoryImpl()
+    infra = InfraLocalImpl(tmp_path)
     managers = build_platform_managers(
         storage,
-        InfraLocalImpl(tmp_path),
+        infra,
         platform_root_options=PlatformRootOptions(
             cloud_pool_options=CloudPoolOptions(prefix=PREFIX, image=IMAGE),
             cloud_pool_stage=stage,
@@ -668,6 +685,7 @@ async def test_a_deleted_tenants_vm_goes_at_the_next_sweep(tmp_path: Path) -> No
             bound_at=now,
         )
         await rows.create_vm(held[org.name])
+        await infra.get_vms().launch(held[org.name].name, VmSpec(image="twin", egress_open=True))
     gone = deleted.model_copy(update={"deleted_at": utcnow(), "deleted_by": deleted.id})
     await orgs.write_org(deleted.id, gone)
     assert await managers.cloud_pool.sweep(stage()) == 1, "its session still stands"
@@ -707,3 +725,125 @@ async def test_a_tenants_purge_waits_for_its_expiry_then_takes_every_vm_and_disk
     assert {row.tenant_id for row in await pool.rows()} == {other.org_id}
     left = await pool.vms.names(PREFIX + "p")
     assert len(left) == 3, "the other tenant's two VMs and its disk"
+
+
+# The claim and the sweep never race.
+
+
+class Holding(Placed):
+    """The relay's side, which reads the session's VM as its host is asked
+    for the workspace, and holds none until told to."""
+
+    def __init__(self, pool: Pool) -> None:
+        super().__init__()
+        self.pool = pool
+        self.holds = False
+        self.asked: list[PoolVm] = []
+
+    async def held_on_host(
+        self,
+        ctx: TenantContext,
+        agent_session_id: UUID,
+        spec: IsolationSpec,
+        restore: object = None,
+        *,
+        pooled: PlacementState | None = None,
+    ) -> AgentWorkspace:
+        rows = await self.pool.rows()
+        self.asked.extend(row for row in rows if row.agent_session_id == agent_session_id)
+        if not self.holds:
+            self.pool.now = self.pool.now + timedelta(seconds=10)  # its wait runs out
+            raise IsolationRefused("its host holds no workspace yet", clears=True)
+        return await super().held_on_host(ctx, agent_session_id, spec, restore, pooled=pooled)
+
+
+async def test_a_claimed_vms_host_is_asked_for_the_workspace_only_once_enrolled_and_sealed(
+    tmp_path: Path, ctx: TenantContext
+) -> None:
+    pool = Pool(tmp_path, warm=1)
+    await pool.image()
+    await pool.manager.sweep(stage())
+    await pool.manager.close()
+    (warm,) = await pool.rows()
+    holding = Holding(pool)
+    pool.placed = holding
+    agent_session_id = new_id()
+    with pytest.raises(IsolationRefused) as waiting:
+        await pool.prepare(ctx, agent_session_id)
+    assert waiting.value.clears, "no workspace until its host holds one: the loop waits"
+    (asked,) = holding.asked
+    assert asked.id == warm.id, "the warm VM it claimed"
+    assert asked.host_id is not None, "its host enrolled before it was asked"
+    assert asked.sealed_at is not None, "and its VM was sealed"
+    holding.holds = True
+    workspace = await pool.prepare(ctx, agent_session_id)
+    assert workspace.location == "/workspace"
+    await pool.manager.close()
+
+
+async def test_a_warm_vm_a_session_claims_while_the_sweep_reads_it_is_never_destroyed_under_it(
+    tmp_path: Path, ctx: TenantContext
+) -> None:
+    pool = Pool(tmp_path, warm=1)
+    await pool.image()
+    key = new_key()
+    late = PoolVm(
+        id=new_id(),
+        created_at=pool.now - timedelta(minutes=20),
+        name=f"{PREFIX}plate000000000000",
+        egress_open=True,
+        key_digest=hash_token(key),
+    )
+    await pool.storage.create_vm(late)
+    seeds = pool.manager._seeds  # pyright: ignore[reportPrivateUsage]
+    await seeds.launch_seeded(
+        late.name, VmSpec(image="twin", egress_open=True), IMAGE, seed(pool.options.api_url, key)
+    )
+    # A warm start past the boot bound, which the sweep reads as dead: it
+    # runs just after the sweep's read, and a session claims it before the
+    # sweep acts.
+    agent_session_id = new_id()
+    real = pool.storage.read_vms
+    raced: list[UUID] = []
+
+    async def claimed_after_the_read(limit: int, after: UUID | None = None) -> list[PoolVm]:
+        page = await real(limit, after)
+        if not raced:
+            raced.append(late.id)
+            await pool.storage.mark_started(late.id, pool.now)
+            await pool.prepare(ctx, agent_session_id)
+        return page
+
+    pool.storage.read_vms = claimed_after_the_read  # type: ignore[method-assign]
+    await pool.manager.sweep(stage())
+    await pool.manager.close()
+    pool.storage.read_vms = real  # type: ignore[method-assign]
+    held = await pool.storage.read_of_session(ctx.org_id, agent_session_id)
+    assert held is not None and held.id == late.id, "the session claimed the warm VM"
+    assert await pool.vms.state(late.name) is VmState.RUNNING, "and keeps it"
+
+
+async def test_a_vm_that_dies_after_its_host_enrolled_is_let_go_at_the_next_sweep(
+    tmp_path: Path, ctx: TenantContext
+) -> None:
+    pool = Pool(tmp_path, warm=1)
+    await pool.image()
+    await pool.manager.sweep(stage())
+    await pool.manager.close()
+    agent_session_id = new_id()
+    await pool.prepare(ctx, agent_session_id)
+    await pool.manager.close()
+    rows = await pool.rows()
+    (bound,) = [row for row in rows if row.agent_session_id == agent_session_id]
+    (warm,) = [row for row in rows if row.warm]
+    assert bound.host_id is not None and warm.started_at is not None
+    # The cloud takes both VMs away; the session's host called a moment ago.
+    await pool.vms.destroy(bound.name)
+    await pool.vms.destroy(warm.name)
+    assert await pool.manager.sweep(stage()) == 2
+    await pool.manager.close()
+    assert bound.host_id in pool.hosts.retired, "its host's credential ended"
+    (replacement,) = await pool.rows()
+    assert replacement.id not in (bound.id, warm.id), "neither holds a place any more"
+    assert replacement.warm and replacement.started_at is not None, "the warm count stands again"
+    assert await pool.vms.state(replacement.name) is VmState.RUNNING
