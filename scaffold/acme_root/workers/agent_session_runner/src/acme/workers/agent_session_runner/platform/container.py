@@ -143,9 +143,8 @@ def build_runner_platform(
     agent_knowledge = AgentKnowledgeLayer(storage)
 
     def layers(inner: ToolsManagerInterface) -> ToolsManagerInterface:
-        # The wall and the audit first, then the session's agent playbook gates,
-        # then the agent knowledge a session recalls as its first loop starts.
-        return agent_knowledge.tools(agent_playbooks.tools(trust.tools(inner)))
+        # The wall and the audit first, then the session's agent playbook gates.
+        return agent_playbooks.tools(trust.tools(inner))
 
     async def members(rctx: RequestContext, org_id: UUID, principal: Principal) -> TenantContext:
         return await members_context(managers.tenancy)(rctx, org_id, principal)
@@ -218,7 +217,9 @@ def build_runner_platform(
             placement_options=placing,
             cloud_pool_options=cloud_pool_options(settings),
             cloud_pool_stage=stage,
-            loop_hooks=connectors.loop_hooks,
+            # The agent knowledge a session recalls before its first model
+            # call, around its connectors' toolsets.
+            loop_hooks=agent_knowledge.loop_hooks(connectors.loop_hooks),
         ),
         agent_root_options=AgentRootOptions(
             environment=settings.environment,
