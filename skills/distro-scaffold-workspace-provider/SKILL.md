@@ -70,13 +70,21 @@ The shape of a transport is `TransportContainerImpl` in
    `release` lets the machine go and keeps the files, so the next
    `prepare` finds them; `purge` removes the machine and the files by
    ids alone, and one already gone is no error. Nothing the provider
-   holds in memory is needed to find a workspace again. A provider that
-   keeps a workspace whole takes `KeepsWholeMixin`, as the container
-   provider does; one that keeps its directory alone implements
-   `keeps_directory`, `pack`, `read`, `drop`, and `restore`.
-2. `check` refuses a spec the backend can never hold and makes nothing:
-   the loop asks it before its first model call. `prepare` refuses the
-   same before it creates anything:
+   holds in memory is needed to find a workspace again. Choose by what
+   its `snapshot` keeps. A provider whose snapshot is the whole workspace
+   (a container's filesystem, a disk) takes `KeepsWholeMixin`, as the
+   container provider does. One whose every instance starts again from
+   the workspace's base, so the session's directory alone carries over,
+   implements `keeps_directory` (True), `pack`, `read`, `drop`, and
+   `restore`, and its `snapshot` takes a base's build alone, as the VM
+   provider does (`vm.py`).
+2. `check` refuses a spec the backend can never hold and makes nothing.
+   Before a new loop's first model call, the platform asks it of the
+   session's pin when this process makes the workspace and the pin asks
+   more than its isolation, a snapshot or a base: a refusal ends the
+   loop with no call spent (`check_pinned`, in
+   `om/src/<name>/om/agent_workspaces/impl/tools.py`). `prepare` refuses
+   the same before it creates anything:
    `refusal(spec, mode=..., egress=..., limits=...)` answers why the
    backend cannot hold it, and the provider raises `IsolationRefused`
    with it, its `cause` the same text, from `check` and `prepare` alike.
