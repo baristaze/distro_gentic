@@ -46,8 +46,9 @@ enrolls and calls the same way, as a kind of its own
   with its workspace local is pinned to a pool of one of its own. Its
   person asks for a client key, and their client trades it as a host
   enrolls, with its name and what it probed. The host serves that
-  session alone; every host that served it before ends, so one client
-  serves it at a time. Any other session, or another person's, is
+  session's tree alone: the session, its sub-agents, and the instances
+  their checks ask for. Every host that served it before ends, so one
+  client serves it at a time. Any other session, or another person's, is
   refused as `workspace_held_elsewhere`, which a client reads as
   "follow". A client ends its own host as it stops.
 - **Rotate.** A claimant trades its credential for the next one. The one it

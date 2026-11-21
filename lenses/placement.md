@@ -339,27 +339,24 @@ names in its request; a host handed work pinned to another pool.
 
 **Principle.** A host enforces limits its owner sets and the platform
 cannot raise: the agent projects it serves, its minimum isolation, its
-egress, the paths it lets a result read, the programs a command may
-start, whether it accepts people's commands, and the MCP servers it
-starts, each named whole. A refusal names the ceiling that refused. A
-compromised control plane still cannot widen what a host does.
+egress, the paths it lets a result read, whether it accepts people's
+commands, and the MCP servers it starts, each named whole. A refusal
+names the ceiling that refused. A compromised control plane still cannot
+widen what a host does.
 
 **Source.** Placement and Workspace Hosts, Workspace Hosts (Owner's
 ceilings); Deviations from the Guideline.
 
 **Look for.** Where the owner's ceilings are kept and checked on the
-host, a command's program among them, before anything starts; what a
-refusal says; every message from the control plane that could change
-one.
+host; what a refusal says; every message from the control plane that
+could change one.
 
 **Violation.** A ceiling kept or checked only in the control plane; a
 work item, a policy, or a setting from the control plane that serves
 another agent project, lowers the minimum isolation, widens egress or
-the readable paths, adds a program a command may start, turns on
-people's commands, or names a program, an argument, or a variable for a
-server the host starts; a command that starts before its program is held
-to `commands`, or that sets the search path a named program is found
-on; a refusal that does not name its ceiling.
+the readable paths, turns on people's commands, or names a program, an
+argument, or a variable for a server the host starts; a refusal that
+does not name its ceiling.
 
 **Severity.** high
 
@@ -560,10 +557,11 @@ it serves it from their own machine. The session is pinned to a pool of
 one of its own. Its person's client trades a one-use key, which the
 platform issues that person alone, for a host's credential of that pool,
 never the person's own, and runs the host program's claim loop, held to
-the machine's ceilings. One client serves the session at a time, and a
-client ends its host as it stops. A client attached to a session whose
-workspace a VM, a host, or another person's client holds follows it and
-serves nothing.
+the machine's ceilings. It serves the session's tree: the session, its
+sub-agents, and the instances their checks ask for, and no other
+session. One client serves the session at a time, and a client ends its
+host as it stops. A client attached to a session whose workspace a VM, a
+host, or another person's client holds follows it and serves nothing.
 
 **Source.** Placement and Workspace Hosts, Placement; Placement and
 Workspace Hosts, Workspace Hosts (A person's own client).
@@ -576,12 +574,14 @@ the session is held elsewhere.
 
 **Violation.** A client that serves on the person's own credential; a key
 that enrolls twice, outlives its few minutes, or is issued for another
-person's session or one that is not local; a client's host handed
-another session's work; a local session's pool shared with the cloud
-pool's, a tenant's, or another session's; two clients serving one
-session; a client that serves a session whose workspace a VM or a host
-holds; a client that claims through a loop of its own beside the host
-program's, so a ceiling holds on one and not the other.
+person's session or one that is not local; a client's host handed the
+work of a session outside its session's tree, or one that fails a
+sub-agent's work or an instance its checks ask for; a local session's
+pool shared with the cloud pool's, a tenant's, or another session's; two
+clients serving one session; a client that serves a session whose
+workspace a VM or a host holds; a client that claims through a loop of
+its own beside the host program's, so a ceiling holds on one and not the
+other.
 
 **Severity.** high
 

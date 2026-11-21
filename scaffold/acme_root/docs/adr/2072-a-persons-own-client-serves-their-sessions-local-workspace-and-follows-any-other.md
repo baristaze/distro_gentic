@@ -36,10 +36,13 @@ prefix (`hck_`), five minutes long, kept as a digest beside the
 enrollment tokens. Their CLI runs the host program's own claim loop,
 which trades the key at the host's enrollment
 (`POST /v1/hosts/enrollments`) for a host's credential of the session's
-pool, carrying the session in its identity, so placement fails any other
-session's item that reaches it. The trade spends the key, and refuses it
-when the session left its pool, or the person left the tenant or no
-longer writes its sessions. The person answers for the host. Its
+pool, carrying the session in its identity. The host serves the
+session's tree: placement hands it the work of the session, of its
+sub-agents, which run where their root runs, and of the instances their
+checks ask for, each read up to the root of the session it names, and
+fails any other session's item that reaches it. The trade spends the
+key, and refuses it when the session left its pool, or the person left
+the tenant or no longer writes its sessions. The person answers for the host. Its
 credential lives in a temporary home only its user reads, which goes as
 the client stops; the owner's ceilings, secrets, and snapshots are the
 host's own home's.
@@ -58,14 +61,20 @@ VM of the cloud pool, a host of a pool, or another person's client
 holds is refused as `workspace_held_elsewhere`. The CLI reads it as
 "follow": it streams the session's steps and serves nothing.
 
-**The owner's ceilings name the programs a command starts.** The host's
-`ceilings.toml` gains `commands`: the programs a command may start, by
-name or absolute path, none unless named, or `all`. The relay reads what
-a command runs once it holds the item's detail, and refuses a program
-the list does not name, and a command that sets the search path a named
-program is found on, before anything starts. Every ceiling's refusal
-names the ceiling. A VM of the cloud pool names `all`: the VM is its
-session's wall.
+**The container is a local workspace's wall, and a refusal names its
+ceiling.** A local workspace is a container on the person's own engine,
+as the host program makes one, and the container is its wall. The
+owner's ceilings stay as every host holds them, and each refusal names
+the ceiling that refused, so a person who wrote the file reads which
+line stopped an item. No ceiling lists the programs a command may start.
+The platform's own scripts run through a shell (`sh -c`): the checkout's
+sync, which runs around every loop of a session bound to a repository,
+and an instance's unpack, copy, and lock steps. A list without the shell
+refuses every local session that works on a repository, and a list with
+it lets any command through. A list of programs is no wall for a command
+that runs through a shell. Such a list waits for a transport that runs
+a bare directory as a dedicated user, where no container stands between
+a command and the machine.
 
 ## Consequences
 
@@ -79,8 +88,3 @@ session's wall.
 - A client restarted prepares the workspace again, on a new host. A
   client killed without its stop keeps its host until it falls silent,
   and the session waits for that host meanwhile.
-- `commands` is a net on the program a command names. A command that
-  runs a named interpreter runs what that interpreter runs, and a base's
-  setup runs as a prepare does, outside it.
-- An installed host's `ceilings.toml` without `commands` runs no
-  command: its owner names the programs, or `all`.

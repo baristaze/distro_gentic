@@ -6,8 +6,9 @@ The client asks the platform for a one-use key for the session
 (`ApiClient.issue_client_key`), which only the person who started a session
 whose workspace is local is issued. The host trades it, once, for a host's
 credential of the session's local pool of one, as a VM of the cloud pool
-trades its key: it is handed that session's work and no other's. It is the
-host program's own claim loop, made as `acme-host run` makes it
+trades its key: it is handed the work of that session's tree, the session,
+its sub-agents, and the instances their checks ask for, and no other's. It
+is the host program's own claim loop, made as `acme-host run` makes it
 (`main.host_agent`), over the host's own transports and workspaces, and held
 to the owner's `ceilings.toml` in the host's home: the exec relay, the
 ceilings, and every wall stay one. A machine whose owner wrote no ceilings
