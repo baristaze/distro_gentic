@@ -84,4 +84,4 @@ and a boot that outlasts a prepare's wait is still recorded.
 - A kind that asked raw CPUs or memory of the pool is now refused, and
   asks a size instead.
 - A VM that turns 72 hours during a run lives until that run ends.
-- The metric's `source` label is bounded, by two values.
+- The metric carries no label, so it adds no series as VMs come and go.
