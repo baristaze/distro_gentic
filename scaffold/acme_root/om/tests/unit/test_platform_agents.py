@@ -28,6 +28,7 @@ from acme.om.agents.types.kind import (
     AgentKind,
     AgentKindCatalog,
     DoneRule,
+    Starter,
     TreeLimits,
 )
 from acme.om.agents.types.request import Spawn
@@ -429,6 +430,41 @@ async def test_a_lead_spawns_the_reviewer_under_its_share(tmp_path: Path) -> Non
     page = await platform.managers.spend_budgets.get_spend_budgets(platform.owner, None, 50)
     own = SpendBudgetScope(kind=SpendBudgetScopeKind.AGENT_SESSION, key=str(child.id))
     assert [budget.amount for budget in page.items if budget.scope == own] == [REVIEWER_SHARE]
+
+
+SPAWNED_KINDS = (kinds.SOFTWARE_ENGINEER, kinds.ANALYSIS, kinds.REVIEWER)
+"""The shipped kinds a spawn starts: the two that split their work, and
+the reviewer a lead starts on the pull request another kind opened."""
+
+
+@pytest.mark.parametrize("name", list(dict.fromkeys(kind.name for kind in SHIPPED)))
+async def test_a_spawn_starts_each_shipped_kind_a_lead_starts_and_refuses_the_rest(
+    tmp_path: Path, name: str
+) -> None:
+    """A spawn starts a shipped kind only at a latest version that names an
+    agent among those who may start it. A person starts every one, and the
+    rest are a person's alone: a spawn of one is refused before anything is
+    written, and takes no slot of its tree."""
+    kind = AgentKindCatalog(kinds=SHIPPED).latest(name)
+    # A lead that may grant each result tool a shipped kind submits through.
+    lead = LEAD.model_copy(
+        update={"name": "lead", "tools": (*REVIEWER_KIND.tools, kinds.SUBMIT_RESULT)}
+    )
+    platform = platform_over(tmp_path, kinds=(lead,))
+    lead_id = await platform.start(lead.name)
+    asked = Spawn(id=new_id(), kind=name, title="a part", objective="Do your part of it.")
+
+    if name in SPAWNED_KINDS:
+        assert kind.started_by == {Starter.PERSON, Starter.AGENT}
+        child = await platform.managers.agents.spawn(platform.owner, lead_id, asked)
+        assert (child.kind, child.kind_version, child.parent_id) == (name, kind.version, lead_id)
+        return
+    assert kind.started_by == {Starter.PERSON}
+    with pytest.raises(ValidationFailed, match="started only when a person starts it"):
+        await platform.managers.agents.spawn(platform.owner, lead_id, asked)
+    with pytest.raises(NotFound):
+        await platform.managers.agent_sessions.get_agent_session(platform.owner, asked.id)
+    assert (await platform.managers.agents.tree_of(platform.owner, lead_id)).size == 0
 
 
 # Each shipped kind reaches an accepted end; the software engineer's success only on

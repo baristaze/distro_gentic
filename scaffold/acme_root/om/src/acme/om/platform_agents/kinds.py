@@ -15,7 +15,8 @@ engine runs every one of them the same way.
   or checks, into sub-agents, each in a clean context of its own, and wait
   for their reports. Every kind takes the engine's tree, three levels deep
   and ten sub-agents besides its root, and each kind a sub-agent may run
-  as names its share (ADR 2043).
+  as names its share and an agent among those who may start it
+  (`SPAWNED`, ADR 2043).
 - The planner turns findings into tasks: it reads where sessions stand,
   hands new engineering work to a software engineer, and answers with its plan.
 - The platform assistant answers the people who run their part of the
@@ -58,7 +59,7 @@ from typing import Any
 
 from acme.infra.agent_workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
 from acme.om.agent_sessions.limits import Limits
-from acme.om.agents.types.kind import NO_AGENT_WORKSPACE, AgentKind, DoneRule
+from acme.om.agents.types.kind import NO_AGENT_WORKSPACE, AgentKind, DoneRule, Starter
 from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.base import OmBase
 from acme.om.context import Permission
@@ -249,6 +250,13 @@ WORKSPACE = IsolationSpec(mode=IsolationMode.CONTAINER, egress=EgressPolicy(mode
 kinds that change or read files and run code."""
 
 
+SPAWNED: frozenset[Starter] = frozenset({Starter.PERSON, Starter.AGENT})
+"""Who may start a kind a spawn starts: a person, and an agent as its
+sub-agent. The software engineer, analysis, and the reviewer name it
+beside their share; every other kind is started by a person alone, and a
+spawn of it is refused."""
+
+
 def allowing(*classes: ToolClass) -> ToolPolicyLayer:
     """A kind's layer of policy: these classes run unattended. A tenant
     narrows or loosens it, and the platform's ceilings hold above both."""
@@ -314,7 +322,7 @@ SOFTWARE_ENGINEER_V2 = AgentKind(
 it."""
 
 SOFTWARE_ENGINEER_V3 = SOFTWARE_ENGINEER_V2.model_copy(
-    update={"version": 3, "share": Amount(cost_micros=50_000_000)}
+    update={"version": 3, "share": Amount(cost_micros=50_000_000), "started_by": SPAWNED}
 )
 """The software engineer before its step guard was sized for a change: kept while a
 session may still run it."""
@@ -505,6 +513,7 @@ ANALYSIS_V3 = revised(
     prompts=(*ANALYSIS_V2.prompts, SUB_AGENTS, ANALYSIS_WAITS),
     policy=allowing(ToolClass.READ, ToolClass.EXECUTE, ToolClass.SPAWN),
     share=ANALYSIS_SHARE,
+    started_by=SPAWNED,
 )
 """Analysis before it read back a result kept outside its window: kept
 while a session may still run it."""
@@ -657,6 +666,7 @@ REVIEWER_KIND = AgentKind(
     policy=allowing(ToolClass.READ),
     isolation=NO_AGENT_WORKSPACE,
     share=REVIEWER_SHARE,
+    started_by=SPAWNED,
 )
 """The reviewer. It reads one pull request through the forge, at its head,
 and changes nothing: it has no workspace, and no tool it holds writes a
