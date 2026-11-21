@@ -39,7 +39,7 @@ from acme.om.tenancy.types.membership import Membership
 from acme.om.tenancy.types.user import User
 from acme.om.tools.tool import ToolInterface
 from acme.services.api.container import AppContainer
-from acme.services.api.seed import first_agent_project
+from acme.services.api.seed import first_agent_project, seed_matrix
 from acme.services.api.settings import ApiSettings
 
 OWNER = {"email": "ann@example.test", "name": "Ann"}
@@ -190,7 +190,8 @@ async def minted_owner(client: httpx.AsyncClient, container: AppContainer) -> di
 
 async def open_spend_account(container: AppContainer, headers: dict[str, str]) -> None:
     """Opens the signed-in person's tenant account on the platform's funding,
-    as `make seed` does locally, so a loop's calls have someone to charge."""
+    and publishes the matrix, as `make seed` does locally, so a loop's calls
+    have someone to charge and a fill to resolve."""
     token = headers["Authorization"].removeprefix("Bearer ")
     ctx = await container.managers.tenancy.authenticate(seed_request(), token)
     agent_billing = build_agent_billing(
@@ -200,6 +201,9 @@ async def open_spend_account(container: AppContainer, headers: dict[str, str]) -
         funding=FundingMode.PLATFORM, key_ref=None, unit_plan_id="starter", zone="UTC"
     )
     await agent_billing.open_spend_account(ctx, request)
+    await seed_matrix(
+        container.storage, container.managers, seed_request(), container.managers.kinds.kinds
+    )
 
 
 async def add_member(container: AppContainer, org_id: UUID, email: str, role: Role) -> User:
