@@ -66,8 +66,8 @@ nothing, and answers which session should take it".
   the kind's `kind.py`; the two factors are in `kinds/__init__.py`.
 - `--workspace`: `container` for a kind that reads or changes files or
   runs commands (the profile's `isolation` is `WORKSPACE`), `none` for
-  one that has no workspace (`NO_WORKSPACE`). A delegated kind a person
-  talks to has none, as the assistant has none.
+  one that has no workspace (`NO_AGENT_WORKSPACE`). A delegated kind a
+  person talks to has none, as the assistant has none.
 - `--classes`: the tool classes its policy layer allows, `allowing(...)`.
 - `--roles`: model roles beyond `MAIN` the kind's calls take.
 - `--asks`: the model size the kind asks of a role, as `main=xl`. By
@@ -89,7 +89,7 @@ beside the others and never inside one. The shape is
 | File | Holds |
 |------|-------|
 | `kinds/<kind>/__init__.py` | its docstring alone: the kind's name, its versions in `kind.py`, their prompts in `prompts/` |
-| `kinds/<kind>/kind.py` | a docstring of what the kind does, `<KIND>_KIND` (a constant per version, the latest named `<KIND>_KIND`, each with `prompts=(prompt_of(__file__, <N>),)` and its `started_by`), any `<KIND>_LOOPS` and `<KIND>_SHARE`, and `VERSIONS`, every version the platform still runs |
+| `kinds/<kind>/kind.py` | a docstring of what the kind does; a constant per version, `<KIND>_V<N>` for each but the latest, which is `<KIND>_KIND`, each with `prompts=(prompt_of(__file__, <N>),)` and its `started_by`; any `<KIND>_LOOPS` and `<KIND>_SHARE`; and `VERSIONS`, every version the platform still runs, oldest first |
 | `kinds/<kind>/prompts/v1.md` | the prompt of version 1, Markdown, ending in one line break (step 2) |
 | `kinds/<kind>/prompts/lock.json` | `{"v1.md": "<digest>"}`, the digest step 7 prints |
 | `kinds/<kind>/manuals/<name>.md`, `kinds/<kind>/wiki/<slug>.md` (step 6) | each manual and each entry the kind ships for its sessions |
@@ -103,7 +103,7 @@ module, as step 3 says.
 |------|--------|
 | `om/src/<name>/om/platform_agents/kinds/__init__.py` | `<KIND>`, any tool name constant it adds, and its line in the module docstring |
 | `om/src/<name>/om/platform_agents/shipped.py` | the kind's module imported, `from <name>.om.platform_agents.kinds.<kind> import kind as <kind>`, and named in `FOLDERS`, after the platform's others, so `SHIPPED` holds its versions |
-| `om/src/<name>/om/platform_agents/kinds/<parent>/kind.py` and its `prompts/` (a kind a spawn starts, whose parent lacks what step 4 says) | the parent's next version, holding the kind's tools and any prompt layer step 4 asks for, beside its last in `VERSIONS`, with its prompt file and its lock entry (step 2); the tests below take that version as they take the kind's |
+| `om/src/<name>/om/platform_agents/kinds/<parent>/kind.py` and its `prompts/` (a kind a spawn starts, whose parent lacks what step 4 says) | the parent's next version, holding the kind's tools and any paragraph of its prompt step 4 asks for, beside its last in `VERSIONS`, with its prompt file and its lock entry (step 2); the tests below take that version as they take the kind's |
 | `om/src/<name>/om/platform_agents/tools/<toolset>.py` (a tool of its own) | `<Tool>Impl(NativeToolImpl)`, its input, and its output, in the module of its toolset |
 | `om/src/<name>/om/platform_agents/catalog.py` (a tool of its own) | the tool in `with_shipped`, in `own_specs` and in `own` |
 | `om/tests/unit/test_platform_agents.py` | the kind in `test_every_shipped_agent_is_a_profile_that_sets_its_powers`, the cases of step 5, each of its versions in `NAMED_ONE_BY_ONE` with the tools it names one by one, since `test_each_shipped_kind_built_from_toolsets_renders_the_tool_block_it_named_one_by_one` holds that set equal to `SHIPPED`, and its latest version in `RENDERED`, the digest of its request's tools, with its profile in the loop of `test_each_shipped_kind_renders_its_versions_bytes_with_a_break_after_its_prompt`: run that test once with `-vv`, since a shorter report cuts the digest short, and pin the digest its failure prints |
@@ -207,8 +207,8 @@ module, as step 3 says.
    `om/tests/unit/test_platform_tools_<toolset>.py`.
    A `result_tool` kind names its result tool among its tools.
 4. The profile sets its powers: `isolation` is `WORKSPACE` or
-   `NO_WORKSPACE`, and its `policy` is `allowing(...)` the classes it
-   needs and no more. A kind that may only read, or read and hand on,
+   `NO_AGENT_WORKSPACE`, and its `policy` is `allowing(...)` the classes
+   it needs and no more. A kind that may only read, or read and hand on,
    is held to it at boot by its reach: the classes it may make, its
    authority, and no workspace, in `REACHES` in `rules.py`, which
    `refuse_reach` in `catalog.py` checks for every version of it over
@@ -221,8 +221,9 @@ module, as step 3 says.
    to its parent's (a lead, in `platform_agents/README.md`); the
    `sub_agents` toolset, a paragraph of its prompt on sub-agents, and
    `SPAWN` in its policy, as `ANALYSIS_V3` took them (the paragraph is
-   the second of `kinds/analysis/prompts/v3.md`), when it lacks them; and, when its
-   prompt must say when to start the kind, a prompt layer that says it.
+   the second of `kinds/analysis/prompts/v3.md`), when it lacks them;
+   and, when its prompt must say when to start the kind, a paragraph
+   that says it.
    A parent that lacks any of them gets its next version holding them,
    as step 2 says. Ask for that version; unattended, write it and name
    it in the output. When no shipped kind is named its parent, none
