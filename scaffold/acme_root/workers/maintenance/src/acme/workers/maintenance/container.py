@@ -110,7 +110,7 @@ def worker_managers(
     matrix = MatrixLayer(
         storage,
         options=MatrixOptions(environment=settings.environment, purge_batch=batch),
-        kinds=ports.kinds.agents,
+        kinds=ports.kinds.agent_kinds,
     )
     managers = build_platform_managers(
         storage,

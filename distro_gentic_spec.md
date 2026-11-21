@@ -805,14 +805,17 @@ text][e-rendering]: whole in the system layer of every request, before
 and after every compaction, and cached with the kind's prompts. Its
 gates narrow the session's policy as an invoked agent playbook's do. A
 pin names one version, and a session keeps the kind manual it was made
-with: a later pin reaches only the sessions made after it. A brief
-longer than the standing text holds is refused when it is pinned.
+with: a later pin reaches only the sessions made after it. The kind's
+own manuals come first in that standing text ([The Agents a Platform
+Ships](#the-agents-a-platform-ships)), and a brief that would not fit
+after them is refused when it is pinned.
 
 **Agent knowledge** is recalled into a session when its trigger matches,
 so a new session does not rediscover its environment. It renders as
 data. An agent may suggest agent knowledge, and a person reviews it
 before any session recalls it, so one session cannot plant instructions
-for the next.
+for the next. A kind's own entries ship in its folder, reviewed as its
+code is, and reach only the sessions of that kind.
 
 An agent playbook and a reviewed entry are a tenant's **levers**: texts
 written for people that an agent then follows. A lever is read as a
@@ -1178,6 +1181,18 @@ each role it calls, and holds its workspace warm for a grace of its own
 kinds the same way, as data, and the models and the rhythm follow. A
 tenant adds toolsets of its own to a kind: its connectors
 ([Connectors](#connectors)).
+
+Each kind is a folder of its own, as the engine keeps one: its typed
+versions, and each version's prompt in Markdown, pinned by its digest.
+Beside them, the folder ships the kind's own texts. Its **manuals**
+open the standing text of each new session of the kind, before the
+kind manual its tenant pins. Its **wiki** is agent knowledge its
+sessions recall, search, and read beside the tenant's ([Agent Playbooks
+and Agent Knowledge](#agent-playbooks-and-agent-knowledge)). Both are
+the kind's, never a tenant's: no tenant edits or erases them, and a
+session of another kind never reaches them. The gate reads each one
+with the checks a lever gets, and fails on what they find. A product
+keeps its own kinds as folders the same way.
 
 - The **software engineer** takes an objective to a validated,
   reviewable change. Its workspace has no network and starts from its

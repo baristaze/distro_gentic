@@ -39,12 +39,13 @@ from acme.om.platform_agents.catalog import (
     with_assistant_tools,
     with_object_model,
 )
-from acme.om.platform_agents.kinds import (
-    ASSISTANT_READERS,
+from acme.om.platform_agents.kinds import ASSISTANT_READERS
+from acme.om.platform_agents.kinds.platform_assistant.kind import (
     PLATFORM_ASSISTANT_KIND,
     PLATFORM_ASSISTANT_V1,
-    SHIPPED,
+    PRODUCT_OBJECT_MODEL,
 )
+from acme.om.platform_agents.shipped import SHIPPED
 from acme.om.platform_agents.tools.base import NativeToolImpl
 from acme.om.platform_agents.types.corpus import Corpus
 from acme.om.platform_root import (
@@ -237,7 +238,7 @@ async def test_a_product_that_names_its_object_model_has_the_assistant_search_an
     # The prompt names it after the platform's own, which stay as they were.
     own = list(PLATFORM_ASSISTANT_KIND.prompts)
     assert system[: len(own)] == own
-    assert system[len(own)] == kinds.PRODUCT_OBJECT_MODEL.format(path=PRODUCT_MODEL)
+    assert system[len(own)] == PRODUCT_OBJECT_MODEL.format(path=PRODUCT_MODEL)
     assert system[len(own)].startswith(PRODUCT_MODEL)
     # The version before keeps its prompts, as a session still on it does.
     assert PLATFORM_ASSISTANT_V1 in with_object_model(SHIPPED, PRODUCT_MODEL, corpus)

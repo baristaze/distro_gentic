@@ -60,7 +60,7 @@ from acme.om.matrix.types.tenant import FillOptions
 from acme.om.placement.rules import DEFAULT_TIER
 from acme.om.placement.types.share import FairShare
 from acme.om.platform_agents import kinds
-from acme.om.platform_agents.kinds import SHIPPED
+from acme.om.platform_agents.shipped import SHIPPED
 from acme.om.platform_root import ProductKinds
 from acme.om.privacy.types.agent_session_privacy import StorageMode
 from acme.om.retention import rules as retention_rules

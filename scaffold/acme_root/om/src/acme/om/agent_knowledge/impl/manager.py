@@ -1,16 +1,24 @@
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import datetime
 from uuid import UUID
 
 from pydantic import Field
 
 from acme.om.agent_knowledge.manager import AgentKnowledgeManagerInterface
-from acme.om.agent_knowledge.rules import ranked, reaches, recalled_step, slug_of, triggered
+from acme.om.agent_knowledge.rules import (
+    own_recalled_step,
+    ranked,
+    reaches,
+    recalled_step,
+    slug_of,
+    triggered,
+)
 from acme.om.agent_knowledge.storage import AgentKnowledgeStorageInterface
 from acme.om.agent_knowledge.types.agent_knowledge import (
     AgentKnowledge,
     AgentKnowledgeRecall,
     AgentKnowledgeStatus,
+    KindEntry,
 )
 from acme.om.agent_projects.policies import SessionAgentProjectsInterface
 from acme.om.agent_sessions import AgentSessionsManagerInterface
@@ -45,6 +53,9 @@ class AgentKnowledgeOptions(OmBase):
 
 
 class AgentKnowledgeManagerImpl(AgentKnowledgeManagerInterface):
+    """`wiki` holds each kind's own entries, by its name; a kind it does not
+    name ships none."""
+
     def __init__(
         self,
         storage: AgentKnowledgeStorageInterface,
@@ -55,6 +66,7 @@ class AgentKnowledgeManagerImpl(AgentKnowledgeManagerInterface):
         options: AgentKnowledgeOptions,
         reach: LeverReach,
         clock: Callable[[], datetime] = utcnow,
+        wiki: Mapping[str, tuple[KindEntry, ...]] | None = None,
     ) -> None:
         self._storage = storage
         self._sessions = sessions
@@ -64,6 +76,7 @@ class AgentKnowledgeManagerImpl(AgentKnowledgeManagerInterface):
         self._options = options
         self._reach = reach
         self._clock = clock
+        self._wiki = wiki or {}
 
     async def suggest(
         self,
@@ -180,12 +193,15 @@ class AgentKnowledgeManagerImpl(AgentKnowledgeManagerInterface):
 
     async def recall(
         self, ctx: TenantContext, agent_session_id: UUID, about: str
-    ) -> tuple[AgentKnowledge, ...]:
+    ) -> tuple[AgentKnowledge | KindEntry, ...]:
         ctx.require(Permission.WRITE)
+        session = await self._sessions.get_agent_session(ctx, agent_session_id)
+        # Its kind's own entries first, then its tenant's, within one bound.
+        own = triggered(self._wiki.get(session.kind, ()), about)[: self._options.most]
         agent_project_id = await self._agent_projects.agent_project_of(ctx, agent_session_id)
         found: list[AgentKnowledge] = []
         after: UUID | None = None
-        while len(found) < self._options.most:
+        while len(own) + len(found) < self._options.most:
             page = await self._storage.read_reachable(
                 ctx.org_id, agent_project_id, after, self._options.page
             )
@@ -193,24 +209,27 @@ class AgentKnowledgeManagerImpl(AgentKnowledgeManagerInterface):
             if len(page) < self._options.page:
                 break
             after = page[-1].id
-        found = found[: self._options.most]
-        if found:
+        found = found[: self._options.most - len(own)]
+        if own or found:
             principal = Principal(kind=PrincipalKind.SERVICE, id=ctx.user_id)
             now = self._clock()
-            # Which version each recall brought in, kept before the session
-            # reads it, so a reading of the sessions that stalled names it.
-            await self._storage.create_recalls(
-                ctx.org_id, tuple(self._recall(entry, agent_session_id) for entry in found)
-            )
-            steps = [recalled_step(entry, agent_session_id, principal, now) for entry in found]
+            # Which version each recall of the tenant's brought in, kept before
+            # the session reads it, so a reading of the sessions that stalled
+            # names it. A kind's own entry is no tenant's lever, so none is kept.
+            if found:
+                await self._storage.create_recalls(
+                    ctx.org_id, tuple(self._recall(entry, agent_session_id) for entry in found)
+                )
+            steps = [own_recalled_step(entry, session, principal, now) for entry in own]
+            steps += [recalled_step(entry, agent_session_id, principal, now) for entry in found]
             await self._sessions.receive(ctx, agent_session_id, steps)
-        return tuple(found)
+        return (*own, *found)
 
     async def search(
         self, ctx: TenantContext, agent_session_id: UUID, query: str, limit: int
-    ) -> tuple[AgentKnowledge, ...]:
+    ) -> tuple[AgentKnowledge | KindEntry, ...]:
         ctx.require(Permission.READ)
-        await self._sessions.get_agent_session(ctx, agent_session_id)
+        session = await self._sessions.get_agent_session(ctx, agent_session_id)
         agent_project_id = await self._agent_projects.agent_project_of(ctx, agent_session_id)
         # Every entry the session reaches is read, a page at a time: a
         # tenant's reviewed agent knowledge is what its people kept by hand.
@@ -225,11 +244,17 @@ class AgentKnowledgeManagerImpl(AgentKnowledgeManagerInterface):
                 break
             after = page[-1].id
         most = max(1, min(limit, self._options.most_found))
-        return tuple(ranked(reached, query, most))
+        own = self._wiki.get(session.kind, ())
+        return tuple(ranked((*own, *reached), query, most))
 
-    async def read(self, ctx: TenantContext, agent_session_id: UUID, slug: str) -> AgentKnowledge:
+    async def read(
+        self, ctx: TenantContext, agent_session_id: UUID, slug: str
+    ) -> AgentKnowledge | KindEntry:
         ctx.require(Permission.READ)
-        await self._sessions.get_agent_session(ctx, agent_session_id)
+        session = await self._sessions.get_agent_session(ctx, agent_session_id)
+        for own in self._wiki.get(session.kind, ()):
+            if own.handle == slug:
+                return own
         agent_project_id = await self._agent_projects.agent_project_of(ctx, agent_session_id)
         entry = await self._storage.read_by_slug(ctx.org_id, agent_project_id, slug)
         if entry is None or not reaches(entry, agent_project_id):

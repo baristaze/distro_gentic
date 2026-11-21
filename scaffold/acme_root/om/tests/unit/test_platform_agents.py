@@ -65,22 +65,26 @@ from acme.om.platform_agents.catalog import (
     refuse_reach,
     with_shipped,
 )
-from acme.om.platform_agents.kinds import (
+from acme.om.platform_agents.kinds import ValidationWorkKind
+from acme.om.platform_agents.kinds.analysis.kind import (
     ANALYSIS_KIND,
+    ANALYSIS_LOOPS,
     ANALYSIS_SHARE,
     ANALYSIS_V3,
-    OPS_ANALYST_KIND,
-    PLANNER_KIND,
-    PLATFORM_ASSISTANT_KIND,
-    REVIEWER_KIND,
-    REVIEWER_SHARE,
-    SHIPPED,
+)
+from acme.om.platform_agents.kinds.ops_analyst.kind import OPS_ANALYST_KIND
+from acme.om.platform_agents.kinds.planner.kind import PLANNER_KIND
+from acme.om.platform_agents.kinds.platform_assistant.kind import PLATFORM_ASSISTANT_KIND
+from acme.om.platform_agents.kinds.reviewer.kind import REVIEWER_KIND, REVIEWER_SHARE
+from acme.om.platform_agents.kinds.software_engineer.kind import (
     SOFTWARE_ENGINEER_KIND,
+    SOFTWARE_ENGINEER_LOOPS,
     SOFTWARE_ENGINEER_SHARE,
+    SOFTWARE_ENGINEER_STEP_GUARD,
     SOFTWARE_ENGINEER_V6,
     SOFTWARE_ENGINEER_V7,
-    ValidationWorkKind,
 )
+from acme.om.platform_agents.shipped import SHIPPED
 from acme.om.platform_agents.types.validation import ValidationStart, ValidationStatus
 from acme.om.platform_root import PlatformRootOptions, ProductKinds, build_platform_managers
 from acme.om.spend_budgets.types.spend_budget import SpendBudgetScope, SpendBudgetScopeKind
@@ -269,9 +273,9 @@ def test_the_sub_agent_layer_says_a_sub_agent_starts_from_the_default_branch() -
     every kind that starts one is told its sub-agents lack its changes, and
     asks about the default branch or hands over what they need."""
     for kind in (SOFTWARE_ENGINEER_KIND, ANALYSIS_KIND):
-        assert kinds.SUB_AGENTS in kind.prompts, kind.name
-    assert "a fresh checkout of the default branch, without your changes" in kinds.SUB_AGENTS
-    assert "hand it what it needs in its objective" in kinds.SUB_AGENTS
+        (prompt,) = kind.prompts
+        assert "a fresh checkout of the default branch, without your changes" in prompt, kind.name
+        assert "hand it what it needs in its objective" in prompt, kind.name
 
 
 def test_the_software_engineers_layers_name_analysis_for_a_question_and_the_software_engineer_for_a_change() -> (
@@ -328,11 +332,11 @@ def test_the_software_engineers_step_guard_is_sized_for_a_change_and_its_share_f
     """A software engineer a spawn or an agent automation starts parks for a person past the
     calls a change takes, never at the engine's default guard, and its share
     pays for its loops at that guard."""
-    assert SOFTWARE_ENGINEER_KIND.limits.step_guard == kinds.SOFTWARE_ENGINEER_STEP_GUARD
+    assert SOFTWARE_ENGINEER_KIND.limits.step_guard == SOFTWARE_ENGINEER_STEP_GUARD
     assert SOFTWARE_ENGINEER_KIND.limits.step_guard > Limits().step_guard
     assert SOFTWARE_ENGINEER_KIND.share == SOFTWARE_ENGINEER_SHARE
     assert SOFTWARE_ENGINEER_SHARE.cost_micros == (
-        kinds.SOFTWARE_ENGINEER_LOOPS
+        SOFTWARE_ENGINEER_LOOPS
         * SOFTWARE_ENGINEER_KIND.limits.step_guard
         * kinds.CACHED_CALL_MICROS
     )
@@ -344,7 +348,7 @@ def test_analysis_keeps_the_engines_step_guard_and_its_share_follows_it() -> Non
     assert ANALYSIS_KIND.limits == Limits()
     assert ANALYSIS_KIND.share == ANALYSIS_SHARE
     assert ANALYSIS_SHARE.cost_micros == (
-        kinds.ANALYSIS_LOOPS * ANALYSIS_KIND.limits.step_guard * kinds.CACHED_CALL_MICROS
+        ANALYSIS_LOOPS * ANALYSIS_KIND.limits.step_guard * kinds.CACHED_CALL_MICROS
     )
 
 
@@ -552,32 +556,30 @@ RENDERED = {
     (
         kinds.SOFTWARE_ENGINEER,
         8,
-    ): "9cc87aa9d21dd89c27a67b9b8ed4899e50a36f416386ff0d5d4b8cb3a560ba05",
-    (kinds.ANALYSIS, 4): "5b4047be69f2dedab3921c6d31c92796a2887d7e12c0dcf7d319b6b28eed2d52",
-    (kinds.PLANNER, 1): "6aff6c34908d0b1791f6ecc3e155b77f31d6635faa23fb75c46756e741205035",
+    ): "04fd4cbcacddf156e91f07743eb35987cffb54f08748850f2c52cacf6dfc65fd",
+    (kinds.ANALYSIS, 4): "5bb9c28b157e286d0ed62826b215ea2e6c429758b85cd190bfbc5f5b74ed59eb",
+    (kinds.PLANNER, 1): "0dd1fd420a048131aa4d74acf6c9ec9f4bada79429cddecc11db15ba439ea7a0",
     (
         kinds.PLATFORM_ASSISTANT,
         2,
-    ): "930825c984ab75a673c1a65353f365f29dae1e6e1501ba4ccc2c9889bfc03753",
-    (kinds.REVIEWER, 1): "f19192e0af04c5b3c6ba12c5724b563d540a2b4cb452a4f654e11b36d1fe0eb1",
-    (kinds.OPS_ANALYST, 1): "2377712e4882d2500950e01c904163bb8bf6c8411cf122fafc1c060234672f3e",
+    ): "a149e48cc527948be2e0cf7e634ae4bbc2bd8177cf31a9897af9935575189119",
+    (kinds.REVIEWER, 1): "2228559c82dca8133ff510a145a9fcc97f19c89802dc7a2b163652f450f1bde7",
+    (kinds.OPS_ANALYST, 1): "6a8f7bf77d69a4718ce6c482317ec111360dc29ac3bcc469d5ec9bccd2bfbb40",
 }
 """Each shipped kind at the version a session starts on, and the digest of
-its request's first two layers: its system text and its tools. A kind
-version pins those bytes, the prefix its sessions share in the cache, so a
-change to either is a new version of the kind."""
+its request's tools. A kind version pins those bytes and its prompt, which
+its folder's lock pins (`prompts/lock.json`, held in `test_kind_folders`):
+the prefix its sessions share in the cache, so a change to either is a new
+version of the kind."""
 
 
-def layers_of(call: ModelCall) -> str:
-    """The digest of a request's system text and its tools."""
-    layers = {
-        "system": [block.text for block in call.system],
-        "tools": [tool.model_dump(mode="json") for tool in call.tools],
-    }
-    return hashlib.sha256(json.dumps(layers, sort_keys=True).encode()).hexdigest()
+def tools_of(call: ModelCall) -> str:
+    """The digest of a request's tools."""
+    tools = [tool.model_dump(mode="json") for tool in call.tools]
+    return hashlib.sha256(json.dumps(tools, sort_keys=True).encode()).hexdigest()
 
 
-async def test_each_shipped_kind_renders_its_versions_bytes_with_a_break_after_its_prompts(
+async def test_each_shipped_kind_renders_its_versions_bytes_with_a_break_after_its_prompt(
     evidenced: tuple[Platform, ScriptedExecutor, WorkProductMemoryImpl],
 ) -> None:
     platform, _, work = evidenced
@@ -601,10 +603,10 @@ async def test_each_shipped_kind_renders_its_versions_bytes_with_a_break_after_i
         platform.anthropic.add(reply(said("Done.")))
         await platform.managers.loop.run(platform.owner, agent_session_id)
         call = platform.anthropic.calls[before]
-        assert layers_of(call) == RENDERED[(kind.name, kind.version)], kind.name
-        prompts = [prompt for prompt in kind.prompts if prompt]
-        assert [block.text for block in call.system[: len(prompts)]] == prompts, kind.name
-        assert call.system_break == len(prompts), f"{kind.name} caches the end of its prompts"
+        assert tools_of(call) == RENDERED[(kind.name, kind.version)], kind.name
+        (prompt,) = kind.prompts
+        assert call.system[0].text == prompt, kind.name
+        assert call.system_break == 1, f"{kind.name} caches the end of its prompt"
 
 
 NAMED_ONE_BY_ONE: dict[tuple[str, int], tuple[str, ...]] = {

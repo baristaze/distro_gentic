@@ -1,4 +1,4 @@
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import datetime
 from uuid import UUID
 
@@ -74,6 +74,7 @@ class AgentPlaybooksManagerImpl(AgentPlaybooksManagerInterface):
         kinds: AgentKindCatalog,
         agent_projects: SessionAgentProjectsInterface,
         clock: Callable[[], datetime] = utcnow,
+        manuals: Mapping[str, str] | None = None,
     ) -> None:
         self._storage = storage
         self._sessions = sessions
@@ -86,6 +87,9 @@ class AgentPlaybooksManagerImpl(AgentPlaybooksManagerInterface):
         self._kinds = kinds
         self._agent_projects = agent_projects
         self._clock = clock
+        # Each kind's own manuals, by its name, as a session receives them:
+        # its standing text holds them before the kind manual.
+        self._manuals = manuals or {}
 
     async def publish(
         self,
@@ -205,14 +209,16 @@ class AgentPlaybooksManagerImpl(AgentPlaybooksManagerInterface):
         ):
             raise NotFound(f"agent project {agent_project_id} not found")
         agent_playbook = await self.get_agent_playbook(ctx, name)
-        # The brief rides every request of the sessions it reaches, whole:
-        # one past what a session's standing text holds is refused here,
-        # never at a session's start.
-        size = len(skill_md(agent_playbook))
+        # The brief rides every request of the sessions it reaches, whole,
+        # after the kind's own manuals: one past what a session's standing
+        # text holds is refused here, never at a session's start.
+        own = self._manuals.get(kind, "")
+        size = len(skill_md(agent_playbook)) + (len(own) + 2 if own else 0)
         if size > MAX_STANDING:
+            after = f" after the {kind} kind's own manuals" if own else ""
             raise ValidationFailed(
                 f"agent playbook {name} version {agent_playbook.version} is {size} characters as a session"
-                f" receives it, past the bound of {MAX_STANDING} a session's standing text holds"
+                f" receives it{after}, past the bound of {MAX_STANDING} a session's standing text holds"
             )
         now = self._clock()
         held = await self._storage.read_pin(ctx.org_id, kind, agent_project_id)

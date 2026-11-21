@@ -13,6 +13,11 @@ of](../../../../README.md).
   agent reads it by, and what the [lever checks](../levers/README.md)
   found in its words at its version.
 - **Recall**: an entry's version a session recalled, or read by its slug.
+- **A kind's own entry**: one a kind ships in its folder's `wiki/`
+  ([the platform's agents](../platform_agents/README.md)), with its
+  title, its trigger, and its text. It is no tenant's row: it is
+  reviewed as its kind's code is, and no tenant writes, edits, rejects,
+  or erases it.
 
 ## What can happen
 
@@ -43,9 +48,12 @@ of](../../../../README.md).
 
 - **Nothing unreviewed is recalled or read.** A suggestion waits for a
   person, so one session cannot plant instructions for the next.
-- **A session reaches its agent project's entries and its tenant's
-  alone.** An entry of another agent project, or of another tenant, is
-  never recalled, found, or read, as one that never existed is not.
+- **A session reaches its agent project's entries, its tenant's, and
+  its kind's own alone.** An entry of another agent project, of another
+  tenant, or of another kind is never recalled, found, or read, as one
+  that never existed is not. A kind's own is recalled before the
+  tenant's, and read by `<kind>/<slug>`, which no tenant's slug takes;
+  no recall of it is kept, since it is no tenant's lever.
 - **Recalled agent knowledge is data.** It arrives as an event the agent
   reads quoted, whoever wrote it.
 - **A session does not rediscover its environment.** What its subject

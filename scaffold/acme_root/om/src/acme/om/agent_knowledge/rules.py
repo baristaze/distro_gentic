@@ -4,8 +4,10 @@ the input that brings it into a session. Values in, values out.
 
 Only a reviewed entry is ever recalled or read, and only by a session of
 its tenant whose agent project is the entry's, or by any session of the tenant
-for an entry of no agent project. A recalled entry arrives as an event: data the
-engine quotes and labels, never an instruction, whoever wrote it."""
+for an entry of no agent project. A kind's own entry is reviewed as its
+kind's code is, and only a session of its kind reaches it. A recalled
+entry arrives as an event: data the engine quotes and labels, never an
+instruction, whoever wrote it."""
 
 import re
 from collections.abc import Iterable
@@ -16,7 +18,9 @@ from acme.om.agent_knowledge.types.agent_knowledge import (
     MAX_SLUG,
     AgentKnowledge,
     AgentKnowledgeStatus,
+    KindEntry,
 )
+from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.agent_steps.types.agent_step import Actor, AgentStep, AgentStepType, Origin
 from acme.om.agent_steps.types.content import Content, TextBlock
 from acme.om.agent_steps.types.header import InputHeader
@@ -31,8 +35,11 @@ def words(text: str) -> frozenset[str]:
     return frozenset(WORD.findall(text.lower()))
 
 
-def recallable(entry: AgentKnowledge) -> bool:
-    """Whether a session may recall an entry: a person reviewed it."""
+def recallable(entry: AgentKnowledge | KindEntry) -> bool:
+    """Whether a session may recall an entry: a person reviewed it, or it is
+    a kind's own, reviewed as its kind's code is."""
+    if isinstance(entry, KindEntry):
+        return True
     return entry.status is AgentKnowledgeStatus.REVIEWED and entry.reviewed_by is not None
 
 
@@ -44,7 +51,7 @@ def reaches(entry: AgentKnowledge, agent_project_id: UUID | None) -> bool:
     return recallable(entry) and entry.agent_project_id in (None, agent_project_id)
 
 
-def triggered(entries: Iterable[AgentKnowledge], about: str) -> list[AgentKnowledge]:
+def triggered[E: AgentKnowledge | KindEntry](entries: Iterable[E], about: str) -> list[E]:
     """The recallable entries whose every trigger word appears in `about`."""
     said = words(about)
     return [
@@ -54,12 +61,12 @@ def triggered(entries: Iterable[AgentKnowledge], about: str) -> list[AgentKnowle
     ]
 
 
-def ranked(entries: Iterable[AgentKnowledge], query: str, limit: int) -> list[AgentKnowledge]:
+def ranked[E: AgentKnowledge | KindEntry](entries: Iterable[E], query: str, limit: int) -> list[E]:
     """The recallable entries that share the most of the query's words with
     their title, trigger, and text, best first, at most `limit`. An entry
     that shares none is never an answer."""
     asked = words(query)
-    scored: list[tuple[int, int, AgentKnowledge]] = []
+    scored: list[tuple[int, int, E]] = []
     for entry in entries:
         if not recallable(entry):
             continue
@@ -97,4 +104,28 @@ def recalled_step(
         origin=Origin.ENGINE,
         header=InputHeader(waking=False, principal=principal),
         content=Content(blocks=(TextBlock(text=f"agent knowledge: {entry.title}\n{entry.text}"),)),
+    )
+
+
+def own_recalled_step(
+    entry: KindEntry, session: AgentSession, principal: Principal, now: datetime
+) -> AgentStep:
+    """A kind's own entry as the input a session of its kind receives: an
+    event, as a tenant's entry is, labelled as the kind's own. Its id is
+    derived from the session's and the entry's handle, so it arrives once."""
+    agent_step_id = derived_id(session.id, session.created_at, f"recall:{entry.handle}")
+    return AgentStep(
+        id=agent_step_id,
+        created_at=now,
+        agent_session_id=session.id,
+        loop_id=agent_step_id,
+        type=AgentStepType.EVENT,
+        actor=Actor.EXTERNAL,
+        origin=Origin.ENGINE,
+        header=InputHeader(waking=False, principal=principal),
+        content=Content(
+            blocks=(
+                TextBlock(text=f"agent knowledge, your kind's own: {entry.title}\n{entry.text}"),
+            )
+        ),
     )

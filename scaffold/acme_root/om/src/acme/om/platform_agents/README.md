@@ -13,6 +13,20 @@ calls, and holds its workspace warm for a while after a loop.
 
 ## What it holds
 
+- **Kinds as folders**: each kind sits in `kinds/<kind>/`, beside the
+  others. Its `kind.py` holds a typed constant for each version it
+  still runs, and `prompts/v<N>.md` each version's prompt, pinned by
+  its digest in `prompts/lock.json`
+  ([ADR 2073](../../../../../docs/adr/2073-a-kind-ships-its-own-manuals-and-wiki-in-its-folder-and-the-platforms-kinds-are-folders.md)).
+  Beside them, `manuals/` holds the kind's own manuals, which open each
+  new session's standing text before its tenant's kind manual, and
+  `wiki/` the kind's own agent knowledge, which its sessions recall,
+  find, and read by `<kind>/<slug>`. Both are the kind's, never a
+  tenant's, and a session of another kind never reaches them. A
+  product keeps its own kinds as folders the same way, and declares
+  each one (`ProductKinds.folders`). A check holds every folder: its
+  prompts to their lock, and its texts to their bounds and to the
+  lever checks.
 - **Toolsets**: the platform's tools in ten groups a kind takes whole.
   `files` lists, reads, and searches a workspace; `code` changes its
   files and runs commands; `agent_knowledge` searches and reads what the

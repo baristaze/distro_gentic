@@ -20,7 +20,7 @@ from acme.om.agent_billing.types.spend_account import FundingMode, SpendAccountR
 from acme.om.context import OperatorRole, TenantContext
 from acme.om.language_models.types.fill import MAIN, SUMMARIZER
 from acme.om.matrix.types.record import ModelRef
-from acme.om.platform_agents.kinds import SHIPPED
+from acme.om.platform_agents.shipped import SHIPPED
 from acme.services.api.container import AppContainer
 from acme.services.api.seed import BENCHMARK, seed_matrix
 from acme.services.api.types import matrix as wire

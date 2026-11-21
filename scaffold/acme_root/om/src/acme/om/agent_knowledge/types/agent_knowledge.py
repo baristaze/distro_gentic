@@ -2,7 +2,9 @@
 environment, recalled into it when its trigger matches, and searched and
 read by its agent on demand. It renders as data. An agent may suggest it;
 a person reviews it before any session recalls or reads it. An entry
-belongs to one agent project of its tenant, or to the whole tenant."""
+belongs to one agent project of its tenant, or to the whole tenant. A
+kind's own entry belongs to no tenant: it ships in its kind's folder, and
+every session of its kind reaches it."""
 
 from enum import StrEnum
 from typing import ClassVar
@@ -11,7 +13,7 @@ from uuid import UUID
 from pydantic import Field
 
 from acme.om.agent_steps.types.content import MAX_NAME, Stored
-from acme.om.base import Created, Identifiable, Trackable
+from acme.om.base import Created, Identifiable, OmBase, Trackable
 from acme.om.levers.types.lever import LeverFinding
 
 MAX_TEXT = 10_000
@@ -65,3 +67,26 @@ class AgentKnowledgeRecall(Identifiable, Created):
     agent_session_id: UUID
     entry_id: UUID
     version: int = Field(ge=1)
+
+
+class KindEntry(OmBase):
+    """An entry a kind ships in its folder's `wiki/`: the kind's own, never a
+    tenant's. Every session of its kind reaches it, whatever its tenant
+    and its agent project; a session of another kind never does. No tenant
+    writes, reviews, edits, or erases it, and no recall of it is recorded,
+    since it is no tenant's lever: it is reviewed as its kind's code is.
+    `slug` is its handle among its kind's entries, and an agent reads it by
+    its kind's name and its slug (`handle`), which no tenant's slug
+    matches."""
+
+    kind: str = Field(min_length=1, max_length=MAX_NAME)
+    slug: str = Field(max_length=MAX_SLUG, pattern=SLUG)
+    title: Stored = Field(min_length=1, max_length=MAX_NAME)
+    trigger: tuple[Stored, ...] = Field(min_length=1, max_length=20)
+    text: Stored = Field(min_length=1, max_length=MAX_TEXT)
+
+    @property
+    def handle(self) -> str:
+        """What an agent reads the entry by: `<kind>/<slug>`. A tenant's slug
+        holds no `/`, so the two never meet."""
+        return f"{self.kind}/{self.slug}"

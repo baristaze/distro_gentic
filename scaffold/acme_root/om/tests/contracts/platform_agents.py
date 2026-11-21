@@ -48,7 +48,8 @@ from acme.om.intake.tools import FORGE
 from acme.om.intake.types.link import Installation
 from acme.om.platform_agents import kinds
 from acme.om.platform_agents.catalog import PlatformAgents
-from acme.om.platform_agents.kinds import ANALYSIS_KIND, ANALYSIS_SHARE, SOFTWARE_ENGINEER_KIND
+from acme.om.platform_agents.kinds.analysis.kind import ANALYSIS_KIND, ANALYSIS_SHARE
+from acme.om.platform_agents.kinds.software_engineer.kind import SOFTWARE_ENGINEER_KIND
 from acme.om.platform_agents.rules import TENANT_USERS
 from acme.om.platform_agents.types.corpus import Corpus, Document
 from acme.om.platform_root import (

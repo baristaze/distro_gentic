@@ -115,7 +115,7 @@ def build_platform_api(
     # The example assistant, where the environment offers it and the product
     # declares no kind; its tool reads the media manager the root below builds.
     example_kinds, example_tools = offered(
-        settings.environment, ports.kinds.agents, lambda: managers.media
+        settings.environment, ports.kinds.agent_kinds, lambda: managers.media
     )
     # A start makes each session with its kind manual.
     agent_playbooks = AgentPlaybooksLayer(storage)
@@ -178,7 +178,7 @@ def build_platform_api(
     matrix = MatrixLayer(
         storage,
         options=MatrixOptions(environment=settings.environment),
-        kinds=ports.kinds.agents,
+        kinds=ports.kinds.agent_kinds,
     ).build(managers)
     # Where a tenant connects a system, and where a person reads and
     # clears what waits on them.

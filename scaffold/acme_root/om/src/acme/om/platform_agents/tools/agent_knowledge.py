@@ -1,6 +1,6 @@
-"""The `agent_knowledge` toolset: search and read the reviewed entries of
-the session's agent project and of its whole tenant, and the platform's
-own documentation, its corpus. The suggestion of an entry, which waits for
+"""The `agent_knowledge` toolset: search and read the entries the session's
+kind ships, the reviewed entries of its agent project and of its whole
+tenant, and the platform's own documentation, its corpus. The suggestion of an entry, which waits for
 a person's review, and the assistant's search of the corpus sit here too."""
 
 from collections.abc import Callable
@@ -9,7 +9,7 @@ from datetime import timedelta
 from pydantic import Field
 
 from acme.om.agent_knowledge import AgentKnowledgeManagerInterface
-from acme.om.agent_knowledge.types.agent_knowledge import MAX_TEXT, AgentKnowledge
+from acme.om.agent_knowledge.types.agent_knowledge import MAX_TEXT, AgentKnowledge, KindEntry
 from acme.om.agent_steps.types.content import MAX_NAME
 from acme.om.base import OmBase
 from acme.om.context import TenantContext
@@ -21,13 +21,22 @@ from acme.om.tools.types.tool import Effect, ToolClass, ToolInput, ToolMode, Too
 
 EXCERPT = 500  # characters of an entry or a passage a search answers
 
-AGENT_PROJECT, TENANT, PLATFORM = "agent_project", "tenant", "platform"
-"""Where a piece of agent knowledge comes from: an entry of the session's agent project,
-one of its whole tenant, or the platform's own documentation."""
+KIND, AGENT_PROJECT, TENANT, PLATFORM = "kind", "agent_project", "tenant", "platform"
+"""Where a piece of agent knowledge comes from: an entry the session's kind
+ships, one of its agent project, one of its whole tenant, or the platform's
+own documentation."""
 
 
-def scope_of(entry: AgentKnowledge) -> str:
+def scope_of(entry: AgentKnowledge | KindEntry) -> str:
+    if isinstance(entry, KindEntry):
+        return KIND
     return TENANT if entry.agent_project_id is None else AGENT_PROJECT
+
+
+def slug_of(entry: AgentKnowledge | KindEntry) -> str | None:
+    """What read_agent_knowledge takes for an entry: a kind's own by its
+    handle, `<kind>/<slug>`, a tenant's by its slug."""
+    return entry.handle if isinstance(entry, KindEntry) else entry.slug
 
 
 class AgentKnowledgeQuery(ToolInput):
@@ -48,9 +57,10 @@ class AgentKnowledgeHits(OmBase):
 
 
 class SearchAgentKnowledgeImpl(NativeToolImpl):
-    """Searches what the session may know: the reviewed entries of its
-    agent project and of its whole tenant, never another agent project's or another
-    tenant's, and the platform's own documentation. An entry waiting for its
+    """Searches what the session may know: the entries its kind ships, the
+    reviewed entries of its agent project and of its whole tenant, never
+    another kind's, agent project's, or tenant's, and the platform's own
+    documentation. An entry waiting for its
     review is never found. The session and its agent project are the call's,
     never the input's."""
 
@@ -86,7 +96,7 @@ class SearchAgentKnowledgeImpl(NativeToolImpl):
         hits = [
             AgentKnowledgeHit(
                 scope=scope_of(entry),
-                slug=entry.slug,
+                slug=slug_of(entry),
                 title=entry.title,
                 excerpt=entry.text[:EXCERPT],
             )
@@ -118,9 +128,9 @@ class AgentKnowledgeRead(OmBase):
 
 class ReadAgentKnowledgeImpl(NativeToolImpl):
     """Reads one piece of agent knowledge whole, by the slug a search answered: a
-    document of the platform's corpus by its path, or a reviewed entry the
-    session reaches. Any other entry is not found, as one that never existed
-    is not."""
+    document of the platform's corpus by its path, an entry the session's
+    kind ships by its handle, or a reviewed entry the session reaches. Any
+    other entry is not found, as one that never existed is not."""
 
     SPEC = ToolSpec(
         name=kinds.READ_AGENT_KNOWLEDGE,

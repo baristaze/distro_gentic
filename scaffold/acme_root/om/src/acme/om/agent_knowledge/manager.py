@@ -3,12 +3,18 @@ into it when its trigger matches, as data, and searched and read by its
 agent on demand. An agent may suggest an entry; only a person's review lets
 any session recall or read it, so one session cannot plant instructions
 for the next. A session reaches its tenant's entries of its own agent project and
-of no agent project, never another agent project's or another tenant's."""
+of no agent project, never another agent project's or another tenant's, and
+its kind's own entries, which its kind ships (`KindEntry`), never another
+kind's."""
 
 from abc import ABC, abstractmethod
 from uuid import UUID
 
-from acme.om.agent_knowledge.types.agent_knowledge import AgentKnowledge, AgentKnowledgeStatus
+from acme.om.agent_knowledge.types.agent_knowledge import (
+    AgentKnowledge,
+    AgentKnowledgeStatus,
+    KindEntry,
+)
 from acme.om.context import TenantContext
 
 
@@ -85,26 +91,32 @@ class AgentKnowledgeManagerInterface(ABC):
     @abstractmethod
     async def recall(
         self, ctx: TenantContext, agent_session_id: UUID, about: str
-    ) -> tuple[AgentKnowledge, ...]:
-        """Brings the reviewed entries the session reaches whose trigger
-        `about` matches into the session, each as an event it reads as data
-        at its next model call, once; answers them."""
+    ) -> tuple[AgentKnowledge | KindEntry, ...]:
+        """Brings the entries the session reaches whose trigger `about`
+        matches into the session, its kind's own first, then its tenant's
+        reviewed ones, each as an event it reads as data at its next model
+        call, once; answers them."""
         ...
 
     @abstractmethod
     async def search(
         self, ctx: TenantContext, agent_session_id: UUID, query: str, limit: int
-    ) -> tuple[AgentKnowledge, ...]:
-        """The reviewed entries the session reaches that share the most of
-        the query's words, best first, at most `limit`."""
+    ) -> tuple[AgentKnowledge | KindEntry, ...]:
+        """The entries the session reaches, its kind's own and its tenant's
+        reviewed ones, that share the most of the query's words, best
+        first, at most `limit`."""
         ...
 
     @abstractmethod
-    async def read(self, ctx: TenantContext, agent_session_id: UUID, slug: str) -> AgentKnowledge:
-        """The reviewed entry of `slug` the session reaches, its version
-        recorded as one the session reached, as a recall's is. One waiting
-        for its review, rejected, of another agent project, or of another tenant
-        is `NotFound`, as one that never existed is."""
+    async def read(
+        self, ctx: TenantContext, agent_session_id: UUID, slug: str
+    ) -> AgentKnowledge | KindEntry:
+        """The entry of `slug` the session reaches: its kind's own by its
+        handle, `<kind>/<slug>`, or its tenant's reviewed one, whose version
+        is recorded as one the session reached, as a recall's is. One
+        waiting for its review, rejected, of another agent project, of
+        another tenant, or of another kind is `NotFound`, as one that never
+        existed is."""
         ...
 
     @abstractmethod
