@@ -46,7 +46,6 @@ from acme.om.agent_steps.types.header import AgentWorkspaceSnapshot, SnapshotHea
 from acme.om.agent_workspaces.impl.pool_directory import KEPT as PACKS
 from acme.om.agent_workspaces.impl.tools import ToolsManagerAgentWorkspacesImpl
 from acme.om.agent_workspaces.types.host import HostOffer
-from acme.om.agents.types.kind import AgentKind
 from acme.om.base import new_id, utcnow
 from acme.om.cloud_pool.impl.manager import CloudPoolOptions
 from acme.om.cloud_pool.types.archive import PoolArchive

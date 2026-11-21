@@ -385,9 +385,9 @@ class CloudPoolStorageContract:
         await storage.keep_archive(mine.model_copy(update={"id": new_id(), "kept_at": now}))
         assert await storage.read_archives(idle, 10) == [theirs]
         moved = await storage.read_archives(now + timedelta(seconds=1), 10)
-        assert [(a.id, a.kept_at) for a in moved if a.agent_session_id == mine.agent_session_id] == [
-            (mine.id, now)
-        ]
+        assert [
+            (a.id, a.kept_at) for a in moved if a.agent_session_id == mine.agent_session_id
+        ] == [(mine.id, now)]
 
         await storage.delete_archive(other, mine.agent_session_id)  # another tenant's: none
         await storage.delete_archive(other, theirs.agent_session_id)
