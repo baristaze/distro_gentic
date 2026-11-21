@@ -507,8 +507,7 @@ export interface paths {
         };
         /**
          * Get Unlocks
-         * @description What the session waits on a person to unlock, other than a call's
-         *     decision.
+         * @description What the session waits on a person to unlock, other than a call's decision.
          */
         get: operations["get_unlocks"];
         put?: never;

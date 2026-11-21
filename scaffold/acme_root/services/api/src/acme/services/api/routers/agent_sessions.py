@@ -355,8 +355,7 @@ async def get_tool_output(
 async def get_unlocks(
     ctx: Ctx, sessions: AgentSessionsService, agent_session_id: UUID
 ) -> list[UnlockView]:
-    """What the session waits on a person to unlock, other than a call's
-    decision."""
+    """What the session waits on a person to unlock, other than a call's decision."""
     return await sessions.get_unlocks(ctx, agent_session_id)
 
 

@@ -4439,7 +4439,7 @@
     },
     "/v1/agent-sessions/{agent_session_id}/unlocks": {
       "get": {
-        "description": "What the session waits on a person to unlock, other than a call's\ndecision.",
+        "description": "What the session waits on a person to unlock, other than a call's decision.",
         "operationId": "get_unlocks",
         "parameters": [
           {
