@@ -28,6 +28,17 @@ class CloudPoolManagerInterface(ABC):
         ...
 
     @abstractmethod
+    @stageless
+    async def check(self, spec: IsolationSpec) -> None:
+        """System-internal: whether the pool's VMs can ever hold a session's
+        spec, asked of the spec alone before its loop's first model call.
+        `IsolationRefused` that never clears, its cause the spec's, for one
+        they never can: a size the deployment does not allow among them, an
+        ask of CPUs or memory, an egress the VMs cannot close, or a base. No
+        VM starts, and nothing is counted."""
+        ...
+
+    @abstractmethod
     async def prepare(
         self,
         ctx: TenantContext,
@@ -47,9 +58,7 @@ class CloudPoolManagerInterface(ABC):
         clears while either maximum stands, the VM starts, or its host has
         not prepared it in time, and the loop waits on the resource; its
         cause names no count and no other tenant's use. One that never
-        clears, its cause the spec's, for a spec the pool's VMs cannot hold:
-        a size the deployment does not allow among them, before any VM
-        starts.
+        clears, as `check` refuses it, before any VM starts.
         `AgentWorkspaceLost` when the snapshot is gone, was not taken by the
         pool, or does not match its digest."""
         ...

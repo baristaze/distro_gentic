@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from acme.infra.agent_workspaces import AgentWorkspace, IsolationSpec
+from acme.infra.agent_workspaces import AgentWorkspace, EgressMode, IsolationSpec
 from acme.infra.transports import OutputSink
 from acme.om.agent_steps.types.agent_step import AgentStep
 from acme.om.agent_steps.types.header import AgentWorkspaceSnapshot, ToolFailure, ToolRequestHeader
@@ -55,6 +55,7 @@ class ToolsManagerTrustedImpl(ToolsManagerInterface):
         call_input: Mapping[str, Any],
         workspace: AgentWorkspace,
         *,
+        egress: EgressMode,
         holds_private: bool = True,
         tree_deadline: datetime | None = None,
         above: Sequence[ToolPolicyLayer] = (),
@@ -69,6 +70,7 @@ class ToolsManagerTrustedImpl(ToolsManagerInterface):
             request,
             call_input,
             workspace,
+            egress=egress,
             holds_private=holds_private,
             tree_deadline=tree_deadline,
             above=above,
@@ -167,6 +169,9 @@ class ToolsManagerTrustedImpl(ToolsManagerInterface):
 
     async def write_policy(self, ctx: TenantContext, policy: ToolPolicy) -> ToolPolicy:
         return await self._inner.write_policy(ctx, policy)
+
+    async def check_agent_workspace(self, ctx: TenantContext, spec: IsolationSpec) -> None:
+        await self._inner.check_agent_workspace(ctx, spec)
 
     async def prepare_agent_workspace(
         self,

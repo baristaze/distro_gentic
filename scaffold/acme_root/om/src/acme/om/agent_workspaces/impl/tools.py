@@ -50,6 +50,7 @@ from acme.infra.agent_workspaces import (
     AgentWorkspace,
     AgentWorkspaceLost,
     Durability,
+    EgressMode,
     IsolationMode,
     IsolationRefused,
     IsolationSpec,
@@ -67,7 +68,8 @@ from acme.om.agent_workspaces.types.host import HostOffer
 from acme.om.agent_workspaces.types.snapshot import HostSnapshot, KeptSnapshot
 from acme.om.base import OmBase, new_id, utcnow
 from acme.om.cloud_pool import CloudPoolManagerInterface
-from acme.om.context import TenantContext
+from acme.om.context import Permission, TenantContext
+from acme.om.exceptions import NotFound
 from acme.om.tools.impl.snapshots import SnapshotStore, snapshot_key
 from acme.om.tools.manager import KeyedHash, ToolsManagerInterface
 from acme.om.tools.registry import ToolRegistry
@@ -191,6 +193,20 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
         self._preparing: dict[UUID, int] = {}  # the prepares under way here, by session
 
     # The workspace.
+
+    async def check_agent_workspace(self, ctx: TenantContext, spec: IsolationSpec) -> None:
+        if spec.mode is IsolationMode.NONE:
+            await self._inner.check_agent_workspace(ctx, spec)
+            return
+        ctx.require(Permission.WRITE)
+        # A spec the cloud pool runs is held to what its VMs can ever hold,
+        # read of the spec alone as the transport reads it: one they never
+        # can is refused before the loop's first model call, and no VM
+        # starts. Every other refusal clears, since a host of the session's
+        # placement, or this process's provider, may give the isolation
+        # later: it is learned at the first call that reaches the workspace.
+        if self._cloud is not None and await self._cloud.runs(spec):
+            await self._cloud.check(spec)
 
     async def prepare_agent_workspace(
         self,
@@ -803,6 +819,7 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
         call_input: Mapping[str, Any],
         workspace: AgentWorkspace,
         *,
+        egress: EgressMode,
         holds_private: bool = True,
         tree_deadline: datetime | None = None,
         above: Sequence[ToolPolicyLayer] = (),
@@ -814,10 +831,27 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
             request,
             call_input,
             workspace,
+            egress=await self._pinned_egress(ctx, request, workspace, egress),
             holds_private=holds_private,
             tree_deadline=tree_deadline,
             above=above,
         )
+
+    async def _pinned_egress(
+        self, ctx: TenantContext, request: AgentStep, workspace: AgentWorkspace, asked: EgressMode
+    ) -> EgressMode:
+        """The session's egress as its pin holds it, which the rule of two
+        reads whatever workspace the call was given: an agent project's
+        allowlist may open egress its kind holds to its hosts, or close what
+        its kind opens. A prepared workspace holds the pin; a session never
+        pinned holds what its kind asks."""
+        if workspace.spec.mode is not IsolationMode.NONE:
+            return workspace.spec.egress.mode
+        try:
+            pin = await self._agent_workspaces.get_workspace(ctx, request.agent_session_id)
+        except NotFound:
+            return asked
+        return pin.egress
 
     async def execute(
         self,

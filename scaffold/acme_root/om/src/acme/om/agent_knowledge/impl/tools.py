@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from acme.infra.agent_workspaces import AgentWorkspace, IsolationSpec
+from acme.infra.agent_workspaces import AgentWorkspace, EgressMode, IsolationSpec
 from acme.infra.transports import OutputSink
 from acme.om.agent_knowledge.manager import AgentKnowledgeManagerInterface
 from acme.om.agent_sessions import AgentSessionsManagerInterface
@@ -47,6 +47,9 @@ class ToolsManagerRecallImpl(ToolsManagerInterface):
         self._sessions = sessions
         self._steps = steps
 
+    async def check_agent_workspace(self, ctx: TenantContext, spec: IsolationSpec) -> None:
+        await self._inner.check_agent_workspace(ctx, spec)
+
     async def prepare_agent_workspace(
         self,
         ctx: TenantContext,
@@ -77,6 +80,7 @@ class ToolsManagerRecallImpl(ToolsManagerInterface):
         call_input: Mapping[str, Any],
         workspace: AgentWorkspace,
         *,
+        egress: EgressMode,
         holds_private: bool = True,
         tree_deadline: datetime | None = None,
         above: Sequence[ToolPolicyLayer] = (),
@@ -88,6 +92,7 @@ class ToolsManagerRecallImpl(ToolsManagerInterface):
             request,
             call_input,
             workspace,
+            egress=egress,
             holds_private=holds_private,
             tree_deadline=tree_deadline,
             above=above,
