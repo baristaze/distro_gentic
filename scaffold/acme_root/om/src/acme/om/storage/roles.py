@@ -67,6 +67,8 @@ TABLE_ROLES: dict[str, DatabaseRole] = {
     "agent_session_placements": DatabaseRole.CORE,
     "pool_vms": DatabaseRole.CORE,
     "pool_erasures": DatabaseRole.CORE,
+    "pool_limits": DatabaseRole.CORE,
+    "pool_tenant_limits": DatabaseRole.CORE,
     "installations": DatabaseRole.CORE,
     "identity_links": DatabaseRole.CORE,
     "work_bindings": DatabaseRole.CORE,

@@ -385,12 +385,29 @@ in.
   session's next loop starts it again under a new key, its host with it.
   The sweep destroys no disk a live session's VM ran on: the
   session's release, its purge, or its end does.
+- **Bounded, by records.** The pool holds at most a maximum of VMs at
+  once, and one tenant at most a maximum of its own, the pool's default
+  unless an operator set it one. A VM counts from its start or its
+  claim until it is let go, so a VM left running counts too. These are
+  records an operator writes, never deploy settings: every claim and
+  every refill reads them, and every write records who set what. A
+  claim past either maximum starts no VM. Its session waits on the
+  resource and asks again, and its park names no count and no other
+  tenant's use.
 - **Warm, and always let go.** A few VMs may stand started ahead of
-  demand, and a new session claims one. Every path that starts a VM
-  has the one that lets it go: the run's release, the sweep past the
-  grace, a session or a tenant that is gone, a purge, and a key's
-  revocation, since a VM left running is money. A revocation the
-  API takes reaches no VM, so the sweep destroys its disks.
+  demand, as many as an operator sets, below the maximum. They name no
+  tenant until a session claims one, and serve that session alone. At
+  the maximum, a session that cannot take one takes the place of an
+  idle one, which goes.
+  Every path that starts a VM has the one that lets it go: the run's
+  release, the sweep past the grace, a session or a tenant that is
+  gone, a VM that died, a purge, and a key's revocation, since a VM
+  left running is money. A revocation the API takes reaches no VM, so
+  the sweep destroys its disks.
+- **No race between a claim and the sweep.** A VM's host is handed
+  its session's work only once it holds the session's workspace. The
+  sweep takes a warm VM's record before it destroys the VM, under the
+  lock a claim takes, so no claim takes a VM being destroyed.
 
 ### The Exec Relay Transport
 

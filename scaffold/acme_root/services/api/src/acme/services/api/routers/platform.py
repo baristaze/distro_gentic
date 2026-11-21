@@ -16,6 +16,7 @@ from acme.services.api.routers import (
     agent_projects,
     agent_sessions,
     benchmarks,
+    cloud_pool,
     connectors,
     evidence,
     exec_relay,
@@ -93,6 +94,9 @@ PLATFORM_HOSTED: dict[str, tuple[APIRouter, ...]] = {
     # The operators' write of a tenant's fair share, and their read of where
     # its sessions and its hosts stand.
     "placement": (placement.operator,),
+    # The operators' write of the cloud pool's limits, and of a tenant's own
+    # maximum of its VMs.
+    "cloud_pool": (cloud_pool.operator,),
     # The operators' read of which levers a tenant's sessions reached
     # before they stalled.
     "levers": (levers.operator,),

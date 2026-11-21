@@ -550,7 +550,40 @@ is the guideline's NET-37.)
 
 **Check.** review
 
-## PLC-23 A person's own client serves their local session, and follows others
+## PLC-23 The cloud pool holds its maxima, and no claim races its sweep
+
+**Principle.** The cloud pool holds at most a maximum of VMs at once,
+and one tenant at most its own. A VM counts from its start or claim
+until it is let go. Warm VMs stand below the maximum, and at it yield to
+a claim that cannot take one. The limits are operator records, read at
+every claim and refill, each write audited with its writer and values.
+A claim past a maximum starts no VM; its session waits, told no count or
+other tenant's use. A VM's host gets its session's work only once it
+holds the workspace. The sweep takes a warm VM's record under the
+claim's lock before destroying it, and lets go of a dead VM.
+
+**Source.** Placement and Workspace Hosts, The Cloud Pool.
+
+**Look for.** Where a claim and a refill count the VMs held, and the
+lock they count under; where the limits are read, and whether a deploy
+setting or a cache stands in for them; what a write of a limit
+records, and in whose stream; what a park past a maximum says; the
+order of a destroy and its record's delete on each path that lets a
+warm VM go; what a claim that cannot take a warm VM does at the
+maximum; how the sweep finds a VM that died.
+
+**Violation.** A VM started, or a warm one claimed, past a maximum,
+or counted outside the lock, so two claims pass it together; a limit
+read from a deploy setting, or held in memory past a write; a write
+of a limit with no audit event, or the pool's own limits in a tenant's
+stream; a park that names a count, the pool's size, or another
+tenant's use; a warm VM destroyed before its record is taken, so a
+claim binds a VM being destroyed; a VM gone from the backend whose
+record still holds a place; an idle warm VM that keeps a claim that
+cannot take it waiting at the maximum; a host handed its session's work
+before it holds the workspace.
+
+## PLC-24 A person's own client serves their local session, and follows others
 
 **Principle.** A session's workspace is local when the person who
 started it serves it from their own machine. The session is pinned to a

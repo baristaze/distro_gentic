@@ -108,6 +108,9 @@ locals {
   admission_limit_writes = 16 * var.database_pool_size
   admission_limit_holds  = 4 * var.database_pool_size
 
+  # The API and the maintenance worker each seal or open a session's
+  # content, so both hold the key's use; the staging root's
+  # session_key_holders test holds which processes do.
   process_policies = [
     module.queue.policy_arn,
     module.buckets.policy_arn,

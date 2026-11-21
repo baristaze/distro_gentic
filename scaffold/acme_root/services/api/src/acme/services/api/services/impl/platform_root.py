@@ -256,7 +256,9 @@ def build_platform_services(
         hosts=HostsServiceImpl(
             managers.hosts, managers.cloud_pool, infra.get_topics(), kind_streams.reader
         ),
-        agent_fleet=AgentFleetServiceImpl(managers.placement_operator, trust_operator, levers),
+        agent_fleet=AgentFleetServiceImpl(
+            managers.placement_operator, trust_operator, levers, managers.cloud_pool_operator
+        ),
         exec_relay=ExecRelayServiceImpl(managers.exec_relay, infra.get_topics()),
         intake=IntakeServiceImpl(intake),
         budgets=BudgetsServiceImpl(managers.spend_budgets, agent_billing),

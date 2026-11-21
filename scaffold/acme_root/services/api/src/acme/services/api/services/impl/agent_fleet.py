@@ -8,6 +8,8 @@ from acme.om.agent_steps.types.header import (
     ToolRequestHeader,
     ToolResponseHeader,
 )
+from acme.om.cloud_pool import CloudPoolOperatorManagerInterface
+from acme.om.cloud_pool.types.limits import PoolLimits, TenantPoolLimit
 from acme.om.context import OperatorContext
 from acme.om.levers import LeversManagerInterface
 from acme.om.placement import PlacementOperatorManagerInterface
@@ -16,6 +18,12 @@ from acme.om.trust.types.shape import StepShape
 from acme.services.api.services.agent_fleet import AgentFleetServiceInterface
 from acme.services.api.services.impl.agent_sessions import park_view, step_view
 from acme.services.api.types.agent_sessions import AgentStepPageView
+from acme.services.api.types.cloud_pool import (
+    PoolLimitsView,
+    SetPoolLimitsRequest,
+    SetTenantPoolLimitRequest,
+    TenantPoolLimitView,
+)
 from acme.services.api.types.common import clamp_limit
 from acme.services.api.types.hosts import AdvertisementView, HostStandingView, LaneLoadView
 from acme.services.api.types.levers import LeverReadingView
@@ -48,16 +56,61 @@ def shape_view(shape: StepShape) -> StepShapeView:
     )
 
 
+def pool_limits_view(limits: PoolLimits) -> PoolLimitsView:
+    return PoolLimitsView(
+        warm=limits.warm,
+        most=limits.most,
+        tenant_most=limits.tenant_most,
+        version=limits.version,
+        updated_at=limits.updated_at,
+    )
+
+
+def tenant_pool_limit_view(org_id: UUID, limit: TenantPoolLimit) -> TenantPoolLimitView:
+    return TenantPoolLimitView(
+        org_id=org_id,
+        most=limit.most,
+        version=limit.version,
+        updated_at=limit.updated_at,
+        updated_by=limit.updated_by,
+    )
+
+
 class AgentFleetServiceImpl(AgentFleetServiceInterface):
     def __init__(
         self,
         placement: PlacementOperatorManagerInterface,
         trust: TrustOperatorManagerInterface,
         levers: LeversManagerInterface,
+        cloud_pool: CloudPoolOperatorManagerInterface,
     ) -> None:
         self._placement = placement
         self._trust = trust
         self._levers = levers
+        self._cloud_pool = cloud_pool
+
+    async def get_pool_limits(self, admin: OperatorContext) -> PoolLimitsView:
+        return pool_limits_view(await self._cloud_pool.get_limits(admin))
+
+    async def set_pool_limits(
+        self, admin: OperatorContext, body: SetPoolLimitsRequest
+    ) -> PoolLimitsView:
+        written = await self._cloud_pool.set_limits(
+            admin, warm=body.warm, most=body.most, tenant_most=body.tenant_most
+        )
+        return pool_limits_view(written)
+
+    async def set_tenant_pool_limit(
+        self, admin: OperatorContext, org_id: UUID, body: SetTenantPoolLimitRequest
+    ) -> TenantPoolLimitView:
+        written = await self._cloud_pool.set_tenant_limit(admin, org_id, most=body.most)
+        return tenant_pool_limit_view(org_id, written)
+
+    async def clear_tenant_pool_limit(
+        self, admin: OperatorContext, org_id: UUID
+    ) -> TenantPoolLimitView:
+        cleared = await self._cloud_pool.clear_tenant_limit(admin, org_id)
+        return tenant_pool_limit_view(org_id, cleared)
 
     async def set_share(
         self, admin: OperatorContext, org_id: UUID, body: SetShareRequest
