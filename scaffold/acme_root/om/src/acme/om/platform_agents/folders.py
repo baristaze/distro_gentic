@@ -160,13 +160,16 @@ def _texts(folder: Path) -> tuple[tuple[KindManual, ...], tuple[KindEntry, ...],
 
 def _files(where: Path, breaches: list[str]) -> list[tuple[Path, str]]:
     """Each `<name>.md` in `where` with its text, less the line break that
-    ends it, in name order; a missing folder holds none. Any other file, a
+    ends it, in name order; a missing folder holds none, and a hidden file,
+    such as one a file manager leaves, is none of its. Any other file, a
     folder, a text not UTF-8, and an empty one are refused into
     `breaches`."""
     if not where.is_dir():
         return []
     read: list[tuple[Path, str]] = []
     for path in sorted(where.iterdir()):
+        if path.name.startswith("."):
+            continue
         if not path.is_file() or path.suffix != ".md" or not NAME.fullmatch(path.stem):
             breaches.append(
                 f"{_named(path)}: not a <name>.md, its name lowercase words and hyphens"
