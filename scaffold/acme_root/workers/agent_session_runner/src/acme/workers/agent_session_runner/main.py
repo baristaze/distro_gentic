@@ -81,7 +81,10 @@ def build_runner(container: RunnerContainer, lane: str | None = None) -> WorkerL
     duty is to the instances its host holds."""
     managers = container.managers
     loop = LoopHandlerImpl(
-        managers.loop, managers.agent_sessions, container.platform.park_alerts.notify_park
+        managers.loop,
+        managers.agent_sessions,
+        managers.kinds,
+        container.platform.park_alerts.notify_park,
     )
     held = HeldWorkspacesSweep(
         container.infra.get_agent_workspaces(),

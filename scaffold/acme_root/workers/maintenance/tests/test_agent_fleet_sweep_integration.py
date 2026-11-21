@@ -340,7 +340,12 @@ def a_sweep(container: WorkerContainer, clock: Callable[[], datetime]) -> Stalle
     passes, and each reads on from where the one before stopped."""
     managers = container.managers
     return StalledSessionsSweep(
-        managers.agent_sessions, managers.work, managers.tenancy, StalledOptions(), clock=clock
+        managers.agent_sessions,
+        managers.work,
+        managers.tenancy,
+        StalledOptions(),
+        managers.kinds,
+        clock=clock,
     )
 
 

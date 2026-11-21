@@ -122,7 +122,7 @@ def ending(end: RunEnd) -> Callable[[UUID], LoopRun]:
 
 
 def handler_over(container: RunnerContainer, answer: Callable[[UUID], LoopRun]) -> LoopHandlerImpl:
-    return LoopHandlerImpl(Answering(answer), container.managers.agent_sessions)  # pyright: ignore[reportAbstractUsage]
+    return LoopHandlerImpl(Answering(answer), container.managers.agent_sessions, container.managers.kinds)  # pyright: ignore[reportAbstractUsage]
 
 
 @pytest.mark.parametrize("end", [RunEnd.ENDED, RunEnd.PARKED, RunEnd.STALE, RunEnd.IDLE])
@@ -154,6 +154,7 @@ async def test_a_run_that_parks_tells_before_its_item_completes(
     handler = LoopHandlerImpl(
         Answering(ending(end)),  # pyright: ignore[reportAbstractUsage]
         container.managers.agent_sessions,
+        container.managers.kinds,
         notify,
     )
     await handler.handle(ctx, an_item(ctx, new_id()))
