@@ -15,7 +15,8 @@ that reaches it tells it then."""
 from collections.abc import Callable, Sequence
 from datetime import datetime
 
-from acme.infra.agent_workspaces import AgentWorkspace, IsolationMode, IsolationRefused
+from acme.infra.agent_workspaces import AgentWorkspace, IsolationMode
+from acme.infra.exceptions import InfraException
 from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.agent_steps.types.agent_step import Actor, AgentStep, AgentStepType, Origin
 from acme.om.agent_steps.types.content import Content, TextBlock
@@ -26,6 +27,7 @@ from acme.om.base import new_id, utcnow
 from acme.om.context import TenantContext
 from acme.om.exceptions import UnresolvedRole
 from acme.om.language_models.manager import LanguageModelsManagerInterface
+from acme.om.tools.rules import ISOLATION_REFUSED
 
 
 def changed_step(start: LoopStart, text: str, at: datetime) -> AgentStep:
@@ -87,7 +89,9 @@ class PlatformLoopHooksImpl(LoopHooksInterface):
         here."""
         try:
             await self._pinned().check_pinned(ctx, start.agent_session.id, start.kind.isolation)
-        except IsolationRefused as refused:
+        except InfraException as refused:
+            if refused.code != ISOLATION_REFUSED:
+                raise
             # The one refusal the engine ends a loop on before its first
             # model call is a fill's: the loop ends errored, and the log
             # reads the cause.

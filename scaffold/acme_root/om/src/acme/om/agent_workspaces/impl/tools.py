@@ -239,8 +239,8 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface, PinnedWorkspacesInt
             return
         try:
             await self._inner.check_agent_workspace(ctx, pinned)
-        except IsolationRefused as refused:
-            if not refused.clears:
+        except InfraException as refused:
+            if not (isinstance(refused, IsolationRefused) and refused.clears):
                 raise
 
     async def prepare_agent_workspace(
