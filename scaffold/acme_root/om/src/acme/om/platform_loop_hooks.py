@@ -3,8 +3,9 @@
 own connector say, is answered by the hooks the process wires (`inner`).
 Before the run's first model call, a new loop holds its session's pinned
 workspace to where the session runs (`PinnedWorkspacesInterface`): one
-that can never be held there ends the loop errored, nothing spent, as a
-refused fill ends it. A new loop then renews its session's fill set, so a
+that can never be held there is the session's workspace refused, and the
+loop ends errored, nothing spent or made, its end naming the cause for a
+person. A new loop then renews its session's fill set, so a
 fill gone since the last loop switches between loops and never inside
 one. Once the run's first call that reaches the workspace has
 prepared it, and before that call runs, what changed under the model since
@@ -15,7 +16,7 @@ that reaches it tells it then."""
 from collections.abc import Callable, Sequence
 from datetime import datetime
 
-from acme.infra.agent_workspaces import AgentWorkspace, IsolationMode
+from acme.infra.agent_workspaces import AgentWorkspace, IsolationMode, IsolationRefused
 from acme.infra.exceptions import InfraException
 from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.agent_steps.types.agent_step import Actor, AgentStep, AgentStepType, Origin
@@ -25,9 +26,20 @@ from acme.om.agent_workspaces.pinned import PinnedWorkspacesInterface
 from acme.om.agents.hooks import AttachedToolsets, LoopHooksInterface, LoopStart
 from acme.om.base import new_id, utcnow
 from acme.om.context import TenantContext
-from acme.om.exceptions import UnresolvedRole
 from acme.om.language_models.manager import LanguageModelsManagerInterface
 from acme.om.tools.rules import ISOLATION_REFUSED
+
+NEVER_HELD = "the session's pinned workspace can never be held where it runs"
+"""What a person reads on the end of a loop whose session's pin can never be
+held where it runs, followed by the refusal's own cause when it names one.
+One that names none is told what the pin may ask beyond its kind
+(`UNNAMED`): its message may hold the host's state, and reaches the log
+alone."""
+UNNAMED = (
+    f"{NEVER_HELD}: no host there gives all it asks, "
+    "such as its egress allowlist or its workspace base"
+)
+"""The cause of a refused pin whose refusal names no cause of its own."""
 
 
 def changed_step(start: LoopStart, text: str, at: datetime) -> AgentStep:
@@ -92,11 +104,12 @@ class PlatformLoopHooksImpl(LoopHooksInterface):
         except InfraException as refused:
             if refused.code != ISOLATION_REFUSED:
                 raise
-            # The one refusal the engine ends a loop on before its first
-            # model call is a fill's: the loop ends errored, and the log
-            # reads the cause.
-            raise UnresolvedRole(
-                f"the session's pinned workspace can never be held where it runs: {refused.message}"
+            # The session's workspace refused for good: the engine ends the
+            # loop errored before any model call, its end naming the cause.
+            cause = refused.cause if isinstance(refused, IsolationRefused) else None
+            raise IsolationRefused(
+                f"{NEVER_HELD}: {refused.message}",
+                cause=UNNAMED if not cause else f"{NEVER_HELD}: {cause}",
             ) from refused
 
     async def workspace_prepared(

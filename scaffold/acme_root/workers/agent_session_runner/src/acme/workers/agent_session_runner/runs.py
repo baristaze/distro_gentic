@@ -8,8 +8,8 @@ fences the queue row; the epoch fences the history. A run whose time is up
 hands its item back at once, with no attempt spent, and the next claim
 goes on with the loop. A session that is gone has nothing to run, and
 completes its item, and so does one whose kind runs its loop in the
-request that asks it: no worker runs that loop. Any other thing not found, such as a kind this
-process does not declare, fails it, so it is retried and, past its
+request that asks it: no worker runs that loop. Any other thing not
+found, such as a kind this process does not declare, fails it, so it is retried and, past its
 attempts, dead-lettered where an operator requeues it. Every other end
 completes the item: an ended or parked loop, a session another run
 holds, and one with nothing to run. A run that parks on what only a
