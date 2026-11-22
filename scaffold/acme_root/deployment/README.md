@@ -24,7 +24,7 @@ Terraform. Nothing is clicked into place in either.
 |-------|-------------------|--------------------------|
 | The API | the `api` container, or a host process (`scripts/dev.sh`) | a container service behind a load balancer |
 | The maintenance worker | the `maintenance` container, or a host process | a container service that rolls one task at a time, since it holds leases |
-| The session runner | a host process (`scripts/dev.sh`) | a container service that rolls one task at a time and prepares no workspace: a session's tools run on a host of its tenant's pool ([ADR 2026](../docs/adr/2026-the-runner-is-a-cloud-service-with-no-workspace-and-a-host-installs-as-a-user-of-its-own.md)) |
+| The session runner | a host process (`scripts/dev.sh`), or the cloud pool's on Lima (`make cloud-pool`) | a container service that rolls one task at a time and prepares no workspace: a session's tools run on a host of its tenant's pool ([ADR 2026](../docs/adr/2026-the-runner-is-a-cloud-service-with-no-workspace-and-a-host-installs-as-a-user-of-its-own.md)) |
 | The workspace host | a host process (`uv run acme-host run`) | not in the cloud: a service on a tenant's own machine ([host/README.md](host/README.md)) |
 | The portal | nginx in a container, or Vite on the host; each forwards `/v1` to the API | a private bucket behind CloudFront, which serves `/v1` from the load balancer too |
 | The company site | Vite on the host | the portal's module, called with the site's parameters |

@@ -29,6 +29,7 @@ if ! command -v docker >/dev/null 2>&1; then
 fi
 command -v curl >/dev/null 2>&1 || apt-get install -y -q curl
 command -v git >/dev/null 2>&1 || apt-get install -y -q git
+command -v rg >/dev/null 2>&1 || apt-get install -y -q ripgrep
 
 # The host's own user, in Docker's group: its session's commands run as it,
 # and the VM is the session's wall.

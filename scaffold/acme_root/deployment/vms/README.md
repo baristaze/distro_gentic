@@ -16,6 +16,8 @@ The files here make the image every such VM starts from.
   its home are, and nothing secret.
 - **Its ceilings**, [`ceilings.toml`](ceilings.toml): the VM is its
   session's wall, so the host holds no ceiling of its own beyond it.
+- **The tools a session's commands reach for**: Docker, `git`, `curl`,
+  and `rg` (ripgrep).
 - **Its seed**, on `/run/acme-vm/seed.json`, which the pool hands
   each VM as it starts: where the platform answers, and a one-use key
   the host trades for its credential. On Lima the pool writes it through
@@ -38,10 +40,14 @@ make vm-image NAME=acme-vm-image
 It starts a VM from the Lima template `ACME_VM_IMAGE` names,
 copies this checkout in, runs `install.sh` there, stops the VM, and
 keeps it under the name given. Set `ACME_CLOUD_POOL_IMAGE` to that name,
-`ACME_VMS_BACKEND=lima`, and `ACME_CLOUD_POOL_API_URL` to where the
-API answers from inside a guest, such as `http://host.lima.internal:8000`.
-The name must not start with `ACME_VM_PREFIX` and a `p`: those are
-the pool's own VMs.
+`ACME_VMS_BACKEND=lima`, `ACME_CLOUD_POOL_API_URL` to where the API
+answers from inside a guest, such as `http://host.lima.internal:8000`,
+and `ACME_CLOUD_POOL_S3_ENDPOINT_URL` to where the store answers from
+there, such as `http://host.lima.internal:59020`: a guest's 127.0.0.1
+is the guest itself. The name must not start with `ACME_VM_PREFIX` and
+a `p`: those are the pool's own VMs. On the local stack,
+`make cloud-pool` does all of it
+([local/README.md](../local/README.md#a-session-on-the-cloud-pool)).
 
 In the cloud, the image is an AMI made the same way: an instance of a
 Linux whose packages hold Docker, `install.sh` run in it, then an image

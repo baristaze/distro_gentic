@@ -86,6 +86,7 @@ hold for all of them. The init script runs on an empty data directory only.
 | Backing services plus app containers | `make stack-up` |
 | Apply new migrations | `make migrate` |
 | Seed again, or other people | `make seed SEED_EMAIL=you@example.com`, or the `SEED_*` knobs in `.env` |
+| The cloud pool on Lima, and its session runner | `make cloud-pool`, below |
 
 For one service at a time, name both files, both env files, and the
 profile:
@@ -107,6 +108,40 @@ its own, `devx-seed`, which the Makefile runs after the wait.
 
 ElasticMQ keeps nothing between restarts; it declares `acme-webhooks` and
 its `-dead` queue at start. Valkey snapshots on shutdown.
+
+## A session on the cloud pool
+
+A session whose kind asks for a VM runs on a VM of its own, from the
+cloud pool ([ADR 2052](../../docs/adr/2052-the-cloud-pool-runs-a-vm-per-session-whose-host-pulls-its-work.md)).
+Here the pool runs on Lima, which runs on the host and never in a
+container, so its session runner runs on the host too. It needs Lima and
+a hypervisor.
+
+```bash
+make up                  # the stack, migrated and seeded
+make cloud-pool          # the pool's image, built once, then the runner until Ctrl-C
+make cloud-pool-session  # in a second terminal: one session, and what its loop did
+```
+
+- `make cloud-pool` builds the pool's image from this checkout when Lima
+  holds none named `POOL_IMAGE` (`ACME_CLOUD_POOL_IMAGE`, else
+  `acme-pool-image`), which takes minutes, and keeps it. A VM reaches
+  the API and MinIO at this host's ports, as `host.lima.internal`.
+- No kind the platform ships asks for a VM. `scripts/cloud_pool.py`
+  declares one, `vm_assistant`, which only the runner and the session it
+  starts know. Nothing deployed knows it.
+- The model is the one `.env` names. With no key, the scripted twin runs
+  one command and answers:
+  `ACME_LLM_PROVIDERS=scripted ACME_LLM_SCRIPT=deployment/local/cloud-pool-turns.json make cloud-pool`.
+  The twin reads its turns once, at start, so each session takes a fresh
+  runner.
+- `make cloud-pool-session` prints each step, what the command printed,
+  and the snapshot the loop kept. The VM goes at the loop's end. Its
+  directory stays, sealed in the snapshots bucket, and the next loop's
+  VM starts from it.
+- `make up` alone starts no VM: the pool runs in `make cloud-pool`'s
+  runner and nowhere else. Its VMs are named under `ACME_VM_PREFIX`, as
+  `limactl list` shows.
 
 ## Signals
 
