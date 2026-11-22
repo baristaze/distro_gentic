@@ -189,7 +189,10 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
     """`kept` records each snapshot a host keeps; with none, every one a host
     answers is refused, since nothing could record where it lives. `buckets`
     holds the objects the items that move a file name, each sealed under a
-    key of its own that the item keeps under the session's key."""
+    key of its own that the item keeps under the session's key. A link
+    handed to a VM of the cloud pool is signed by `vm_buckets`, the same
+    objects at the address a VM reaches the store at; with none, by
+    `buckets`."""
 
     def __init__(
         self,
@@ -207,9 +210,11 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         clock: Callable[[], datetime] = utcnow,
         *,
         kept: KeptOnHost | None = None,
+        vm_buckets: BucketsInterface | None = None,
     ) -> None:
         self._kept = kept
         self._buckets = buckets
+        self._vm_buckets = vm_buckets or buckets
         self._storage = storage
         self._work = work
         self._steps = steps
@@ -871,6 +876,12 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             await self._abort_uploads(ctx.org_id, last)
         return True
 
+    def _signer(self, host: HostIdentity) -> BucketsInterface:
+        """The store that signs a link `host` follows: a VM of the cloud
+        pool, which serves one session, reaches the store at an address of
+        its own; a tenant's own host where a browser does."""
+        return self._buckets if host.agent_session_id is None else self._vm_buckets
+
     async def detail(self, rctx: RequestContext, host: HostIdentity, item_id: UUID) -> ExecDetail:
         ctx = await self._service(rctx, host.org_id)
         item = await self._held(host, item_id)
@@ -879,7 +890,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         if contents.file_in is not None:
             ttl = self._options.object_ttl
             expires_at = self._clock() + ttl
-            url = await self._buckets.presign_get(
+            url = await self._signer(host).presign_get(
                 host.org_id, BUCKET, contents.file_in.reference, ttl
             )
         return ExecDetail(
@@ -924,7 +935,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
                 number=part.number,
                 offset=part.offset,
                 size_bytes=part.size_bytes,
-                url=await self._buckets.presign_part(
+                url=await self._signer(host).presign_part(
                     host.org_id,
                     BUCKET,
                     slot.reference,

@@ -41,6 +41,12 @@ class PlatformInfraSettings(BaseSettings):
     # limits are records its operators write, never a setting.
     cloud_pool_image: str = ""
     cloud_pool_api_url: str = ""
+    # The address a VM of the cloud pool reaches the object store at, when
+    # it is not a browser's: a link the platform hands a VM's host names it.
+    # A Lima guest reaches this host's ports as `host.lima.internal`, and
+    # 127.0.0.1 there is the guest itself. Empty, a VM follows a browser's
+    # links.
+    cloud_pool_s3_endpoint_url: str = ""
     # The sizes a kind may ask its VM by name, each the machine type it
     # starts on ec2 and the cpus and memory it holds on Lima, as JSON:
     # the cloud pool module's `sizes` output. Empty takes the pool's own,

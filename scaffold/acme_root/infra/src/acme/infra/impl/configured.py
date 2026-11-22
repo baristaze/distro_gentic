@@ -186,7 +186,7 @@ class InfraConfiguredImpl(PlatformInfraRoot, AgentInfraRoot, InfraInterface):
             pull_timeout=timedelta(seconds=settings.docker_pull_timeout_seconds),
         )
         self._platform_infra = PlatformInfra.configured(
-            settings, self._valkey, self._valkey_breaker, self._agent_infra.vms
+            settings, self._valkey, self._valkey_breaker, self._agent_infra.vms, self._aws
         )
 
     def _build_flags(self) -> FlagsInterface:
