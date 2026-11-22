@@ -31,6 +31,10 @@ x-app-env: &app-env
   ACME_S3_SECRET_KEY: acme-minio-local
   ACME_QUEUES_BACKEND: sqs
   ACME_SQS_ENDPOINT_URL: http://elasticmq:9324
+  # The local root the memory key service wraps each session's keys under,
+  # the one .env gives the host processes: a session runner on the host,
+  # such as `make cloud-pool`'s, seals what these containers open.
+  ACME_KEYS_ROOT_KEY: ${ACME_KEYS_ROOT_KEY:-}
   ACME_SECRETS_BACKEND: local
   ACME_SECRETS_FILE: /run/acme/secrets.env
   # No rules file in the container: every flag reads its default.
