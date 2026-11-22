@@ -25,6 +25,7 @@ entry point installs it before anything binds ssl."""
 import argparse
 import asyncio
 import dataclasses
+import json
 import sys
 import time
 from collections.abc import Callable
@@ -32,6 +33,7 @@ from datetime import timedelta
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from acme.om.agent_steps.types.agent_step import AgentStep
     from acme.om.platform_root import PlatformManagers, ProductKinds
     from acme.om.tools.tool import ToolInterface
     from acme.workers.agent_session_runner.settings import AgentSessionRunnerSettings
@@ -91,6 +93,33 @@ def kinds(settings: AgentSessionRunnerSettings) -> ProductKinds:
     )
 
 
+def said(step: AgentStep) -> list[str]:
+    """The lines a step's text says: a model's words, and what a command
+    printed, each of its lines indented under its exit code."""
+    from acme.integrations.model_providers.content import TextBlock, ToolResultBlock
+
+    texts: list[str] = []
+    for block in step.content.blocks:
+        if isinstance(block, TextBlock):
+            texts.append(block.text)
+        elif isinstance(block, ToolResultBlock):
+            texts.extend(part.text for part in block.parts if isinstance(part, TextBlock))
+    lines: list[str] = []
+    for text in texts:
+        try:
+            ran = json.loads(text)
+        except ValueError:
+            ran = None
+        if isinstance(ran, dict) and "stdout" in ran:
+            lines.append(f"exit {ran.get('exit_code')}")
+            lines.extend(
+                f"  {line}" for line in f"{ran['stdout']}{ran.get('stderr', '')}".splitlines()
+            )
+        else:
+            lines.extend(text.splitlines())
+    return lines
+
+
 def runner() -> int:
     """The session runner's own entry, with this script's kind beside the
     product's: it claims every loop of its lane."""
@@ -141,10 +170,9 @@ async def session(message: str, slug: str) -> int:
                 break
             await asyncio.sleep(2)
         for step in page.items:
-            printed = ""
-            if step.type is AgentStepType.TOOL_RESPONSE:
-                printed = step.content.model_dump_json(include={"blocks"})[:1500]
-            print(f"{step.seq:>3} {step.type.value:<16} {printed}")
+            print(f"{step.seq:>3} {step.type.value}")
+            for line in said(step):
+                print(f"      {line}")
         for kept in await managers.agent_workspaces.kept_snapshots(owner, started.id):
             print(f"kept: {kept.reference}, on a host: {kept.on_host}")
         if not ended:
