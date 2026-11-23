@@ -74,6 +74,7 @@ LOCAL_DEFAULT_SERVES_THE_CLOUD = {
     "vm_open_group": "the API runs no machine; it trades a machine's key alone",
     "cloud_pool_image": "the runner's cloud pool only",
     "cloud_pool_api_url": "the runner's cloud pool only",
+    "cloud_pool_s3_endpoint_url": "a VM of the cloud reaches S3 where a browser does",
     "cloud_pool_sizes": "the runner's cloud pool only",
     "flags_file": "the local flags backend only",
     "log_level": "INFO everywhere",

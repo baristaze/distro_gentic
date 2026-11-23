@@ -1,0 +1,26 @@
+{
+  "anthropic": [
+    {
+      "blocks": [
+        {"kind": "text", "text": "Let me look."},
+        {
+          "kind": "tool_use",
+          "id": "use_cloud_pool_1",
+          "name": "run_command",
+          "input": {
+            "argv": ["sh", "-c", "uname -sm && hostname && rg --version | head -n 1 && date -u > kept.txt && ls"]
+          }
+        }
+      ],
+      "stop_reason": "tool_use",
+      "usage": {"input": 120, "output": 30},
+      "model": "claude-sonnet-5-5"
+    },
+    {
+      "blocks": [{"kind": "text", "text": "It ran in a VM of its own, and kept.txt is in its directory."}],
+      "stop_reason": "end_turn",
+      "usage": {"input": 160, "output": 20},
+      "model": "claude-sonnet-5-5"
+    }
+  ]
+}

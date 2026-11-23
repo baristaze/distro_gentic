@@ -1324,6 +1324,9 @@ class RootHooksPlatformImpl(RootHooksInterface):
                 options.relay_options or ExecRelayOptions(),
                 # A snapshot a host answers is recorded where it lives.
                 kept=self._held_to_pins.keep_on_host,
+                # A VM of the cloud pool follows links to the same objects
+                # at the address it reaches the store at.
+                vm_buckets=infra.get_vm_buckets(),
             ),
             cloud_pool=self._cloud_pool,
             # The pool's limits, and a tenant's own maximum, which every claim

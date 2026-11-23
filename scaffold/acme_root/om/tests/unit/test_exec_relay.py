@@ -13,7 +13,7 @@ import base64
 import json
 import time
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
@@ -29,6 +29,7 @@ from acme.infra.agent_workspaces import (
     IsolationSpec,
 )
 from acme.infra.buckets import Buckets, BucketsInterface
+from acme.infra.buckets.local import LOCAL_STORE_URL, BucketsLocalImpl
 from acme.infra.buckets.sealed import digest_of
 from acme.infra.exceptions import InfraValidationFailed
 from acme.infra.impl.local import InfraLocalImpl
@@ -75,7 +76,7 @@ from acme.om.exec_relay.types.exec import (
     StoredObject,
 )
 from acme.om.hosts.exceptions import PinnedToHosts
-from acme.om.hosts.impl.manager import HostsOptions
+from acme.om.hosts.impl.manager import HostsOptions, local_pool_id, session_pool_id
 from acme.om.hosts.impl.placement import PlacementHostsImpl
 from acme.om.hosts.types.host import Advertisement, Enrollment, HostIdentity
 from acme.om.hosts.types.host import IsolationMode as Mode
@@ -110,6 +111,9 @@ PROBED = Advertisement(os="Linux 6.8", shell="/bin/bash", isolation_modes=(Mode.
 WHERE = "/srv/work/session"
 # A lease short enough that a case outlives it.
 SHORT = timedelta(milliseconds=50)
+VM_STORE = "http://store.vm.test"
+"""Where a VM of the cloud pool reaches the store, apart from where a
+tenant's own host and a browser reach it (`LOCAL_STORE_URL`)."""
 
 
 def request() -> RequestContext:
@@ -139,6 +143,18 @@ class Wall:
     workspace: AgentWorkspace
     epoch: int
     buckets: BucketsInterface
+
+
+@pytest.fixture
+def infra(tmp_path: Path) -> InfraLocalImpl:
+    """The local infra, whose buckets a VM of the cloud pool reaches at an
+    address of its own."""
+    infra = InfraLocalImpl(tmp_path)
+    infra._platform_infra = replace(  # pyright: ignore[reportPrivateUsage]
+        infra._platform_infra,  # pyright: ignore[reportPrivateUsage]
+        vm_buckets=BucketsLocalImpl(tmp_path / "buckets", url=VM_STORE),
+    )
+    return infra
 
 
 @pytest.fixture
@@ -1040,6 +1056,43 @@ async def test_an_objects_url_reads_it_alone_until_it_runs_out_and_only_its_host
     for running, held, as_host in ((writing, row, host), (their_writing, their_row, elsewhere)):
         await as_host.finish(held)
         await running
+
+
+async def test_each_link_the_relay_hands_names_where_its_host_reaches_the_store(
+    wall: Wall,
+) -> None:
+    """A VM of the cloud pool, which serves one session, reaches the store
+    at an address of its own; a tenant's own host where a browser does, and
+    so does a person's own client, which serves one session from its local
+    pool of one."""
+    relay = wall.managers.exec_relay
+    host = Host(wall, wall.holder)
+    org_id, session = wall.holder.org_id, wall.workspace.id
+
+    def serving(pool_id: UUID) -> HostIdentity:
+        return wall.holder.model_copy(update={"agent_session_id": session, "pool_id": pool_id})
+
+    vm, client = serving(session_pool_id(org_id, session)), serving(local_pool_id(org_id, session))
+    hosts = ((wall.holder, LOCAL_STORE_URL), (client, LOCAL_STORE_URL), (vm, VM_STORE))
+    writing = asyncio.ensure_future(
+        transport(wall.managers).write_file(wall.workspace, "notes.md", b"notes\n", wall.epoch)
+    )
+    row = await host.claim_soon()
+    for identity, address in hosts:
+        detail = await relay.detail(request(), identity, host.item_id(row))
+        assert detail.url is not None and detail.url.startswith(f"{address}/"), detail.url
+    await host.finish(row)
+    await writing
+    reading = asyncio.ensure_future(
+        transport(wall.managers).read_file(wall.workspace, "notes.md", 16)
+    )
+    row = await host.claim_soon()
+    for identity, address in hosts:
+        issued = await relay.issue_upload(request(), identity, host.item_id(row), "file", 6)
+        assert issued.parts, "a part to send"
+        assert all(part.url.startswith(f"{address}/") for part in issued.parts), issued.parts
+    await host.finish(row, data=b"notes\n")
+    assert await reading == b"notes\n"
 
 
 async def test_a_sessions_objects_are_unreadable_once_its_key_is_revoked(wall: Wall) -> None:

@@ -23,10 +23,18 @@ x-app-env: &app-env
   # A presigned URL is followed by the browser, on the host, so it names the
   # host port; the containers still talk to minio:9000.
   ACME_S3_PRESIGN_ENDPOINT_URL: http://127.0.0.1:${ACME_MINIO_PORT:-59000}
+  # A VM of the cloud pool on Lima reaches the host's ports at
+  # host.lima.internal, so a link handed to its host names that. No other
+  # host is handed one, and with no pool running, nothing is.
+  ACME_CLOUD_POOL_S3_ENDPOINT_URL: http://host.lima.internal:${ACME_MINIO_PORT:-59000}
   ACME_S3_ACCESS_KEY: acme
   ACME_S3_SECRET_KEY: acme-minio-local
   ACME_QUEUES_BACKEND: sqs
   ACME_SQS_ENDPOINT_URL: http://elasticmq:9324
+  # The local root the memory key service wraps each session's keys under,
+  # the one .env gives the host processes: a session runner on the host,
+  # such as `make cloud-pool`'s, seals what these containers open.
+  ACME_KEYS_ROOT_KEY: ${ACME_KEYS_ROOT_KEY:-}
   ACME_SECRETS_BACKEND: local
   ACME_SECRETS_FILE: /run/acme/secrets.env
   # No rules file in the container: every flag reads its default.

@@ -59,6 +59,12 @@ class InfraInterface(ABC):
         ...
 
     @abstractmethod
+    def get_vm_buckets(self) -> BucketsInterface:
+        """The buckets as a VM of the cloud pool reaches them: the same
+        objects, whose links name the address a VM reaches the store at."""
+        ...
+
+    @abstractmethod
     def get_transport(self) -> TransportInterface:
         """The transport that runs commands in the workspaces this root's
         provider prepares."""

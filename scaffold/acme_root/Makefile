@@ -394,3 +394,26 @@ host-check: ## Install and start the workspace host under its unit in a containe
 .PHONY: vm-image
 vm-image: ## Build the cloud pool's image on Lima, NAME=<name>, from this checkout
 	uv run python deployment/vms/lima_image.py $(NAME)
+
+# The cloud pool on this machine's Lima, for the stack `make up` started.
+# Lima runs on the host, never in a container, so the session runner that
+# drives the pool runs here, in the foreground, until Ctrl-C. Its image is
+# POOL_IMAGE, built from this checkout when Lima holds none of that name,
+# and kept for the next run. A VM reaches the API and the store at this
+# host's ports, as host.lima.internal. The runner knows one kind more than
+# the product's, `vm_assistant`, whose workspace is a VM, and
+# `make cloud-pool-session` starts a session of it (scripts/cloud_pool.py).
+POOL_IMAGE ?= $(or $(ACME_CLOUD_POOL_IMAGE),acme-pool-image)
+MESSAGE ?= Run it.
+
+.PHONY: cloud-pool
+cloud-pool: .env ## The cloud pool on Lima and its session runner on the host, for the stack `make up` started; builds its image when missing
+	@limactl list --quiet 2>/dev/null | grep -qx '$(POOL_IMAGE)' || $(MAKE) --no-print-directory vm-image NAME=$(POOL_IMAGE)
+	ACME_VMS_BACKEND=lima ACME_CLOUD_POOL_IMAGE=$(POOL_IMAGE) \
+		ACME_CLOUD_POOL_API_URL=$(or $(ACME_CLOUD_POOL_API_URL),http://host.lima.internal:$(ACME_PORT)) \
+		ACME_CLOUD_POOL_S3_ENDPOINT_URL=$(or $(ACME_CLOUD_POOL_S3_ENDPOINT_URL),http://host.lima.internal:$(ACME_MINIO_PORT)) \
+		uv run python scripts/cloud_pool.py runner
+
+.PHONY: cloud-pool-session
+cloud-pool-session: .env ## One session in a VM of the cloud pool, as the seeded owner, run by `make cloud-pool`'s runner (MESSAGE=...)
+	uv run python scripts/cloud_pool.py session --slug '$(SEED_SLUG)' '$(MESSAGE)'
