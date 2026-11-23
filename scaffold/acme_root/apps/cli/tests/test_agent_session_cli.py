@@ -14,13 +14,14 @@ from api_support import AGENT_PROJECT_ID, OWNER, run, seed_request
 from cli_support import Stack
 
 from acme.apps.cli import main
-from acme.om.agent_steps.types.header import LoopOutcome, Park, ParkReason
-from acme.om.agents.loop_rules import ended_step
+from acme.om.agent_steps.types.header import LoopOutcome, Park, ParkReason, ToolFailure
+from acme.om.agents.loop_rules import NUDGE, ended_step, notice_step
 from acme.om.base import new_id, utcnow
 from acme.om.context import TenantContext
 from acme.om.hosts.types.host import Advertisement, Enrollment, IsolationMode
+from acme.om.tools.rules import ADVICE, response
 
-from contracts.agent_step_storage import make_request, make_response
+from contracts.agent_step_storage import a_person, make_request, make_response, make_tool_request
 
 
 def owner_context(stack: Stack) -> TenantContext:
@@ -265,3 +266,47 @@ def test_attaching_to_a_session_a_vm_holds_follows_its_steps_and_serves_nothing(
     # the only one its pool holds.
     assert keys == []
     assert [status.host.name for status in run(hosts.get_hosts(ctx, pool.id))] == ["vm-1"]
+
+
+def a_call_failed_and_the_engine_nudged(stack: Stack, agent_session_id: str, said: str) -> None:
+    """A run's steps: its response called a tool, policy denied the call
+    with `said`, and the engine nudged the model to go on."""
+    ctx = owner_context(stack)
+    sid = UUID(agent_session_id)
+    managers = stack.container.managers
+
+    async def write() -> None:
+        epoch = await managers.agent_steps.begin_run(ctx, sid)
+        (message,) = (await managers.agent_steps.get_agent_steps(ctx, sid, 0, 10)).items
+        loop_id = message.loop_id
+        request = make_request(sid, loop_id, (message.id,))
+        answer = make_response(sid, loop_id, request.id)
+        call = make_tool_request(sid, loop_id, answer.id)
+        failed = response(new_id(), utcnow(), call, said, ToolFailure.DENIED, limit=1_000)
+        nudge = NUDGE.format(tool="submit_result")
+        notice = notice_step(new_id(), utcnow(), sid, loop_id, a_person(), nudge)
+        steps = [request, answer, call, failed, notice]
+        await managers.agent_steps.append_agent_steps(ctx, sid, epoch, steps)
+
+    run(write())
+
+
+def test_a_person_reads_the_engines_notice_as_the_engines_and_a_failure_without_advice(
+    stack: Stack,
+) -> None:
+    agent_session_id = started(stack)
+    stack.acme("agent-session", "say", agent_session_id, "Clean the build root.")
+    said = "the root is out of bounds"
+    a_call_failed_and_the_engine_nudged(stack, agent_session_id, said)
+
+    lines = stack.acme("agent-session", "steps", agent_session_id, "--after", "4").output
+    views = stack.acme("agent-session", "steps", agent_session_id, "--after", "4", "--json")
+
+    failed, notice = (line.strip().split(maxsplit=2) for line in lines.splitlines())
+    assert failed == ["5", "tool_response", f"denied: {said}"]
+    assert notice[:2] == ["6", "message"]
+    assert notice[2].startswith("from the engine: Your turn ended without a tool call.")
+    failure, nudged = (json.loads(line) for line in views.output.splitlines())
+    assert (failure["failure"], failure["text"]) == ("denied", said)
+    assert (nudged["actor"], nudged["origin"]) == ("engine", "engine")
+    assert ADVICE[ToolFailure.DENIED] not in lines + views.output
