@@ -265,13 +265,11 @@ class LoopLimitsView(View):
 
 class TreeBoundsView(View):
     """What the session's tree shares: how deep and how many sub-agents it
-    may have, how many run at once, the one deadline, and how many were
-    spawned so far."""
+    may have, the one deadline, and how many were spawned so far."""
 
     root_id: UUID
     height: int
     count: int
-    concurrency: int | None
     deadline: datetime | None
     size: int
 
