@@ -5,20 +5,40 @@ included, stay on its GitHub release. Releases are tagged
 `vMAJOR.MINOR.PATCH`; see `CONTRIBUTING.md` for what bumps which
 number.
 
-## 0.31.0 (2026-11-22)
+## 0.32.0 (2026-11-23)
 
-The platform's base is the engine at v0.27.0, so a session whose pinned
-workspace can never be held where it runs ends before any model call,
-and its end names the cause. Minor.
+The platform's base is the engine at v0.28.0, so a person's view of a
+session names the engine's notices and shows a failed call without the
+advice meant for the model; and the local stack runs the cloud pool on
+Lima. Minor, with three reversals named below.
 
 ### Changed
 
-- The platform's base moves to the engine's v0.27.0, through v0.26.1;
-  the move's render is on the `scaffold` branch (#226).
-  - The platform's loop hook refuses a pinned workspace that can never
-    be held where the session runs: the session ends errored before any
-    model call, naming the refusal's cause, where before the cause
-    reached only the log.
-  - The session runner completes a loop item for a kind whose loop runs
-    in the request that asks it, without running it, so no worker takes
-    up a loop its request bounds (the engine's v0.26.1).
+- The base moves to the engine's v0.28.0: a response's calls run one
+  after another in the order the model made them, a call that waits for
+  a person put off until the person decides; the step view gives a
+  failed call's text as the tool's own, without the advice the model
+  reads, and the CLI prints a notice the engine wrote as
+  `from the engine: ...`; the portal shows a failed call's answer as
+  the tool's own text. Reversal: a client that read the advice from a
+  failed call's `text` in the step view no longer finds it there
+  (#229).
+
+### Added
+
+- The local stack runs the cloud pool on Lima: `make cloud-pool` names
+  or builds the pool's image and runs the runner on the host with the
+  pool on, and `make cloud-pool-session` starts one session in a VM.
+  `ACME_CLOUD_POOL_S3_ENDPOINT_URL` names the address a pool VM reaches
+  the store at, apart from the browser's, and the exec relay signs a
+  pool VM's links for it; every other host gets the browser's. The
+  local app containers take `ACME_KEYS_ROOT_KEY` from `.env`. The
+  pool's image installs ripgrep (#228).
+
+### Removed
+
+- A tree's concurrency bound, which nothing held: the engine's
+  `TreeLimits.concurrency` and `AgentTree.concurrency`, and the
+  platform's bounds view's `tree.concurrency`. Reversals: a kind whose
+  tree names it no longer builds, and the bounds view no longer carries
+  it (#229).
