@@ -137,7 +137,7 @@ function answer(path: string): unknown {
   if (part === "executions") return { items: [RUN], next_cursor: null };
   if (part === "validations") return [];
   if (part === "usage") return { calls: 1, input: 10, output: 5, thinking: 0, cache_read: 0, cache_write: 0, fills: [] };
-  if (part === "bounds") return { kind: "assistant", kind_version: 1, kind_deadline_seconds: null, loop: { step_guard: 50, error_streak: 3, nudges: 1, run_time_seconds: 900 }, tree: { root_id: id, height: 2, count: 4, size: 0, concurrency: null, deadline: null } };
+  if (part === "bounds") return { kind: "assistant", kind_version: 1, kind_deadline_seconds: null, loop: { step_guard: 50, error_streak: 3, nudges: 1, run_time_seconds: 900 }, tree: { root_id: id, height: 2, count: 4, size: 0, deadline: null } };
   throw new Error(`no read for ${path}`);
 }
 
@@ -315,6 +315,27 @@ describe("the org's own session", () => {
     await act(async () => (document.querySelector("[role='menuitem']") as HTMLButtonElement).click());
     expect(tabNames()).toEqual(["Step", "Workspace"]);
     expect(new URLSearchParams(address()).get("pane")).toBe("workspace");
+  });
+
+  it("answers a failed call with the tool's own words, its class apart and no advice meant for the model", async () => {
+    // A denied call's view, as the API serves it: `text` is the tool's own
+    // words, and `failure` its class.
+    const said = "the root is out of bounds";
+    await open("a", "/sessions/sa", [
+      step(1, { type: "model_response", actor: "model", tool_uses: [{ id: "u1", name: "run_command", input: { argv: ["rm", "-r", "/"] } }] }),
+      step(2, { type: "tool_request", actor: "agent", refs: ["st1"], tool: "run_command", tool_use_id: "u1" }),
+      step(3, { type: "tool_response", actor: "program", responds_to: "st2", tool: "run_command", tool_use_id: "u1", text: said, failure: "denied" }),
+    ]);
+    await act(async () => container.querySelector<HTMLButtonElement>(".acme-work .acme-fold-line")!.click());
+    await act(async () => container.querySelector<HTMLButtonElement>(".acme-call-line")!.click());
+    await settle();
+    const shown = container.querySelector("[aria-label='Step']")!;
+    const facts = [...shown.querySelectorAll(".acme-facts dt")].map((term) => [term.textContent, term.nextElementSibling?.textContent]);
+    expect(facts).toContainEqual(["Failure", "denied"]);
+    const answered = [...shown.querySelectorAll("[aria-label='What it answered'] .acme-log-text")].map((line) => line.textContent);
+    expect(answered).toEqual([said]);
+    expect(shown.textContent).not.toContain(`denied: ${said}`);
+    expect(shown.textContent).not.toContain("Change your plan");
   });
 
   it("keeps Send open while the session runs, with Pause beside it", async () => {

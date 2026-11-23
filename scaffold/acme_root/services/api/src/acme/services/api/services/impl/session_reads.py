@@ -192,7 +192,6 @@ def bounds_of(kind: AgentKind, tree: AgentTree) -> BoundsView:
             root_id=tree.id,
             height=tree.height,
             count=tree.count,
-            concurrency=tree.concurrency,
             deadline=tree.deadline,
             size=tree.size,
         ),

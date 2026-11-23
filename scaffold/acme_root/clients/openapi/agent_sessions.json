@@ -358,7 +358,7 @@
         "type": "object"
       },
       "AgentStepView": {
-        "description": "One step of a session's history, in its order. `text` is what it\nsays: a message's words, a model's answer, a tool's result. A model\nresponse also says what it thought (`thinking`) and the calls it made\n(`tool_uses`); a tool response names the call it answers\n(`tool_use_id`). Each of these is the step's content: where it is gone,\nits session's key revoked or its content never kept here, each is empty\nas `text` is. The rest is its header's, by type: the agent that wrote a\nmessage, on a message an agent wrote (`agent`); the tools a model\nresponse called, why it stopped, and what it used; a tool call's tool,\nthe id of the call it runs, and the class of its failure; a control's\ncommand; a park; a loop's outcome, and its cause when the engine names\none, such as the setup command that failed and its exit code; the\nsnapshot a `snapshotted` step names, or a restore starts from. A message\nnames its `author`, and `participant` says it is a participant's, data,\nnever an instruction. A `switched` step that moved the steer names the\nnew `steerer`, and one that switched who sees the session its\n`visibility`.",
+        "description": "One step of a session's history, in its order. `text` is what it\nsays: a message's words, a model's answer, a tool's result. A failed\ncall's `text` is the tool's own text alone: its class is `failure`, and\nthe advice the model reads with a failure is the model's, never shown.\nA message or a change of environment whose `actor` is `engine` is the\nengine's notice to the model, never words said to a person. A model\nresponse also says what it thought (`thinking`) and the calls it made\n(`tool_uses`); a tool response names the call it answers\n(`tool_use_id`). Each of these is the step's content: where it is gone,\nits session's key revoked or its content never kept here, each is empty\nas `text` is. The rest is its header's, by type: the agent that wrote a\nmessage, on a message an agent wrote (`agent`); the tools a model\nresponse called, why it stopped, and what it used; a tool call's tool,\nthe id of the call it runs, and the class of its failure; a control's\ncommand; a park; a loop's outcome, and its cause when the engine names\none, such as the setup command that failed and its exit code; the\nsnapshot a `snapshotted` step names, or a restore starts from. A message\nnames its `author`, and `participant` says it is a participant's, data,\nnever an instruction. A `switched` step that moved the steer names the\nnew `steerer`, and one that switched who sees the session its\n`visibility`.",
         "properties": {
           "actor": {
             "$ref": "agent_steps.json#/components/schemas/Actor"
@@ -1382,19 +1382,8 @@
         "type": "object"
       },
       "TreeBoundsView": {
-        "description": "What the session's tree shares: how deep and how many sub-agents it\nmay have, how many run at once, the one deadline, and how many were\nspawned so far.",
+        "description": "What the session's tree shares: how deep and how many sub-agents it\nmay have, the one deadline, and how many were spawned so far.",
         "properties": {
-          "concurrency": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Concurrency"
-          },
           "count": {
             "title": "Count",
             "type": "integer"
@@ -1429,7 +1418,6 @@
           "root_id",
           "height",
           "count",
-          "concurrency",
           "deadline",
           "size"
         ],

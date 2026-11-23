@@ -280,11 +280,9 @@ class ToolUseView(BaseModel):
 class TreeBoundsView(BaseModel):
     """
     What the session's tree shares: how deep and how many sub-agents it
-    may have, how many run at once, the one deadline, and how many were
-    spawned so far.
+    may have, the one deadline, and how many were spawned so far.
     """
 
-    concurrency: Annotated[int | None, Field(title='Concurrency')]
     count: Annotated[int, Field(title='Count')]
     deadline: Annotated[AwareDatetime | None, Field(title='Deadline')]
     height: Annotated[int, Field(title='Height')]
@@ -571,7 +569,11 @@ class AgentSessionView(BaseModel):
 class AgentStepView(BaseModel):
     """
     One step of a session's history, in its order. `text` is what it
-    says: a message's words, a model's answer, a tool's result. A model
+    says: a message's words, a model's answer, a tool's result. A failed
+    call's `text` is the tool's own text alone: its class is `failure`, and
+    the advice the model reads with a failure is the model's, never shown.
+    A message or a change of environment whose `actor` is `engine` is the
+    engine's notice to the model, never words said to a person. A model
     response also says what it thought (`thinking`) and the calls it made
     (`tool_uses`); a tool response names the call it answers
     (`tool_use_id`). Each of these is the step's content: where it is gone,
