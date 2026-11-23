@@ -96,6 +96,7 @@ from acme.om.exec_relay.types.exec import (
     WriteRequest,
 )
 from acme.om.hosts import HostsManagerInterface
+from acme.om.hosts.impl.manager import session_pool_id
 from acme.om.hosts.rules import USER_VERSION
 from acme.om.hosts.types.host import HostIdentity
 from acme.om.outbox import OutboxRelayInterface
@@ -878,9 +879,13 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
 
     def _signer(self, host: HostIdentity) -> BucketsInterface:
         """The store that signs a link `host` follows: a VM of the cloud
-        pool, which serves one session, reaches the store at an address of
-        its own; a tenant's own host where a browser does."""
-        return self._buckets if host.agent_session_id is None else self._vm_buckets
+        pool, enrolled into its session's pool there, reaches the store at
+        an address of its own; every other host, a person's own client in
+        its session's local pool included, where a browser does."""
+        session = host.agent_session_id
+        if session is not None and host.pool_id == session_pool_id(host.org_id, session):
+            return self._vm_buckets
+        return self._buckets
 
     async def detail(self, rctx: RequestContext, host: HostIdentity, item_id: UUID) -> ExecDetail:
         ctx = await self._service(rctx, host.org_id)

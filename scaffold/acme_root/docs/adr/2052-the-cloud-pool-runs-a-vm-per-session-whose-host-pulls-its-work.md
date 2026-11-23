@@ -64,9 +64,10 @@ VM's host may reach it elsewhere than a browser does: a Lima guest
 reaches this machine's ports as `host.lima.internal`, and its own
 127.0.0.1 is the guest. So the relay signs the links it hands a VM of
 the pool for the VM's address of the store
-(`ACME_CLOUD_POOL_S3_ENDPOINT_URL`), and a tenant's own host's for a
-browser's. Each link reads or writes the one object it was signed for,
-wherever it points.
+(`ACME_CLOUD_POOL_S3_ENDPOINT_URL`), and every other host's for a
+browser's: a tenant's own host, and a person's own client, which serves
+one session from its local pool of one. Each link reads or writes the
+one object it was signed for, wherever it points.
 
 **A VM starts from a warm VM, or the image.** A prepare finds the VM
 that serves the session, unless a restore replaces it; else it claims a

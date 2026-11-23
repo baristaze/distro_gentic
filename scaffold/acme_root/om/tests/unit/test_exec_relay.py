@@ -76,7 +76,7 @@ from acme.om.exec_relay.types.exec import (
     StoredObject,
 )
 from acme.om.hosts.exceptions import PinnedToHosts
-from acme.om.hosts.impl.manager import HostsOptions
+from acme.om.hosts.impl.manager import HostsOptions, local_pool_id, session_pool_id
 from acme.om.hosts.impl.placement import PlacementHostsImpl
 from acme.om.hosts.types.host import Advertisement, Enrollment, HostIdentity
 from acme.om.hosts.types.host import IsolationMode as Mode
@@ -1062,11 +1062,18 @@ async def test_each_link_the_relay_hands_names_where_its_host_reaches_the_store(
     wall: Wall,
 ) -> None:
     """A VM of the cloud pool, which serves one session, reaches the store
-    at an address of its own; a tenant's own host where a browser does."""
+    at an address of its own; a tenant's own host where a browser does, and
+    so does a person's own client, which serves one session from its local
+    pool of one."""
     relay = wall.managers.exec_relay
     host = Host(wall, wall.holder)
-    vm = wall.holder.model_copy(update={"agent_session_id": wall.workspace.id})
-    hosts = ((wall.holder, LOCAL_STORE_URL), (vm, VM_STORE))
+    org_id, session = wall.holder.org_id, wall.workspace.id
+
+    def serving(pool_id: UUID) -> HostIdentity:
+        return wall.holder.model_copy(update={"agent_session_id": session, "pool_id": pool_id})
+
+    vm, client = serving(session_pool_id(org_id, session)), serving(local_pool_id(org_id, session))
+    hosts = ((wall.holder, LOCAL_STORE_URL), (client, LOCAL_STORE_URL), (vm, VM_STORE))
     writing = asyncio.ensure_future(
         transport(wall.managers).write_file(wall.workspace, "notes.md", b"notes\n", wall.epoch)
     )
