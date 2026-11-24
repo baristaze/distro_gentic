@@ -14,7 +14,7 @@ import shutil
 import subprocess
 import time
 from collections.abc import AsyncIterator, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -66,7 +66,7 @@ from acme.om.context import (
 )
 from acme.om.exceptions import ToolFailed
 from acme.om.exec_relay.impl.transport import TransportRelayImpl
-from acme.om.exec_relay.types.exec import ExecState, StopKind
+from acme.om.exec_relay.types.exec import INLINE_BYTES, ExecState, StopKind
 from acme.om.hosts.rules import USER_VERSION
 from acme.om.placement.types.work import ExecPayload
 from acme.om.tenancy.rules import permissions_of
@@ -295,17 +295,29 @@ async def test_a_relayed_read_from_an_offset_answers_only_what_follows_it(
     assert await reading == b"tail"
 
 
+def newer(result: dict[str, Any]) -> bool:
+    """Whether a result carries what a platform of an earlier release
+    refuses: times, or bytes inline."""
+    inline = any("data" in (result.get(name) or {}) for name in ("output", "file"))
+    return "times" in result or inline
+
+
 class Crossed(httpx.AsyncBaseTransport):
     """The stack, noting the operation each `exec` item's detail hands the
     host, as its claim carries it or its own route answers it, each call
     the host makes, by its method and the end of its path, and each result
     it pushes. With `earlier`, each claim and detail are as a platform of
     an earlier release answers them: a claim carries no detail, and a
-    detail keeps no times and takes nothing inline."""
+    detail keeps no times and takes nothing inline. With `rolling`, they
+    are this release's, but each result that carries times or bytes inline
+    reaches a replica of an earlier release, which refuses it."""
 
-    def __init__(self, inner: httpx.AsyncBaseTransport, *, earlier: bool = False) -> None:
+    def __init__(
+        self, inner: httpx.AsyncBaseTransport, *, earlier: bool = False, rolling: bool = False
+    ) -> None:
         self._inner = inner
         self._earlier = earlier
+        self._rolling = rolling
         self.asked: list[dict[str, Any]] = []
         self.calls: list[str] = []
         self.answered: list[dict[str, Any]] = []
@@ -318,6 +330,12 @@ class Crossed(httpx.AsyncBaseTransport):
         if request.method == "POST" and path.endswith("/result"):
             pushed = json.loads(await request.aread())["data"]
             self.answered.append(json.loads(base64.b64decode(pushed)))
+            if self._rolling and newer(self.answered[-1]):
+                refused = {
+                    "code": "validation_failed",
+                    "message": "a result that is no exec result",
+                }
+                return httpx.Response(422, json={"error": refused})
         response = await self._inner.handle_async_request(request)
         if response.status_code != 200 or not (claims or detail):
             return response
@@ -535,6 +553,81 @@ async def test_a_small_write_rides_in_its_claim_and_reaches_the_workspace_checke
     # The file came in the claim, by its size, its digest, and its bytes.
     (handed,) = wire.files
     assert sorted(handed) == ["data", "digest", "size"] and handed["size"] == len(data)
+
+
+async def test_a_result_a_replica_refuses_is_pushed_again_as_an_earlier_release_takes_it(
+    api: Stack, tmp_path: Path
+) -> None:
+    wire = Crossed(api.transport, rolling=True)
+    relayed = await relay_to(api, tmp_path, wire=wire)
+    spec = command(relayed.epoch, "false")
+    waiting = asyncio.ensure_future(relayed.runner.run(relayed.workspace, spec, seal=NO_SEAL))
+    # The item settles with the command's own outcome: a result never taken
+    # would leave it to its lease, and the runner waiting.
+    async with asyncio.timeout(20):
+        await claims(relayed.host, waiting)
+        assert (await waiting).exit_code == 1
+    refused, taken = wire.answered
+    assert "times" in refused and "data" in refused["output"]
+    # Again without its times, and what rode inline went to the store, by
+    # the same size and digest.
+    assert "times" not in taken and "data" not in taken["output"]
+    assert taken["output"] == {k: v for k, v in refused["output"].items() if k != "data"}
+    rest = {key: value for key, value in refused.items() if key not in ("times", "output")}
+    assert {key: value for key, value in taken.items() if key != "output"} == rest
+
+
+class Slowed(httpx.AsyncBaseTransport):
+    """The store, answering each GET `seconds` late."""
+
+    def __init__(self, inner: httpx.AsyncBaseTransport, seconds: float) -> None:
+        self._inner = inner
+        self._seconds = seconds
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            await asyncio.sleep(self._seconds)
+        return await self._inner.handle_async_request(request)
+
+
+async def test_a_relayed_writes_download_is_in_its_overhead_and_not_in_its_command(
+    api: Stack, tmp_path: Path
+) -> None:
+    fetch = 0.3
+    assert api.store is not None
+    wire = Crossed(api.transport)
+    relayed = await relay_to(replace(api, store=Slowed(api.store, fetch)), tmp_path, wire=wire)
+    clock = Read()
+    runner = TransportRelayImpl(
+        lambda: api.container.managers.exec_relay,
+        lambda: RequestContext(request_id=new_id(), app=RUNNER),
+        first_poll=timedelta(milliseconds=5),
+        last_poll=timedelta(milliseconds=20),
+        clock=clock,
+    )
+    before = observed("write_file")
+    # Past what rides in the item, so it crosses the store.
+    written = b"w" * (INLINE_BYTES + 1)
+    waiting = asyncio.ensure_future(
+        runner.write_file(relayed.workspace, "in.txt", written, relayed.epoch)
+    )
+    await claims(relayed.host, waiting)
+    await waiting
+    assert (tmp_path / "workspace" / "in.txt").read_bytes() == written
+    # The download lands in the start, before the command, by the host's
+    # own clock.
+    (answered,) = wire.answered
+    times = answered["times"]
+    assert times["command"] < fetch <= times["start"]
+    gained = {name: total - before[name][1] for name, (_, total) in observed("write_file").items()}
+    assert gained["command"] == pytest.approx(times["command"])
+    # The overhead is the send to the read less the command alone, so it
+    # holds the download. The runner's first read of its clock sets the
+    # write's deadline, a moment before its send.
+    sent_at, read_at = clock.reads[0], clock.reads[-1]
+    overhead = (read_at - sent_at).total_seconds() - times["command"]
+    assert gained["overhead"] == pytest.approx(overhead, abs=1e-3)
+    assert gained["overhead"] >= fetch
 
 
 class Sized(httpx.AsyncBaseTransport):

@@ -1,14 +1,14 @@
 """The platform's own tables of the activity role, on the engine's.
 
 Revision ID: 202610041636
-Revises: 202610150049
+Revises: 202611241949
 """
 
 from acme.om.storage.migrate import run_sql
 from acme.om.storage.roles import DatabaseRole
 
 revision = "202610041636"
-down_revision = "202610150049"
+down_revision = "202611241949"
 branch_labels = None
 depends_on = None
 

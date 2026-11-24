@@ -22,7 +22,8 @@ stopped since starts anew over its files. The output streams back a part
 at a time and the result is pushed once, each with the hash the host
 declares of the bytes it sends. The result carries how long the item's
 parts took here, by the host's own clock: from its claim to its detail's
-read, from there to its operation's start, and the operation, which the
+read, from there to its command's start, a write's download included,
+and the command, which the
 platform measures the relay by, when the item's detail says it keeps
 them. From its claim until its result, its
 detail's read and its prepare included, the host renews its lease, and a
@@ -215,10 +216,15 @@ class Running:
         outlasts one lease is tried again within."""
         return self.held_until
 
+    def begin(self) -> None:
+        """Marks its command's start: a write's once its file is downloaded."""
+        self.started = time.monotonic()
+
     def times(self) -> dict[str, float] | None:
         """How long each part of it took here, in seconds, which its result
         carries: from its claim to its detail read, from that read to its
-        operation's start, and the operation. None when it never started."""
+        command's start, a write's download included, and the command. None
+        when it never started."""
         if self.read is None or self.started is None or self.ended is None:
             return None
         return {
@@ -354,7 +360,12 @@ class ExecutorRelayImpl(ExecutorInterface):
             times = running.times()
             if times is not None and detail is not None and detail.times:
                 result["times"] = times
-            await self._push(item_id, result, running.held_until)
+
+            async def earlier() -> dict[str, Any]:
+                # What rode inline goes to the store, as an earlier release takes it.
+                return await self._kept(item_id, detail, ended, running, None, within=0)
+
+            await self._push(item_id, result, running.held_until, earlier)
         finally:
             renewal.cancel()
             if ended.file is not None:
@@ -388,9 +399,9 @@ class ExecutorRelayImpl(ExecutorInterface):
             ended = Ended(_result(refused=(error.code, error.http_status), detail=error.message))
         else:
             if running.stopped is None:
-                running.started = time.monotonic()
+                running.begin()
                 running.operation = asyncio.ensure_future(
-                    _operate(transport, self._objects, workspace, detail, parts.take)
+                    _operate(transport, self._objects, workspace, detail, parts.take, running.begin)
                 )
                 await asyncio.wait({running.operation})
                 running.ended = time.monotonic()
@@ -423,20 +434,22 @@ class ExecutorRelayImpl(ExecutorInterface):
         ended: Ended,
         running: Running,
         parts: _Parts | None,
+        *,
+        within: int | None = None,
     ) -> dict[str, Any]:
         """The result to push once what it names is sent: what the item
         printed or listed, as its output, and a read's file, each in the
-        result itself within the bound its detail names, or uploaded, and
-        named by its size and its digest. The parts of its output not yet
-        sent go first, unless none went and its output rides in the result:
-        the command ended within its first window. An output that is not
-        kept is said in the result; a read whose file is not sent is
-        refused."""
+        result itself within the bound its detail names, or `within`, or
+        uploaded, and named by its size and its digest. The parts of its
+        output not yet sent go first, unless none went and its output rides
+        in the result: the command ended within its first window. An output
+        that is not kept is said in the result; a read whose file is not
+        sent is refused."""
         result = ended.result
         small = _small(result)
         if detail is None:
             return small
-        within = detail.inline or 0
+        within = (detail.inline or 0) if within is None else within
         output = result["output"]
         printed: bytes | None = None
         if detail.output is not None and result["outcome"]["refused"] is None:
@@ -866,18 +879,38 @@ class ExecutorRelayImpl(ExecutorInterface):
                 return
             running.held_until = time.monotonic() + self._lease_seconds
 
-    async def _push(self, item_id: UUID, result: dict[str, Any], held_until: float) -> None:
+    async def _push(
+        self,
+        item_id: UUID,
+        result: dict[str, Any],
+        held_until: float,
+        earlier: Callable[[], Awaitable[dict[str, Any]]] | None = None,
+    ) -> None:
         """Pushes how the item ended, tried again while its lease lasts: its
-        JSON as UTF-8."""
-        data = json.dumps(result, ensure_ascii=False, separators=(",", ":")).encode()
+        JSON as UTF-8. A result refused as invalid that carries times, or
+        bytes inline, is pushed once more as an earlier release takes it:
+        without its times, and with what rode inline sent to the store
+        (`earlier`). During a roll, the push may reach a replica of an
+        earlier release than the one that answered its detail, which keeps
+        no times and takes nothing inline, and the outcome still lands."""
         try:
-            await self._outlasting(
-                lambda client: client.push_exec_result(item_id, data), held_until
-            )
+            try:
+                await self._pushed(item_id, result, held_until)
+            except ApiError as error:
+                if error.status != 422 or not ("times" in result or _inlined(result)):
+                    raise
+                log.info("item %s: its result was refused (%s); it goes as before", item_id, error)
+                plain = await earlier() if earlier is not None and _inlined(result) else result
+                plain = {key: value for key, value in plain.items() if key != "times"}
+                await self._pushed(item_id, plain, held_until)
         except (ApiError, *WIRE_FAILURES) as error:
             # Settled already, by its lease, a stop, or the sweep: the first
             # settlement stands. One the platform never took is the sweep's.
             log.warning("item %s: its result was not taken: %s", item_id, error)
+
+    async def _pushed(self, item_id: UUID, result: dict[str, Any], held_until: float) -> None:
+        data = json.dumps(result, ensure_ascii=False, separators=(",", ":")).encode()
+        await self._outlasting(lambda client: client.push_exec_result(item_id, data), held_until)
 
     async def _outlasting(
         self, call: Callable[[ApiClient], Awaitable[object]], until: float
@@ -909,10 +942,14 @@ async def _operate(
     workspace: AgentWorkspace,
     detail: ExecDetailView,
     on_output: Sink,
+    fetched: Callable[[], None],
 ) -> Ended:
     """The one operation the item names, through the host's transport. A
-    read's file is spooled for its upload; a write's is downloaded and
-    checked before a byte of it reaches the workspace."""
+    read's file is spooled for its upload; a write's is downloaded, or
+    taken from its item, and checked before a byte of it reaches the
+    workspace, and `fetched` marks its command's start there: the download
+    crosses the store, as a read's upload does, and is no part of the
+    command's time."""
     request = detail.request
     match request["operation"]:
         case "run":
@@ -960,6 +997,7 @@ async def _operate(
                 raise CapabilityMissing(
                     "the write names no file, and no object to download it from"
                 )
+            fetched()
             try:
                 await transport.write_file_from(
                     workspace, request["path"], spooled.path, detail.epoch or 0
@@ -1122,6 +1160,11 @@ def _result(
             "detail": detail,
         },
     }
+
+
+def _inlined(result: dict[str, Any]) -> bool:
+    """Whether a result carries an output or a file inline."""
+    return any("data" in (result.get(name) or {}) for name in ("output", "file"))
 
 
 def _inline(data: bytes) -> dict[str, Any]:

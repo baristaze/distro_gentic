@@ -7,9 +7,10 @@
 A session's isolation is pinned when it is created, and the host that
 prepares its workspace enforces it. The engine refuses a spec its
 provider can never meet before the loop's first model call, prepares
-the workspace at the first call that reaches it, never falls back to
-something weaker, and ends the loop `errored` on a refusal that cannot
-clear.
+the workspace at the first call that reaches it, or beside the run's
+first model call for a kind that prepares early (ADR 1048), never falls
+back to something weaker, and ends the loop `errored` on a refusal that
+cannot clear.
 
 On the platform a refusal usually means "not now": the session's pool
 may have no host online, none that offers the pinned level, or one that

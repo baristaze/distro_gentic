@@ -366,7 +366,7 @@ class ExecPhase(StrEnum):
 
     QUEUED = "queued"  # sent to claimed, the host's wake included
     DETAIL = "detail"  # claimed to its host's read of its detail
-    START = "start"  # that read to the command's start, the prepare included
+    START = "start"  # that read to the command's start, the prepare and a write's download included
     COMMAND = "command"  # the command, as its host timed it
     STORE = "store"  # the command's end to its result stored, its uploads included
     READ = "read"  # the result stored to the runner's read of it

@@ -230,10 +230,12 @@ class ExecDetailView(BaseModel):
     GET of it alone until `url_expires_at`, or in the item itself; an
     `output` and a read's `file_out` go by the parts `POST .../upload`
     signs, or, at most `inline` bytes, in the result itself. `times` says
-    the platform keeps the times a host sends with the item's result; a
-    host sends them only when it does, and sends nothing inline past
-    `inline`, so a platform of an earlier release, which keeps no times and
-    takes nothing inline, is never sent a result it refuses.
+    the replica that answers keeps the times a host sends with the item's
+    result, and `inline` the bytes it takes in it; a host sends neither
+    past what they say. During a roll, the push may reach a replica of an
+    earlier release, which keeps no times and takes nothing inline, and
+    refuses either as invalid: the host then pushes the result again
+    without its times, and with what rode inline sent to the store.
     """
 
     agent_session_id: Annotated[UUID, Field(title='Agent Session Id')]
