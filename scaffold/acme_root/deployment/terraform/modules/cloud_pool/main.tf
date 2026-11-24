@@ -101,8 +101,9 @@ resource "aws_vpc_security_group_egress_rule" "open_ipv6" {
 # a name's servers on its behalf: a closed VM could carry data out in the
 # names it looks up. So the network resolves the names a closed VM needs
 # and refuses every other, and refuses a lookup its firewall cannot judge.
-# The network is the pool's alone, so nothing else in it loses a name. A VM whose session chose open egress resolves the rest
-# through a public resolver, as its image sets it up (deployment/vms).
+# The network is the pool's alone, so nothing else in it loses a name. A
+# VM whose session chose open egress resolves the rest through a public
+# resolver, as its image sets it up (deployment/vms).
 resource "aws_route53_resolver_firewall_domain_list" "allowed" {
   name    = "${local.name}-allowed"
   domains = var.allowed_names
