@@ -1,7 +1,8 @@
 # A VM of the cloud pool reaches nothing but the gateway, and what its
 # session's policy opened; nothing reaches in; its network resolves the
 # names it allows alone, and fails closed; it holds no role; its disk is
-# encrypted under the pool's key; and the platform's hold on the VMs
+# encrypted under the pool's key; a change to its template reaches the VMs
+# started after it; and the platform's hold on the VMs
 # starts them from the template alone and passes no role. The mock image
 # boots from /dev/sda1, as many Linux images do.
 # Runs offline: `terraform test` in this folder.
@@ -164,6 +165,15 @@ run "a_vm_holds_no_role_and_its_disk_is_sealed_under_the_pools_key" {
   assert {
     condition     = aws_launch_template.vm.vpc_security_group_ids == null || length(aws_launch_template.vm.vpc_security_group_ids) == 0
     error_message = "the group is the start's to name, by the session's egress"
+  }
+}
+
+run "a_change_to_the_template_reaches_the_vms_started_after_it" {
+  command = plan
+
+  assert {
+    condition     = aws_launch_template.vm.update_default_version == true
+    error_message = "each version an apply writes becomes the default, the one a VM started by the template's id alone runs"
   }
 }
 
