@@ -62,3 +62,14 @@ variable "disk_gb" {
   type        = number
   default     = 64
 }
+
+variable "volume_initialization_rate" {
+  description = "The rate, in MiB/s from 100 to 300, at which EBS loads every block of the image onto each VM's disk from its creation, rather than each block at its first read. Null, the default, sets none. While set, every VM's disk is charged per GiB of the image's snapshot at the rate, apart from the disk's own cost. A region allows 5,000 MiB/s across the disks it creates at once, and a launch past it fails: set a rate whose share fits the most VMs the pool starts at once. An image whose snapshot has fast snapshot restore loads at the rate instead."
+  type        = number
+  default     = null
+
+  validation {
+    condition     = var.volume_initialization_rate == null ? true : var.volume_initialization_rate >= 100 && var.volume_initialization_rate <= 300 && floor(var.volume_initialization_rate) == var.volume_initialization_rate
+    error_message = "The rate is a whole number of MiB/s from 100 to 300, or null: EBS refuses a launch at any other."
+  }
+}

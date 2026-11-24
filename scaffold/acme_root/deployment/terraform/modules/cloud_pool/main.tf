@@ -176,6 +176,8 @@ resource "aws_launch_template" "vm" {
       encrypted             = true
       kms_key_id            = aws_kms_key.disks.arn
       delete_on_termination = true
+      # Null sets no rate, and EBS loads each block at its first read.
+      volume_initialization_rate = var.volume_initialization_rate
     }
   }
 
