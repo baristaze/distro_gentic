@@ -22,6 +22,11 @@ host pulls, and the platform never calls in.
   it, with the session's **pool of one** and the person its session's
   work is for. A row is written before its VM starts and deleted
   once the VM is gone.
+- **A hibernated VM**: a warm VM started to sleep, where the VMs
+  hibernate. Once it settled, its key is ended and it hibernates, its
+  memory written to its disk holding no key that enrolls and no
+  credential. A claim wakes it under a fresh key. A VM that served a
+  session never sleeps (ADR 2075).
 - **A size**: what a session's spec asks its VM by name, `xs`, `s`, or
   `m`, and `s` when it asks none. The deployment's **size map** names
   each size it allows as a machine type, with its CPUs and its memory;
@@ -37,24 +42,28 @@ host pulls, and the platform never calls in.
 - **An archive record**: the pool's record that a session keeps
   archives, with the latest moment it knew the session active, until
   they go.
-- **The pool's limits**: how many VMs stand warm, the most VMs it
-  holds at once, and the most one tenant holds, a row per version an
+- **The pool's limits**: how many VMs stand warm and running, how many
+  sleep warm, the most VMs it holds at once, and the most one tenant
+  holds, a row per version an
   operator wrote; with none, the pool's options hold.
 - **A tenant's own maximum**: the most VMs its sessions hold at once, in
   place of the pool's, which an operator sets or clears.
 
 A VM counts against both maxima from its start or its claim until it is
-let go, whether it runs, starts, or stands stopped for its session.
+let go, whether it runs, starts, sleeps, or stands stopped for its
+session.
 
 ## What can happen
 
 - **Prepare.** A session's loop asks for its workspace. A size the map
   does not name, or an ask of CPUs or memory, is refused for good before
   anything starts. The VM that serves it is found, or a warm one is
-  claimed at the default size, or one of its size is started from the
-  pool's image. A restore lets go of a VM that serves the session for
-  another snapshot, and marks the one it gets for its own, so a prepare
-  asked again while it starts keeps it. A claim counts the VMs held under one
+  claimed at the default size, one that runs before one asleep, or one of
+  its size is started from the pool's image. A claim of one asleep writes
+  the digest of a fresh key, then wakes it with that key in its seed, the
+  way a stopped VM starts again. A restore lets go of a VM that serves
+  the session for another snapshot, and marks the one it gets for its
+  own, so a prepare asked again while it starts keeps it. A claim counts the VMs held under one
   lock. At the pool's maximum, a claim that cannot take a warm VM takes
   the place of an idle one, which goes first. Otherwise, past the pool's
   maximum or its tenant's, it starts none: the loop waits on the
@@ -63,12 +72,14 @@ let go, whether it runs, starts, or stands stopped for its session.
   the VM is sealed and its host prepares the workspace through the exec
   relay.
 - **Enroll.** The VM's host trades its key once. While the VM
-  is warm it is told to ask again. A cold start records its boot, from
+  is warm it is told to ask again; a key ended before its VM slept is
+  refused. A cold start records its boot, from
   its start to here, as `acme_cloud_pool_boot_seconds`; a warm claim
   records none.
 - **Count a claim.** Each claim counts once in
-  `acme_cloud_pool_claims_total`, by how it got its VM: `warm`, `new`,
-  `held` (its session's own, found running), or `restarted` (that one
+  `acme_cloud_pool_claims_total`, by how it got its VM: `warm`,
+  `hibernated` (a warm one woken), `new`, `held` (its session's own,
+  found running), or `restarted` (that one
   started again). A prepare asked again before its claim's returned is
   that claim. The first command on the VM, as the runner's transport
   says it starts, records the claim's wait from the claim in
@@ -98,8 +109,12 @@ let go, whether it runs, starts, or stands stopped for its session.
   that runs with no host to work for, its host never enrolled, ended, or
   silent, is stopped, its disk kept: the session's next prepare starts
   it again under a new key. A warm VM past the maximum age goes, its row
-  first. Then warm VMs start until the warm count stands, never past
-  the pool's maximum.
+  first. A warm VM started to sleep that has settled has its key ended,
+  by one sweep alone, then hibernates; one that cannot goes. One asleep
+  goes two days before the longest its VMs keep one so, 60 days on
+  EC2. Then warm VMs start until the warm count stands, then those that
+  sleep until theirs does, never past the pool's maximum. Lima hibernates
+  none, so it keeps none asleep.
 - **Set the limits.** An operator writes the pool's limits, or a
   tenant's own maximum, and the next claim reads them. Each write leaves
   an audit event naming the operator and the values: the pool's own in

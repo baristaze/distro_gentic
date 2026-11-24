@@ -489,8 +489,8 @@ host other than the one that holds its workspace.
 of its own, which runs the host program and pulls its work through the
 exec relay. Its host trades a one-use key for a credential of the
 session's own pool, and is handed that session's work alone. It holds no
-database credential, model key, history, or cloud role, and its key and
-credential never reach its disk. Its egress is closed outside its guest.
+database credential, model key, history, or cloud role, and no live key
+or credential reaches its disk. Its egress is closed outside its guest.
 A session kept by snapshots keeps its directory sealed under its key in
 the object store, 30 days by default past its last activity, and no
 disk is imaged. A VM with no host stops; every path that starts a VM
@@ -500,7 +500,9 @@ lets it go.
 
 **Look for.** How a VM's host gets its credential and what its
 claims are held to; what a VM's image, its settings, its seed, and
-its role hold; the network rules a VM starts in; what a run's end
+its role hold; what a warm VM holds as it hibernates, which VMs ever
+do, and what key one wakes with; the network rules a VM starts in;
+what a run's end
 keeps of a VM, where, and under whose key, and what the pool's role
 may copy of a disk; what a restore starts its VM from, and what it
 lets go when it fails; each path that starts a VM and the one that
@@ -509,14 +511,17 @@ for comes to; what removes a session's archives, and when.
 
 **Violation.** A VM's host enrolled with a tenant's token, or handed
 another session's work; a database credential, a model key, a platform
-secret, or a cloud role in a VM; a key or a live credential on a
-disk; egress closed by a rule inside the guest, or open to more than
+secret, or a cloud role in a VM; a key that enrolls or a live
+credential on a disk, a sleeping VM's memory among them; a VM that
+served a session hibernated, or one woken with the key it slept with;
+egress closed by a rule inside the guest, or open to more than
 the gateway and the session's egress; the platform calling into a VM;
 an image or a volume snapshot of a VM's disk, made by the pool or
 allowed by its role; a session's files kept outside its key's seal, or
 sent before their size was checked; a failed archive whose parts
 remain, or a failed restore that changes what is kept or leaves its VM
-half-restored; a VM that nothing lets go, warm or bound; a VM that runs
+half-restored; a VM that nothing lets go, warm, asleep, or bound, or
+one asleep past its cloud's bound on a sleep; a VM that runs
 with no host; a disk a live session's VM ran on destroyed by the
 sweep; a session's archives kept past their bound after its last
 activity, or removed while it is active.
@@ -579,7 +584,9 @@ warm VM go; what a claim that cannot take a warm VM does at the
 maximum; how the sweep finds a VM that died.
 
 **Violation.** A VM started, or a warm one claimed, past a maximum,
-or counted outside the lock, so two claims pass it together; a limit
+or counted outside the lock, so two claims pass it together; a VM
+asleep left out of the count, or the hibernated count passed; a claim
+that wakes one asleep while one runs, or takes one before it sleeps; a limit
 read from a deploy setting, or held in memory past a write; a write
 of a limit with no audit event, or the pool's own limits in a tenant's
 stream; a park that names a count, the pool's size, or another

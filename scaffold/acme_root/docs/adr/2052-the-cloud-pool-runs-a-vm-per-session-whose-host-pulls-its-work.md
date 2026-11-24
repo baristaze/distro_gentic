@@ -38,8 +38,10 @@ which the tenant does not list, place a session on, or issue a token for.
 The host carries the session in its identity, and placement fails for
 good any item of another session that reaches its lanes, as it fails one
 of another tenant. The seed and the host's home sit on the guest's
-memory-backed `/run`, so a disk the pool keeps holds neither. The host
-holds no database credential, no model key, and no history; a cloud
+memory-backed `/run`, so a disk the pool keeps holds neither; a warm
+VM that hibernates sleeps holding a key ended first, and no credential
+([ADR 2075](2075-the-cloud-pool-keeps-warm-vms-hibernated-holding-no-key.md)).
+The host holds no database credential, no model key, and no history; a cloud
 VM holds no instance role, so its metadata endpoint has no
 credential to hand out.
 

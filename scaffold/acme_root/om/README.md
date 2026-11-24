@@ -221,7 +221,8 @@ the VM, and claims that session's work alone. When the session is kept
 by snapshots, each loop's end keeps its workspace's files, sealed under
 the session's key in the object store, and lets the VM go with no disk
 kept; the next loop's VM takes the files back. A few VMs may stand **warm**, started ahead of the
-session that claims one. The pool holds at most as many VMs as its
+session that claims one, and where the VMs hibernate a few more may
+sleep, holding no key until a claim wakes one under a fresh key. The pool holds at most as many VMs as its
 operators allow, and a tenant at most its own maximum; a session past
 either waits for one. A VM is the **size** its kind asks by name, which
 the deployment maps onto a machine type, and one past its maximum age

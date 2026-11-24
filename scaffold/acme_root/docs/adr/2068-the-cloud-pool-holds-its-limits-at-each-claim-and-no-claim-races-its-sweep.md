@@ -20,13 +20,15 @@ its session's next prepare, holding a place.
 ## Decision
 
 **The limits are records, read at each claim.** The pool's own limits
-are three numbers: the warm VMs it keeps started, the most VMs it holds
-at once, and the most one tenant holds. An operator writes them, a new
-row per version, so every write stays with who made it. A tenant may
-have a maximum of its own in place of the default, one row an operator
-writes or clears. Every claim and every refill reads them as they stand.
-With no row, the pool's options hold: none warm, 20 at most, 5 a
-tenant. `ACME_CLOUD_POOL_WARM` is gone.
+are four numbers: the warm VMs it keeps started, those it keeps asleep
+([ADR 2075](2075-the-cloud-pool-keeps-warm-vms-hibernated-holding-no-key.md)),
+the most VMs it holds at once, and the most one tenant holds. An
+operator writes them, a new row per version, so every write stays with
+who made it. A tenant may have a maximum of its own in place of the
+default, one row an operator writes or clears. Every claim and every
+refill reads them as they stand. With no row, the pool's options hold:
+none warm, none asleep, 20 at most, 5 a tenant. `ACME_CLOUD_POOL_WARM`
+is gone.
 
 **A VM counts until it is let go.** A VM counts against both maxima
 from its start or its claim until its row goes, whether it runs, starts,

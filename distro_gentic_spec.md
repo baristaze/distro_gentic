@@ -372,8 +372,10 @@ that only reads, plans, or answers starts none.
   session's work and no other session's, whatever lane it reaches.
 - **Nothing to steal.** A VM holds no database credential, no model
   key, no history, and no role in the cloud. Its key and its credential
-  live in its memory, never on its disk. Its commands hold the VM
-  whole: the VM is the session's wall.
+  live in its memory, never on its disk. A warm VM that sleeps writes
+  its memory to its disk, so it sleeps holding neither: its key is ended
+  first, and a warm VM's host holds no credential. Its commands hold the
+  VM whole: the VM is the session's wall.
 - **Closed at its network.** A VM's egress is closed outside its
   guest, to the gateway and what its session's egress allows, never by a
   rule its own commands could undo.
@@ -402,11 +404,11 @@ that only reads, plans, or answers starts none.
 - **Bounded, by records.** The pool holds at most a maximum of VMs at
   once, and one tenant at most a maximum of its own, the pool's default
   unless an operator set it one. A VM counts from its start or its
-  claim until it is let go, so a VM left running counts too. These are
-  records an operator writes, never deploy settings: every claim and
-  every refill reads them, and every write records who set what. A
-  claim past either maximum starts no VM. Its session waits on the
-  resource and asks again, and its park names no count and no other
+  claim until it is let go, so a VM left running or asleep counts too.
+  These are records an operator writes, never deploy settings: every
+  claim and every refill reads them, and every write records who set
+  what. A claim past either maximum starts no VM. Its session waits on
+  the resource and asks again, and its park names no count and no other
   tenant's use.
 - **Sized by its kind.** A kind asks its VM's size by name, `xs`, `s`,
   or `m`, and gets `s` when it asks none. The deployment maps each name
@@ -418,10 +420,14 @@ that only reads, plans, or answers starts none.
   another size.
 - **Warm, and always let go.** A few VMs may stand started ahead of
   demand, as many as an operator sets, below the maximum, all of the
-  default size: a claim of another size starts its own. They name no
-  tenant until a session claims one, and serve that session alone. At
-  the maximum, a session that cannot take one takes the place of an
-  idle one, which goes.
+  default size: a claim of another size starts its own. Where the cloud
+  hibernates VMs, a few more may sleep, as many as an operator sets,
+  costing their disk alone. A claim takes a warm VM that runs, then one
+  asleep, which wakes under a fresh key, then starts a new one. A VM
+  that served a session never sleeps. Warm VMs name no tenant until a
+  session claims one, and serve that session alone. At the maximum, a
+  session that cannot take one takes the place of an idle one, which
+  goes. One asleep goes before its cloud's own bound on a sleep.
   Every path that starts a VM has the one that lets it go: the run's
   release, the sweep past the grace, a run's end past the VM's age, a
   session or a tenant that is gone, a VM that died, and a purge, since
@@ -443,12 +449,12 @@ that only reads, plans, or answers starts none.
   start records how long it took from its start to its host's
   enrollment. Every VM boots the pool's image, and a warm claim records
   none, so that time is what the warm count is set by. Each claim counts
-  once, by how it got its VM: a warm one, a new one, the one its session
-  held, or that one started again. The warm share of claims is the
-  warm-hit ratio. Each claim records its wait, from the claim to the
-  first command on its VM, and each restore its time, by its archive's
-  size in a few classes. These readings say which of the warm VMs, the
-  restore, or the image needs work.
+  once, by how it got its VM: a warm one, a hibernated one, a new one,
+  the one its session held, or that one started again. The warm share
+  of claims is the warm-hit ratio. Each claim records its wait, from the
+  claim to the first command on its VM, and each restore its time, by
+  its archive's size in a few classes. These readings say which of the
+  warm VMs, the restore, or the image needs work.
 - **No race between a claim and the sweep.** A VM's host is handed
   its session's work only once it holds the session's workspace. The
   sweep takes a warm VM's record before it destroys the VM, under the

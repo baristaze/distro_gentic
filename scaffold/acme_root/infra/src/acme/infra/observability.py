@@ -129,14 +129,16 @@ CLOUD_POOL_BOOT_SECONDS = Histogram(
 )
 
 # What a claim of the cloud pool got, and what it cost. A claim takes a warm
-# VM, starts a new one, finds the one its session held running, or starts
-# that one again on its own disk; each counts once, under its source, so the
-# warm share of claims is the warm-hit ratio. Its wait runs from the claim to
-# the first command on its VM, once a claim. A restore is timed from its
+# VM that runs, wakes a hibernated one, starts a new one, finds the one its
+# session held running, or starts that one again on its own disk; each counts
+# once, under its source, so the warm share of claims is the warm-hit ratio,
+# and the hibernated share the claims that woke one. Its wait runs from the
+# claim to the first command on its VM, once a claim. A restore is timed from its
 # first part to its unpack's end, by the archive's size in a few classes.
 CLOUD_POOL_CLAIMS = Counter(
     "acme_cloud_pool_claims_total",
-    "Claims of a VM of the cloud pool, by how the claim got it: warm, new, held, or restarted",
+    "Claims of a VM of the cloud pool, by how the claim got it: warm, hibernated, new, held, "
+    "or restarted",
     ["source"],
 )
 CLOUD_POOL_FIRST_COMMAND_SECONDS = Histogram(
