@@ -148,8 +148,10 @@ class IssuedObjectSlotView(View):
 class ExecDetailView(View):
     """An item the host holds: the call, the workspace, the operation, and
     the objects it moves. A write's `file_in` comes by `url`, signed for a
-    GET of it alone until `url_expires_at`; an `output` and a read's
-    `file_out` go by the parts `POST .../upload` signs."""
+    GET of it alone until `url_expires_at`; a fetch's files come by `urls`,
+    one each, in the order its request names them, until the same time; an
+    `output` and a read's `file_out` go by the parts `POST .../upload`
+    signs."""
 
     item_id: UUID
     call_id: UUID  # the tool request's id: the call's idempotency key
@@ -166,6 +168,7 @@ class ExecDetailView(View):
     file_out: IssuedObjectSlotView | None = None
     url: str | None = None
     url_expires_at: datetime | None = None
+    urls: list[str] = Field(default_factory=list[str])
 
 
 class IssuedObjectPartView(View):

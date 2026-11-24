@@ -36,6 +36,7 @@ from acme.om.exceptions import (
 )
 from acme.om.exec_relay.exceptions import (
     ContentNotKept,
+    FetchNotRead,
     ItemNotHeld,
     NoWorkspaceHost,
     StaleExec,
@@ -53,6 +54,7 @@ from acme.om.exec_relay.rules import (
     dispatch_objects,
     exec_id,
     held_by,
+    kept_part_of,
     max_attempts,
     object_reference,
     repeatable,
@@ -77,6 +79,7 @@ from acme.om.exec_relay.types.exec import (
     ExecRequest,
     ExecResult,
     ExecState,
+    FetchRequest,
     IssuedObjectPart,
     IssuedObjectUpload,
     ItemContent,
@@ -97,7 +100,7 @@ from acme.om.exec_relay.types.exec import (
 )
 from acme.om.hosts import HostsManagerInterface
 from acme.om.hosts.impl.manager import session_pool_id
-from acme.om.hosts.rules import USER_VERSION
+from acme.om.hosts.rules import FETCH_VERSION, USER_VERSION
 from acme.om.hosts.types.host import HostIdentity
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import OutboxRow, outbox_row, versioned_row
@@ -627,6 +630,11 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
     ) -> ExecItem:
         if (content is not None) != isinstance(call.request, WriteRequest):
             raise ValidationFailed("a write carries its content, and no other operation does")
+        if isinstance(call.request, FetchRequest) and not all(
+            kept_part_of(call.agent_session_id, file.object.reference)
+            for file in call.request.files
+        ):
+            raise ValidationFailed("a fetch hands its host its own session's kept parts alone")
         ctx = await self._service(rctx, org_id)
         await self._admit(ctx, call.agent_session_id, call.epoch)
         request = REQUESTS.dump_json(call.request)
@@ -651,6 +659,10 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             )
         if isinstance(call.request, RunRequest) and call.request.user is not None:
             await self._reads_user(
+                ctx, binding.instance_of or call.agent_session_id, binding.host_id
+            )
+        if isinstance(call.request, FetchRequest):
+            await self._reads_fetch(
                 ctx, binding.instance_of or call.agent_session_id, binding.host_id
             )
         contents = await self._contents(
@@ -892,12 +904,23 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         item = await self._held(host, item_id)
         contents = await self._contents_of(ctx, item)
         url = expires_at = None
+        urls: list[str] = []
+        ttl = self._options.object_ttl
         if contents.file_in is not None:
-            ttl = self._options.object_ttl
             expires_at = self._clock() + ttl
             url = await self._signer(host).presign_get(
                 host.org_id, BUCKET, contents.file_in.reference, ttl
             )
+        if isinstance(contents.request, FetchRequest):
+            # Each of the session's own parts, which `send` held it to, in the
+            # bucket that keeps them.
+            expires_at = self._clock() + ttl
+            for file in contents.request.files:
+                urls.append(
+                    await self._signer(host).presign_get(
+                        host.org_id, Buckets.SNAPSHOTS, file.object.reference, ttl
+                    )
+                )
         return ExecDetail(
             item_id=item.id,
             key=item.key,
@@ -914,6 +937,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             file_out=contents.file_out,
             url=url,
             url_expires_at=expires_at,
+            urls=tuple(urls),
         )
 
     async def issue_upload(
@@ -1323,20 +1347,34 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         status = await self._hosts.get_host(ctx, placed.pool.id, host_id)
         return status is not None and status.host.revoked_at is None
 
-    async def _reads_user(self, ctx: TenantContext, agent_session_id: UUID, host_id: UUID) -> None:
-        """Refuses a command that names a user for a host whose `exec` work
-        is from before a command named one: it would run as the workspace's
-        own user there."""
+    async def _exec_version(self, ctx: TenantContext, agent_session_id: UUID, host_id: UUID) -> int:
+        """The version of `exec` work the host reads; 0 for one its session's
+        pool does not list."""
         placed = await self._hosts.work_placement(ctx, agent_session_id)
         status = (
             None
             if placed.pool is None
             else await self._hosts.get_host(ctx, placed.pool.id, host_id)
         )
-        if status is None or status.host.exec_version < USER_VERSION:
+        return 0 if status is None else status.host.exec_version
+
+    async def _reads_user(self, ctx: TenantContext, agent_session_id: UUID, host_id: UUID) -> None:
+        """Refuses a command that names a user for a host whose `exec` work
+        is from before a command named one: it would run as the workspace's
+        own user there."""
+        if await self._exec_version(ctx, agent_session_id, host_id) < USER_VERSION:
             raise UserNotRead(
                 f"host {host_id} reads exec work from before a command named its user, so "
                 "a command that names one never runs there"
+            )
+
+    async def _reads_fetch(self, ctx: TenantContext, agent_session_id: UUID, host_id: UUID) -> None:
+        """Refuses a fetch for a host whose `exec` work is from before a host
+        fetched a file: it knows no such operation."""
+        if await self._exec_version(ctx, agent_session_id, host_id) < FETCH_VERSION:
+            raise FetchNotRead(
+                f"host {host_id} reads exec work from before a host fetched a kept file, so "
+                "no fetch is sent to it"
             )
 
     async def _attach(
@@ -1556,6 +1594,10 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             return ItemContent(request=request, file_in=named)
         if isinstance(request, ReadRequest):
             return ItemContent(request=request, file_out=await slot("file"))
+        if isinstance(request, FetchRequest):
+            # Its files are the session's kept parts, which the item never
+            # moves or removes.
+            return ItemContent(request=request)
         return ItemContent(request=request, output=await slot("output"))
 
     async def _put(self, ctx: TenantContext, contents: ItemContent, content: bytes) -> None:

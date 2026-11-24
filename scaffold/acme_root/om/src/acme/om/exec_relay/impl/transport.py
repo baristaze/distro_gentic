@@ -8,7 +8,7 @@ import asyncio
 import hashlib
 import logging
 from collections import OrderedDict
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import datetime, timedelta
 from uuid import UUID
 
@@ -32,6 +32,7 @@ from acme.om.context import RequestContext
 from acme.om.exceptions import NotFound, OmException, ToolFailed, Unavailable
 from acme.om.exec_relay.exceptions import (
     ContentNotKept,
+    FetchNotRead,
     NoWorkspaceHost,
     StaleExec,
     UserNotRead,
@@ -48,6 +49,9 @@ from acme.om.exec_relay.types.exec import (
     ExecProgress,
     ExecRequest,
     ExecState,
+    FetchesKept,
+    FetchRequest,
+    KeptFile,
     ListRequest,
     McpRequest,
     ReadRequest,
@@ -216,6 +220,17 @@ class TransportRelayImpl(TransportInterface):
         """One item, whose file crosses as an object its host downloads."""
         request = WriteRequest(path=path)
         _, progress = await self._file(workspace, request, "idempotent", epoch, data)
+        _completed(*_ended(progress))
+
+    async def fetch_files(
+        self, workspace: AgentWorkspace, files: Sequence[KeptFile], epoch: int
+    ) -> None:
+        """One item, whose host fetches each file from the store itself, by
+        a link signed for it alone, all at once, and writes it whole: no byte
+        of them crosses the runner. A host that reads no fetch is refused
+        before anything is sent (`FetchNotRead`)."""
+        request = FetchRequest(files=tuple(files))
+        _, progress = await self._file(workspace, request, "idempotent", epoch)
         _completed(*_ended(progress))
 
     async def list_files(self, workspace: AgentWorkspace, path: str, limit: int) -> list[FileEntry]:
@@ -482,6 +497,14 @@ class TransportPlacedImpl(TransportInterface):
         self, workspace: AgentWorkspace, path: str, data: bytes, epoch: int
     ) -> None:
         await (await self._for(workspace)).write_file(workspace, path, data, epoch)
+
+    async def fetch_files(
+        self, workspace: AgentWorkspace, files: Sequence[KeptFile], epoch: int
+    ) -> None:
+        transport = await self._for(workspace)
+        if not isinstance(transport, FetchesKept):
+            raise FetchNotRead(f"{transport.describe()} fetches no file the store keeps")
+        await transport.fetch_files(workspace, files, epoch)
 
     async def list_files(self, workspace: AgentWorkspace, path: str, limit: int) -> list[FileEntry]:
         return await (await self._for(workspace)).list_files(workspace, path, limit)

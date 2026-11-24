@@ -29,6 +29,8 @@ class ExecOperation(StrEnum):
     READ_FILE = "read_file"
     WRITE_FILE = "write_file"
     LIST_FILES = "list_files"
+    # Files the store keeps for the session, each fetched by the host.
+    FETCH_FILES = "fetch_files"
     # A call of a tool of an MCP server the host runs, beside the workspace.
     MCP_CALL = "mcp_call"
 

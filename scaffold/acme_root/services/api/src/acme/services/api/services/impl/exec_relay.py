@@ -117,6 +117,7 @@ class ExecRelayServiceImpl(ExecRelayServiceInterface):
             else IssuedObjectSlotView(reference=detail.file_out.reference, key=detail.file_out.key),
             url=detail.url,
             url_expires_at=detail.url_expires_at,
+            urls=list(detail.urls),
         )
 
     async def issue_upload(

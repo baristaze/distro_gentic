@@ -215,8 +215,10 @@ class ExecDetailView(BaseModel):
     """
     An item the host holds: the call, the workspace, the operation, and
     the objects it moves. A write's `file_in` comes by `url`, signed for a
-    GET of it alone until `url_expires_at`; an `output` and a read's
-    `file_out` go by the parts `POST .../upload` signs.
+    GET of it alone until `url_expires_at`; a fetch's files come by `urls`,
+    one each, in the order its request names them, until the same time; an
+    `output` and a read's `file_out` go by the parts `POST .../upload`
+    signs.
     """
 
     agent_session_id: Annotated[UUID, Field(title='Agent Session Id')]
@@ -236,6 +238,7 @@ class ExecDetailView(BaseModel):
     url_expires_at: Annotated[AwareDatetime | None, Field(title='Url Expires At')] = (
         None
     )
+    urls: Annotated[list[str] | None, Field(title='Urls')] = None
 
 
 class PartRequest(BaseModel):

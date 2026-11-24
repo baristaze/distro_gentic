@@ -78,7 +78,7 @@
         "type": "object"
       },
       "ExecDetailView": {
-        "description": "An item the host holds: the call, the workspace, the operation, and\nthe objects it moves. A write's `file_in` comes by `url`, signed for a\nGET of it alone until `url_expires_at`; an `output` and a read's\n`file_out` go by the parts `POST .../upload` signs.",
+        "description": "An item the host holds: the call, the workspace, the operation, and\nthe objects it moves. A write's `file_in` comes by `url`, signed for a\nGET of it alone until `url_expires_at`; a fetch's files come by `urls`,\none each, in the order its request names them, until the same time; an\n`output` and a read's `file_out` go by the parts `POST .../upload`\nsigns.",
         "properties": {
           "agent_session_id": {
             "format": "uuid",
@@ -186,6 +186,13 @@
               }
             ],
             "title": "Url Expires At"
+          },
+          "urls": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Urls",
+            "type": "array"
           }
         },
         "required": [

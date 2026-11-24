@@ -48,3 +48,11 @@ class UserNotRead(ExecRelayException, Unavailable):
     own user, so it is never sent."""
 
     code = "user_not_read"
+
+
+class FetchNotRead(ExecRelayException, Unavailable):
+    """A fetch, for a host that reads `exec` work from before a host
+    fetched a file: it knows no such operation, so it is never sent. Its
+    caller hands the files another way."""
+
+    code = "fetch_not_read"

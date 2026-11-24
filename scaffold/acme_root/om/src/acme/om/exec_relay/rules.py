@@ -5,6 +5,7 @@ a file item moves lives. Values in, values out; no clock, no storage, no
 settings."""
 
 import hashlib
+import re
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -68,6 +69,12 @@ PUSH_PARTS = 256
 OBJECTS = "exec_relay/"
 """Where, under its tenant, the objects the items of a session move live."""
 
+KEPT_PART = re.compile(
+    r"agent-sessions/(?P<session>[0-9a-f-]{36})/workspace/[0-9a-f-]{36}/part-[0-9]{4,}"
+)
+"""A part of a session's archive, where the snapshots bucket keeps it under
+its tenant (`acme.om.tools.impl.snapshots.part_key`)."""
+
 HOST_ISOLATION: dict[IsolationMode, HostIsolation] = {
     IsolationMode.VM: "vm",
     IsolationMode.CONTAINER: "container",
@@ -114,6 +121,13 @@ def object_reference(agent_session_id: UUID, item_id: UUID, dispatch: int, kind:
     by what it is, so the relay finds it to remove with nothing of the item
     opened."""
     return f"{dispatch_objects(agent_session_id, item_id, dispatch)}{kind}"
+
+
+def kept_part_of(agent_session_id: UUID, reference: str) -> bool:
+    """Whether `reference` names a part of one of the session's own
+    archives: the only object a fetch hands its host."""
+    found = KEPT_PART.fullmatch(reference)
+    return found is not None and found["session"] == str(agent_session_id)
 
 
 def row_id(item_id: UUID, dispatch: int) -> UUID:

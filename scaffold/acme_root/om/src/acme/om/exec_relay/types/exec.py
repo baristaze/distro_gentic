@@ -6,14 +6,15 @@ and no output rides in it or in its result: each crosses as an object in
 the store, sealed under a key of its own, and the item carries the
 object's reference, its size, its digest, and that key."""
 
+from collections.abc import Sequence
 from datetime import datetime
 from enum import StrEnum
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Protocol, runtime_checkable
 from uuid import UUID
 
 from pydantic import ConfigDict, Field, TypeAdapter, model_validator
 
-from acme.infra.agent_workspaces import IsolationSpec
+from acme.infra.agent_workspaces import AgentWorkspace, IsolationSpec
 from acme.infra.transports import USER, FileEntry, SecretUse
 from acme.om.agent_workspaces.types.snapshot import DIGEST, REFERENCE
 from acme.om.base import FrozenMapping, Identifiable, OmBase, Trackable
@@ -37,6 +38,10 @@ it ended, that a result carries."""
 SECRETS = 32
 """The most secrets one relayed command uses, so a result that names them
 stays small."""
+
+FETCHED = 16
+"""The most files one fetch hands its host, which fetches them all at once,
+so each link it is handed is followed well within its time."""
 
 
 def _from_the_start(offset: int) -> bool:
@@ -84,9 +89,10 @@ class RunRequest(OmBase):
 
 
 class ObjectRef(OmBase):
-    """A file a write hands its host, as the object that holds it: where it
-    is under the tenant, the size and the digest of the file, and the key it
-    is sealed under (base64), which opens this object and no other."""
+    """A file a write or a fetch hands its host, as the object that holds
+    it: where it is under the tenant, the size and the digest of the file,
+    and the key it is sealed under (base64), which opens this object and no
+    other."""
 
     reference: str = Field(min_length=1, max_length=512)
     size: int = Field(ge=0)
@@ -128,6 +134,35 @@ class WriteRequest(OmBase):
     path: str
 
 
+class KeptFile(OmBase):
+    """A file a fetch hands its host: where it goes in the workspace, and
+    the object the store keeps it as, a part of its session's archive,
+    which the item reads and never removes."""
+
+    path: str
+    object: ObjectRef
+
+
+class FetchRequest(OmBase):
+    """Files the store keeps for the session, each fetched by its host from
+    a link of its own, all at once, and written whole."""
+
+    operation: Literal[ExecOperation.FETCH_FILES] = ExecOperation.FETCH_FILES
+    files: tuple[KeptFile, ...] = Field(min_length=1, max_length=FETCHED)
+
+
+@runtime_checkable
+class FetchesKept(Protocol):
+    """A transport whose workspace's host fetches files the store keeps for
+    its session itself, `FETCHED` at most at a time, so no byte of them
+    crosses the runner. A host that cannot is refused before anything is
+    sent (`FetchNotRead`)."""
+
+    async def fetch_files(
+        self, workspace: AgentWorkspace, files: Sequence[KeptFile], epoch: int
+    ) -> None: ...
+
+
 class ListRequest(OmBase):
     operation: Literal[ExecOperation.LIST_FILES] = ExecOperation.LIST_FILES
     path: str
@@ -149,7 +184,7 @@ class McpRequest(OmBase):
 
 
 ExecRequest = Annotated[
-    RunRequest | ReadRequest | WriteRequest | ListRequest | McpRequest,
+    RunRequest | ReadRequest | WriteRequest | FetchRequest | ListRequest | McpRequest,
     Field(discriminator="operation"),
 ]
 """What one item does: the session's content, sealed at rest, opened for the
@@ -331,6 +366,9 @@ class ExecDetail(OmBase):
     # A write's `file_in`, signed for a GET of it alone, and when that ends.
     url: str | None = None
     url_expires_at: datetime | None = None
+    # A fetch's files, each signed for a GET of its object alone, in the
+    # order its request names them; each ends at `url_expires_at`.
+    urls: tuple[str, ...] = ()
 
 
 class IssuedObjectPart(OmBase):

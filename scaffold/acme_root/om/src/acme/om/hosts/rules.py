@@ -33,13 +33,18 @@ class WireType(StrEnum):
     EXEC = "exec"  # what a workspace host runs: commands, file operations, workspaces
 
 
-WIRE_VERSION: dict[WireType, int] = {WireType.EXEC: 3}
+WIRE_VERSION: dict[WireType, int] = {WireType.EXEC: 4}
 """The version of each wire type this build writes."""
 
 USER_VERSION = 3
 """The first version of `exec` work whose hosts run a command as the user it
 names. A host below it leaves the user out and runs the command as its
 workspace's own, so it is handed no command that names one."""
+
+FETCH_VERSION = 4
+"""The first version of `exec` work whose hosts fetch files the store keeps
+for their session (`fetch_files`). A host below it knows no such operation,
+so it is handed none."""
 
 WIRE_FLOOR: dict[WireType, int] = {WireType.EXEC: 2}
 """The oldest version of each wire type this build still hands work to. A

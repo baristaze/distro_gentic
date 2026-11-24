@@ -27,7 +27,8 @@ its whole process tree.
 
 No file and no output crosses in an item or its result. A write's file is
 downloaded from the store, checked against its size and its digest, and
-only then written into the workspace; a read's file and what an item
+only then written into the workspace; so is each file a fetch names, a
+part the store keeps for the session, all of an item's at once; a read's file and what an item
 printed or listed are uploaded to the store as objects (`objects.py`), and
 the result names them by their size and their digest, so it is a few KiB,
 sent as UTF-8 JSON. The lease is renewed until the result is pushed, the
@@ -59,7 +60,7 @@ from acme.apps.host.objects import HostObjects, PartRefused, Spooled, removed
 from acme.apps.host.snapshots import HostSnapshots, SnapshotHeldSecret, SnapshotLost
 from acme.client.client import ApiClient
 from acme.client.transport import WIRE_FAILURES, ApiError
-from acme.client.types.exec_relay import ExecDetailView, OutputStream
+from acme.client.types.exec_relay import ExecDetailView, IssuedObjectView, OutputStream
 from acme.client.types.hosts import ClaimedWorkView
 from acme.client.types.hosts import IsolationMode as HostIsolation
 from acme.infra.agent_workspaces import (
@@ -886,6 +887,14 @@ async def _operate(
             finally:
                 await removed(spooled.path)
             return Ended(_result())
+        case "fetch_files":
+            files, urls = request["files"], detail.urls or []
+            if len(urls) != len(files):
+                raise CapabilityMissing("the fetch names no link for each of its files")
+            if not isinstance(transport, WritesFromFile):
+                raise CapabilityMissing(f"{transport.describe()} writes no file from disk")
+            await _fetched(transport, objects, workspace, files, urls, detail.epoch or 0)
+            return Ended(_result())
         case "list_files":
             entries = await transport.list_files(workspace, request["path"], request["limit"])
             return Ended(_result(entries=[entry.model_dump(mode="json") for entry in entries]))
@@ -893,6 +902,33 @@ async def _operate(
             return Ended(
                 _result(refused=("validation_failed", 422), detail=f"no operation {operation!r}")
             )
+
+
+async def _fetched(
+    transport: WritesFromFile,
+    objects: HostObjects,
+    workspace: AgentWorkspace,
+    files: list[dict[str, Any]],
+    urls: list[str],
+    epoch: int,
+) -> None:
+    """Each file a fetch names, downloaded by its own link, all at once,
+    and written into the workspace only once it matches its size and its
+    digest. The first that fails ends the others and is raised as it is."""
+
+    async def one(file: dict[str, Any], url: str) -> None:
+        spooled = await objects.fetch(IssuedObjectView.model_validate(file["object"]), url)
+        try:
+            await transport.write_file_from(workspace, file["path"], spooled.path, epoch)
+        finally:
+            await removed(spooled.path)
+
+    try:
+        async with asyncio.TaskGroup() as group:
+            for file, url in zip(files, urls, strict=True):
+                group.create_task(one(file, url))
+    except ExceptionGroup as failed:
+        raise failed.exceptions[0] from None
 
 
 def _ended(operation: asyncio.Future[Ended]) -> Ended | None:
