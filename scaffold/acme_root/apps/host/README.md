@@ -214,6 +214,10 @@ refused. What the item runs it reads from the gateway while it holds it
   session's workspace under `ACME_HOST_VM_WORKSPACE` (default
   `/workspace`), at the VM's level, which its pool keeps whole
   ([ADR 2052](../../docs/adr/2052-the-cloud-pool-runs-a-vm-per-session-whose-host-pulls-its-work.md)).
+  A key the pool ended, as it ends a warm VM's before the VM hibernates,
+  is refused, and the host stops; after a resume the image reads the
+  fresh seed and starts it again
+  ([ADR 2075](../../docs/adr/2075-the-cloud-pool-keeps-warm-vms-hibernated-holding-no-key.md)).
 
 ## Test
 
