@@ -528,6 +528,7 @@ async def test_a_warm_claim_a_new_vm_a_held_one_and_one_started_again_each_count
     await pool.image()
     await pool.manager.sweep(stage())
     await pool.manager.close()
+    await pool.warm_asks()
     holding = Holding(pool)
     pool.placed = holding
 
