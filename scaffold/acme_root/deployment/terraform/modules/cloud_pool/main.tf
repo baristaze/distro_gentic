@@ -7,6 +7,8 @@
 # its host has read the seed the pool handed it. Its egress is closed at the
 # network: the closed group reaches the gateway alone, and the open group
 # adds the open egress a session's policy chose. Neither admits anything in.
+# A group does not hold a VM's lookups, so the network's resolver answers
+# the names a closed VM needs and no other, and fails closed (ADR 2074).
 # Its disk is encrypted under the pool's own key, and the pool keeps no image
 # or snapshot of it: a session's files are kept sealed in the snapshots
 # bucket, under the session's key (ADR 2070). Its size is one of the size map's machine types, the only
@@ -93,6 +95,63 @@ resource "aws_vpc_security_group_egress_rule" "open_ipv6" {
   cidr_ipv6         = "::/0"
   ip_protocol       = "-1"
   description       = "Open egress, the session's recorded choice."
+}
+
+# The network's own resolver answers every VM, whatever its group, and asks
+# a name's servers on its behalf: a closed VM could carry data out in the
+# names it looks up. So the network resolves the names a closed VM needs
+# and refuses every other, and refuses a lookup its firewall cannot judge.
+# The network is the pool's alone, so nothing else in it loses a name. A
+# VM whose session chose open egress resolves the rest through a public
+# resolver, as its image sets it up (deployment/vms).
+resource "aws_route53_resolver_firewall_domain_list" "allowed" {
+  name    = "${local.name}-allowed"
+  domains = var.allowed_names
+  tags    = local.tags
+}
+
+resource "aws_route53_resolver_firewall_domain_list" "every_name" {
+  name    = "${local.name}-every-name"
+  domains = ["*"]
+  tags    = local.tags
+}
+
+resource "aws_route53_resolver_firewall_rule_group" "names" {
+  name = local.name
+  tags = local.tags
+}
+
+resource "aws_route53_resolver_firewall_rule" "allow" {
+  name                    = "${local.name}-allow"
+  firewall_rule_group_id  = aws_route53_resolver_firewall_rule_group.names.id
+  firewall_domain_list_id = aws_route53_resolver_firewall_domain_list.allowed.id
+  priority                = 100
+  action                  = "ALLOW"
+  # An allowed name may answer through an alias the platform's zone names,
+  # such as its load balancer's: the chain is the platform's, never the VM's.
+  firewall_domain_redirection_action = "TRUST_REDIRECTION_DOMAIN"
+}
+
+resource "aws_route53_resolver_firewall_rule" "block" {
+  name                    = "${local.name}-block"
+  firewall_rule_group_id  = aws_route53_resolver_firewall_rule_group.names.id
+  firewall_domain_list_id = aws_route53_resolver_firewall_domain_list.every_name.id
+  priority                = 200
+  action                  = "BLOCK"
+  block_response          = "NXDOMAIN"
+}
+
+resource "aws_route53_resolver_firewall_rule_group_association" "names" {
+  name                   = local.name
+  firewall_rule_group_id = aws_route53_resolver_firewall_rule_group.names.id
+  vpc_id                 = var.vpc_id
+  priority               = 101
+  tags                   = local.tags
+}
+
+resource "aws_route53_resolver_firewall_config" "closed" {
+  resource_id        = var.vpc_id
+  firewall_fail_open = "DISABLED"
 }
 
 resource "aws_launch_template" "vm" {
