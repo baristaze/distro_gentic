@@ -58,11 +58,12 @@ change.
   gateway's name means no VM enrolls.
 - On a closed VM, a lookup of another name waits out the public
   resolver before it fails, where the network's refusal was at once.
-- The image routes the gateway's name alone to the network. The store
-  answers at S3's names, which public DNS holds too, so an open VM
-  resolves the store publicly and reaches it by its open egress. The
-  trigger to route the store's name as well is a store at a name only
-  the pool's network answers.
+- The image routes the gateway's name alone to the network's resolver.
+  A VM of the cloud reaches the store where a browser does, at S3's
+  names, which public DNS holds, so an open VM resolves them there. The
+  trigger to route the store's name too is a deployment that sets
+  `ACME_CLOUD_POOL_S3_ENDPOINT_URL` for its VMs: a closed VM would look
+  that name up where it reaches no resolver.
 - No deployment calls the module yet
   ([ADR 2052](2052-the-cloud-pool-runs-a-vm-per-session-whose-host-pulls-its-work.md)).
   The trigger is the same: the platform's cloud account, whose
