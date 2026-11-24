@@ -2,12 +2,18 @@
 tools over the pool on the VMs' twin (ADR 2070). The relay is played by
 the transport a VM's host runs, over the VM's folder on the twin, so the
 directory is packed, read out, and brought back by the same commands a
-VM's host runs. A run's end keeps the directory alone, as sealed parts in
-the snapshots bucket, and its release lets the VM go: the VMs keep no
-disk of it, under the session's names or any other. The next run's VM
-starts from the pool's image and holds the same files, and nothing of what
-was written outside the directory. A directory past the bound is refused
-before it is packed. An archive that fails part way keeps no part, the
+VM's host runs. A run's end keeps the directory alone, compressed where the
+VM has zstd and in a plain tar where it has none, as parts in the snapshots
+bucket, each sealed under a key of its own that the archive keeps under
+the session's, and its release lets the VM go: the VMs keep no disk of it,
+under the session's names or any other. The next run's VM starts from the
+pool's image and holds the same files, and nothing of what was written
+outside the directory; here the twin's transport fetches nothing, so each
+part is opened by the runner and relayed. An archive kept before, the
+engine's plain tar with its parts under the session's key, restores as it
+did. A part that opens to bytes other than its digest loses the restore,
+and its VM goes, touching nothing kept. A directory past the bound is
+refused before it is packed. An archive that fails part way keeps no part, the
 snapshot before stays the latest, and its VM stays; a restore that fails
 part way lets its new VM go and touches nothing kept. A restore that ends
 is timed once, under its archive's size class, and one that fails is not.
@@ -17,7 +23,10 @@ the archives of a session idle past 30 days, by its last activity, and
 keeps a newer one's."""
 
 import asyncio
-from collections.abc import Awaitable, Callable
+import base64
+import os
+import shutil
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -34,11 +43,13 @@ from acme.infra.agent_workspaces import (
     EgressMode,
     EgressPolicy,
     IsolationMode,
+    AgentWorkspaceLost,
     IsolationSpec,
     SnapshotRefused,
 )
 from acme.infra.buckets import Buckets, BucketsInterface
 from acme.infra.buckets.local import BucketsLocalImpl
+from acme.infra.buckets.sealed import seal_object
 from acme.infra.exceptions import BackendFailed
 from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.secrets.local import SecretsLocalImpl
@@ -47,7 +58,10 @@ from acme.infra.transports.pool_vm import TransportPoolVmImpl
 from acme.infra.vms import VmState
 from acme.om.agent_steps.types.agent_step import AgentStep, AgentStepType
 from acme.om.agent_steps.types.header import AgentWorkspaceSnapshot, SnapshotHeader, SnapshotHolds
+from acme.om.agent_workspaces.impl import pool_directory
+from acme.om.agent_workspaces.impl.pool_archive import PoolManifest, opened
 from acme.om.agent_workspaces.impl.pool_directory import KEPT as PACKS
+from acme.om.agent_workspaces.impl.pool_directory import TAR, TAR_ZSTD
 from acme.om.agent_workspaces.impl.tools import (
     PinnedToolsOptions,
     ToolsManagerAgentWorkspacesImpl,
@@ -62,7 +76,14 @@ from acme.om.hosts.types.placement import PlacementState
 from acme.om.platform_root import PlatformRootOptions, build_platform_managers
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tools.impl.manager import ToolsOptions
-from acme.om.tools.impl.snapshots import BUCKET, SnapshotStore, session_prefix, snapshot_key
+from acme.om.tools.impl.snapshots import (
+    BUCKET,
+    CONTENT_TYPE,
+    Manifest,
+    SnapshotStore,
+    session_prefix,
+    snapshot_key,
+)
 from acme.om.tools.seal import RecordSealInterface
 
 from contracts.agent_session_storage import stored_session
@@ -83,6 +104,12 @@ PLAIN = "the plain words of the notes, " * 200
 """What a command writes into the directory: longer than a part, so it
 spans several, and plain, so a part that held it in the clear would show
 it."""
+TOOLS = ("sh", "id", "find", "wc", "awk", "rm", "mkdir", "tar", "cat")
+"""What the pool's scripts run in a VM, beside sudo and zstd."""
+
+
+def zstd_runs() -> bool:
+    return shutil.which("zstd") is not None
 
 
 class Plain(RecordSealInterface):
@@ -157,6 +184,7 @@ class Kept:
         *,
         bound: int | None = None,
         clock: Callable[[], datetime] = utcnow,
+        zstd: bool | None = None,
     ) -> None:
         self.infra = FlakyInfra(tmp_path / "infra")
         options = ToolsOptions(snapshot_part_bytes=PART)
@@ -171,16 +199,22 @@ class Kept:
         )
         self.pool = Pool(tmp_path / "pool")
         self.pool.placed = InTheVm(self.pool)
-        # A sudo that refuses, so every command runs as this user.
+        # A sudo that refuses, so every command runs as this user, and the
+        # VM's tools, with zstd or without it.
         shims = tmp_path / "shims"
         shims.mkdir()
         (shims / "sudo").write_text("#!/bin/sh\nexit 1\n")
         (shims / "sudo").chmod(0o755)
+        with_zstd = zstd_runs() if zstd is None else zstd
+        for tool in TOOLS + (("zstd",) if with_zstd else ()):
+            found = shutil.which(tool)
+            assert found is not None, f"the pool's scripts run {tool}"
+            (shims / tool).symlink_to(found)
         self.transport = TransportPoolVmImpl(
             tmp_path / "records",
             SecretsLocalImpl(tmp_path / "secrets"),
             BrokerNullImpl(),
-            search_path=f"{shims}:/usr/bin:/bin",
+            search_path=str(shims),
         )
         inner = self.loop.managers.tools
         self.snapshots: SnapshotStore = inner._snapshots  # type: ignore[attr-defined]  # pyright: ignore[reportAttributeAccessIssue]
@@ -191,6 +225,7 @@ class Kept:
             HostOffer(),
             local=True,
             snapshots=self.snapshots,
+            buckets=self.infra.buckets,
             keyed_hash=self.loop.managers.privacy.keyed_hash,
             cloud=self.pool.manager,
             transport=self.transport,
@@ -239,6 +274,39 @@ class Kept:
         steps = await self.loop.history(agent_session_id)
         return [named(step) for step in steps if step.type is AgentStepType.SNAPSHOTTED]
 
+    async def archive(
+        self, agent_session_id: UUID, snapshot: AgentWorkspaceSnapshot
+    ) -> PoolManifest | Manifest:
+        """What the snapshot's archive names, opened as a restore opens it."""
+        return await opened(self.snapshots, self.owner, agent_session_id, snapshot)
+
+    async def kept_before(
+        self, workspace: AgentWorkspace, epoch: int
+    ) -> AgentWorkspaceSnapshot:
+        """The directory kept as a release before the pool kept its own
+        archives kept it: one plain tar, its parts sealed under the session's
+        key, named by the engine's manifest. Then the release."""
+        packed, packing = await pool_directory.pack(
+            self.owner,
+            self.transport,
+            Plain(),
+            workspace,
+            bound=self.snapshots.directory_bound,
+            epoch=epoch,
+            within=timedelta(minutes=1),
+            now=utcnow(),
+        )
+        assert packing == TAR, "a VM with no zstd packs a plain tar"
+
+        def read(part_bytes: int) -> AsyncGenerator[bytes]:
+            return pool_directory.read(self.transport, workspace, packed, part_bytes)
+
+        snapshot = await self.snapshots.keep_parts(
+            self.owner, workspace.id, new_id(), workspace.id, packed.size, read
+        )
+        await self.tools.release_agent_workspace(self.owner, workspace)
+        return snapshot
+
 
 class Ahead:
     """The real clock, moved ahead by the time a case says has passed."""
@@ -256,12 +324,14 @@ def named(step: AgentStep) -> AgentWorkspaceSnapshot:
 
 
 def written(workspace: AgentWorkspace, text: str) -> Path:
-    """A run's command: its notes in the directory, deep and shallow, and a
-    line outside it, as an install leaves one in the VM."""
+    """A run's command: its notes in the directory, deep and shallow, bytes
+    no compression shrinks, so even a compressed archive is many parts, and
+    a line outside it, as an install leaves one in the VM."""
     directory = Path(workspace.location)
     (directory / "deep").mkdir(exist_ok=True)
     (directory / "notes.txt").write_text(text)
     (directory / "deep" / "more.txt").write_text(text[::-1])
+    (directory / "deep" / "noise.bin").write_bytes(os.urandom(6 * PART))
     (directory.parent / "installed.txt").write_text("outside the directory")
     return directory
 
@@ -273,17 +343,23 @@ def no_disk_kept(pool: Pool) -> bool:
 
 @pytest.fixture
 async def kept(tmp_path: Path) -> Kept:
+    """The VM's tools with zstd where this machine has it."""
     made = Kept(tmp_path)
     await made.pool.image()
     return made
 
 
+@pytest.mark.parametrize("zstd", [True, False], ids=["zstd", "no-zstd"])
 async def test_a_run_keeps_the_directory_in_sealed_parts_its_vm_goes_and_the_next_holds_it(
-    kept: Kept,
+    tmp_path: Path, zstd: bool
 ) -> None:
+    if zstd and not zstd_runs():
+        pytest.skip("needs zstd")
+    kept = Kept(tmp_path, zstd=zstd)
+    await kept.pool.image()
     agent_session_id = await kept.loop.start(KEEPER.name)
     workspace, epoch = await kept.prepared(agent_session_id)
-    written(workspace, PLAIN)
+    noise = (written(workspace, PLAIN) / "deep" / "noise.bin").read_bytes()
 
     snapshot = await kept.kept(workspace, epoch)
 
@@ -291,8 +367,13 @@ async def test_a_run_keeps_the_directory_in_sealed_parts_its_vm_goes_and_the_nex
     stored = await kept.stored(agent_session_id)
     parts = [key for key in stored if f"/workspace/{snapshot.id}/part-" in key]
     assert len(parts) > 2, "the directory in parts"
-    assert snapshot_key(agent_session_id, snapshot.hash) in stored, "and the manifest"
+    assert snapshot_key(agent_session_id, snapshot.hash) in stored, "and the archive"
     assert not any(b"plain words" in blob for blob in stored.values()), "each part sealed"
+    archive = await kept.archive(agent_session_id, snapshot)
+    assert isinstance(archive, PoolManifest), "the pool's own archive"
+    assert archive.packing == (TAR_ZSTD if zstd else TAR)
+    assert len(archive.parts) == len(parts)
+    assert len({part.key for part in archive.parts}) == len(parts), "each under a key of its own"
     record = await kept.loop.platform.agent_workspaces.kept_snapshot(kept.owner, snapshot.id)
     assert record is not None and not record.on_host
     assert record.reference == snapshot_key(agent_session_id, snapshot.hash)
@@ -306,6 +387,7 @@ async def test_a_run_keeps_the_directory_in_sealed_parts_its_vm_goes_and_the_nex
     assert directory != Path(workspace.location), "a new VM"
     assert (directory / "notes.txt").read_text() == PLAIN
     assert (directory / "deep" / "more.txt").read_text() == PLAIN[::-1]
+    assert (directory / "deep" / "noise.bin").read_bytes() == noise
     assert not (directory.parent / "installed.txt").exists(), "outside it, the image's again"
     assert not (directory / PACKS).exists(), "no part left in the directory"
     (row,) = await kept.pool.rows()
@@ -328,6 +410,50 @@ def restores() -> dict[str, float]:
 def timed_since(before: dict[str, float]) -> dict[str, float]:
     now = restores()
     return {size: now[size] - before[size] for size in now if now[size] != before[size]}
+
+
+async def test_an_archive_kept_before_the_pool_kept_its_own_restores(tmp_path: Path) -> None:
+    kept = Kept(tmp_path, zstd=False)
+    await kept.pool.image()
+    agent_session_id = await kept.loop.start(KEEPER.name)
+    workspace, epoch = await kept.prepared(agent_session_id)
+    written(workspace, PLAIN)
+    snapshot = await kept.kept_before(workspace, epoch)
+    assert isinstance(await kept.archive(agent_session_id, snapshot), Manifest), "the engine's"
+    before = await kept.stored(agent_session_id)
+
+    restored, _ = await kept.prepared(agent_session_id, restore=snapshot)
+
+    directory = Path(restored.location)
+    assert (directory / "notes.txt").read_text() == PLAIN
+    assert (directory / "deep" / "more.txt").read_text() == PLAIN[::-1]
+    assert not (directory / PACKS).exists(), "no part left in the directory"
+    assert await kept.stored(agent_session_id) == before, "the archive as it was"
+
+
+async def test_a_part_that_opens_to_bytes_other_than_its_digest_loses_the_restore_and_its_vm(
+    kept: Kept,
+) -> None:
+    agent_session_id = await kept.loop.start(KEEPER.name)
+    workspace, epoch = await kept.prepared(agent_session_id)
+    written(workspace, PLAIN)
+    snapshot = await kept.kept(workspace, epoch)
+    archive = await kept.archive(agent_session_id, snapshot)
+    assert isinstance(archive, PoolManifest)
+    part = archive.objects(agent_session_id)[1]
+    # Sealed again under its own key and at its own place, so it opens, to
+    # bytes of its size that are not the ones its digest names.
+    other = seal_object(base64.b64decode(part.key), part.reference, b"x" * part.size)
+    await kept.infra.buckets.put(kept.owner.org_id, BUCKET, part.reference, other, CONTENT_TYPE)
+    before = await kept.stored(agent_session_id)
+    timed = restores()
+
+    with pytest.raises(AgentWorkspaceLost, match="part 1 .* does not open to its size and its"):
+        await kept.prepared(agent_session_id, restore=snapshot)
+
+    assert timed_since(timed) == {}, "a restore that failed is not timed"
+    assert await kept.pool.rows() == [], "its VM went: no half-restored directory stands"
+    assert await kept.stored(agent_session_id) == before, "nothing kept touched"
 
 
 async def test_a_restore_is_timed_once_under_its_archives_size_class(kept: Kept) -> None:

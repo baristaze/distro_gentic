@@ -1132,6 +1132,8 @@ class RootHooksPlatformImpl(RootHooksInterface):
             held=self._held,
             placed=None if options.transport_layer is None else placed_workspaces,
             snapshots=snapshots,
+            # A VM of the pool keeps its parts under keys of their own there.
+            buckets=infra.get_buckets(),
             # A snapshot a host keeps is named by the digest it declared, keyed
             # by the session; its revoked key asks the host to let it go.
             keyed_hash=self._privacy.keyed_hash,
