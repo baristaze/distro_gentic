@@ -47,3 +47,9 @@ variable "disk_gb" {
   type        = number
   default     = 64
 }
+
+variable "hibernation" {
+  description = "Whether a VM may hibernate, so the pool keeps warm VMs asleep: the template sets it at launch, since no VM takes it later, and the root disk adds the largest size's memory, which a VM writes there as it sleeps. Every type the size map names must hibernate. ACME_VM_HIBERNATION."
+  type        = bool
+  default     = false
+}

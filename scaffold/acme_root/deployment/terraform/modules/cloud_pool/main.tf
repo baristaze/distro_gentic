@@ -10,13 +10,20 @@
 # Its disk is encrypted under the pool's own key, and the pool keeps no image
 # or snapshot of it: a session's files are kept sealed in the snapshots
 # bucket, under the session's key (ADR 2070). Its size is one of the size map's machine types, the only
-# ones the platform's role may launch (ADR 2069).
+# ones the platform's role may launch (ADR 2069). With `hibernation`, a warm VM
+# may sleep, its memory written to its encrypted disk holding no key
+# (ADR 2075): the template sets it at launch, every type of the map must
+# hibernate, and the disk holds the largest size's memory too.
 
 locals {
   name = "acme-${var.environment}-cloud-pool"
   tags = { "acme:component" = "cloud-pool", "acme:environment" = var.environment }
   # The machine types the size map names, each once: what a VM may run on.
   types = sort(distinct([for size in values(var.sizes) : size.type]))
+  # A VM that hibernates writes its memory to its root disk, so the disk
+  # holds the largest size's memory beside the room a session's work takes.
+  memory_gb = ceil(max([for size in values(var.sizes) : size.memory_mb]...) / 1024)
+  disk_gb   = var.disk_gb + (var.hibernation ? local.memory_gb : 0)
   # Every call that makes a disk image or a volume snapshot, or copies one in.
   disk_copies = [
     "ebs:StartSnapshot",
@@ -45,6 +52,14 @@ data "aws_ami" "image" {
     name   = "image-id"
     values = [var.image_id]
   }
+}
+
+# Each machine type of the map, read for whether it hibernates, where a VM
+# may: a type that cannot is refused at plan, since a VM launched on one
+# would fail only as it went to sleep.
+data "aws_ec2_instance_type" "sized" {
+  for_each      = var.hibernation ? toset(local.types) : toset([])
+  instance_type = each.value
 }
 
 resource "aws_kms_key" "disks" {
@@ -109,10 +124,16 @@ resource "aws_launch_template" "vm" {
     instance_metadata_tags      = "disabled"
   }
 
+  # Set at launch, as no VM takes it later; the disk it writes the memory
+  # to is the encrypted root disk below.
+  hibernation_options {
+    configured = var.hibernation
+  }
+
   block_device_mappings {
     device_name = data.aws_ami.image.root_device_name
     ebs {
-      volume_size           = var.disk_gb
+      volume_size           = local.disk_gb
       volume_type           = "gp3"
       encrypted             = true
       kms_key_id            = aws_kms_key.disks.arn
@@ -131,6 +152,13 @@ resource "aws_launch_template" "vm" {
   }
 
   tags = local.tags
+
+  lifecycle {
+    precondition {
+      condition     = alltrue([for type in values(data.aws_ec2_instance_type.sized) : type.hibernation_supported])
+      error_message = "Every machine type the size map names hibernates, where a VM may: ${join(", ", sort([for name, type in data.aws_ec2_instance_type.sized : name if !type.hibernation_supported]))} cannot."
+    }
+  }
 }
 
 # What the platform's runner and its sweep may do to the pool's VMs,

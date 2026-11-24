@@ -33,3 +33,8 @@ output "sizes" {
     }
   })
 }
+
+output "hibernation" {
+  description = "ACME_VM_HIBERNATION: a VM of the template may hibernate, so the pool keeps warm VMs asleep."
+  value       = var.hibernation
+}
