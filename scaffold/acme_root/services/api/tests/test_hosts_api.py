@@ -190,6 +190,7 @@ async def test_a_claim_names_only_its_version_and_is_handed_only_its_pools_work(
     written = rules.WIRE_VERSION[WireType.EXEC]
     assert (item["id"], item["kind"], item["wire_version"]) == (str(mine.id), "WORKSPACE", written)
     assert item["payload"]["pool_id"] == ours
+    assert item["detail"] is None, "a prepare hands nothing past its payload"
     nothing = await client.post(
         "/v1/hosts/me/claims", headers=bearer(host["token"]), json={"exec_version": 2}
     )

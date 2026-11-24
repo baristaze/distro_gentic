@@ -73,6 +73,15 @@ async def a_held_item(
 ) -> tuple[dict[str, Any], UUID]:
     """A host that holds a session's workspace, and an exec item the runner
     sent it, claimed by the host through its route."""
+    host, item_id, _ = await a_claimed_item(client, owner, container)
+    return host, item_id
+
+
+async def a_claimed_item(
+    client: httpx.AsyncClient, owner: dict[str, str], container: AppContainer
+) -> tuple[dict[str, Any], UUID, dict[str, Any]]:
+    """A host that holds a session's workspace, an exec item the runner sent
+    it, and the item as the host's claim handed it over."""
     pool_id = await a_pool(client, owner)
     host = await a_host(client, await a_token(client, owner, pool_id))
     ctx = await tenant_of(container, owner)
@@ -97,7 +106,7 @@ async def a_held_item(
     )
     assert claimed.status_code == 200, claimed.text
     assert claimed.json()["item"]["payload"]["item_id"] == str(item.id)
-    return host, item.id
+    return host, item.id, claimed.json()["item"]
 
 
 def test_every_call_a_host_makes_is_a_request_it_opens_with_its_own_credential(
@@ -138,6 +147,22 @@ async def test_the_relays_routes_take_the_hosts_credential_and_nothing_else(
     other = await a_host(client, await a_token(client, owner, await a_pool(client, owner, "c")))
     foreign = await client.get(f"/v1/hosts/me/exec/{item_id}", headers=bearer(other["token"]))
     assert foreign.status_code == 409 and foreign.json()["error"]["code"] == "exec_not_held"
+
+
+async def test_a_claim_of_an_exec_item_carries_its_detail_and_its_route_still_answers(
+    client: httpx.AsyncClient, owner: dict[str, str], container: AppContainer
+) -> None:
+    host, item_id, claimed = await a_claimed_item(client, owner, container)
+    detail = claimed["detail"]
+    assert detail is not None and detail["item_id"] == str(item_id)
+    assert detail["request"]["argv"] == ["make", "deploy"]
+    # It says what the platform keeps of a result, as the route does.
+    assert (detail["times"], detail["inline"]) == (True, 64 * 1024)
+    # A host that reads the detail by its route, as before, is answered
+    # the same.
+    held = await client.get(f"/v1/hosts/me/exec/{item_id}", headers=bearer(host["token"]))
+    assert held.status_code == 200, held.text
+    assert held.json() == detail
 
 
 def test_nothing_the_platform_keeps_or_imports_could_call_into_a_host() -> None:
