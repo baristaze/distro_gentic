@@ -4,8 +4,9 @@
 # (CPU, free storage), the queues (a backlog and a dead letter, per
 # inbound queue), the worker's sweep (a pass longer than its interval), the
 # work queue and the outbox in Postgres (a backlog, a dead letter, the
-# relay's lag), and the runtime (a service running fewer tasks than it wants, one per
-# service). The thresholds are inputs with defaults here, at the
+# relay's lag), the runtime (a service running fewer tasks than it wants, one per
+# service), and the model calls (the prompt cache's read share). The
+# thresholds are inputs with defaults here, at the
 # leaf, because a threshold is a number and not shape; an environment that
 # wants another number passes it through the environment module, which
 # exposes none of them yet.
@@ -493,4 +494,71 @@ resource "aws_cloudwatch_metric_alarm" "tasks_below_desired" {
       dimensions  = { ClusterName = var.cluster_name, ServiceName = each.key }
     }
   }
+}
+
+# The model calls. A prompt the cache serves costs a fraction of one it
+# does not, and starts its first token sooner; a prefix that changes each turn
+# rebuilds the cache on every call, and nothing else says so. The runner
+# writes each settled call's prompt tokens as fields of one log line (no
+# text of the call), and a metric filter per field on its log group turns
+# them into metrics, since an alarm cannot sum the token counter's series
+# across their labels. The share is the cache's reads of every prompt
+# token, over a period long enough that a session's first call, which
+# writes the cache and reads none, does not move it alone.
+
+locals {
+  # The fields of the settled call's line, prefixed with `model_call.`; the
+  # metric is `acme_model_call_<field>`.
+  prompt_token_fields = toset(["input_tokens", "cache_read_tokens", "cache_write_tokens"])
+}
+
+resource "aws_cloudwatch_log_metric_filter" "prompt_tokens" {
+  for_each = local.prompt_token_fields
+
+  name           = "${local.prefix}-model-call-${replace(each.key, "_", "-")}"
+  log_group_name = var.runner_log_group_name
+  pattern        = "{ $.model_call.${each.key} = * }"
+
+  metric_transformation {
+    name      = "acme_model_call_${each.key}"
+    namespace = "Acme"
+    value     = "$.model_call.${each.key}"
+    unit      = "Count"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "prompt_cache_read_share" {
+  alarm_name          = "${local.prefix}-prompt-cache-read-share"
+  alarm_description   = "The prompt cache served less than ${var.prompt_cache_read_percent} percent of settled model calls' prompt tokens in each of ${var.evaluation_periods} periods of ${var.prompt_cache_period_seconds}s, as the runner counted them: the cache is rebuilt on most calls."
+  comparison_operator = "LessThanThreshold"
+  evaluation_periods  = var.evaluation_periods
+  threshold           = var.prompt_cache_read_percent
+  # A period with no settled call has no share, and is no fall.
+  treat_missing_data = "notBreaching"
+  alarm_actions      = [aws_sns_topic.alarms.arn]
+  ok_actions         = [aws_sns_topic.alarms.arn]
+  tags               = local.tags
+
+  metric_query {
+    id          = "share"
+    expression  = "100 * cache_read_tokens / (input_tokens + cache_read_tokens + cache_write_tokens)"
+    label       = "prompt cache read share, percent"
+    return_data = true
+  }
+
+  dynamic "metric_query" {
+    for_each = local.prompt_token_fields
+
+    content {
+      id = metric_query.value
+      metric {
+        namespace   = "Acme"
+        metric_name = "acme_model_call_${metric_query.value}"
+        period      = var.prompt_cache_period_seconds
+        stat        = "Sum"
+      }
+    }
+  }
+
+  depends_on = [aws_cloudwatch_log_metric_filter.prompt_tokens]
 }

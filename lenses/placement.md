@@ -639,14 +639,13 @@ other.
 
 **Principle.** A kind asks its VM's size by name, `s` when it asks none,
 and the deployment maps each name it allows onto a machine type; the
-pool's cloud role launches no other type and moves no VM to one. A size
-the deployment does not map, or an ask of CPUs or memory, is refused
-for good, with its cause, before the loop's first model call. Warm VMs
-are the default size. A VM past its maximum age goes at its run's end
-once its work is kept, never under a running loop; a warm one goes at
-the sweep.
-Each cold start, of the pool's image, records its time to its host's
-enrollment; a warm claim records none.
+pool's cloud role launches no other type and moves no VM to one. An
+unmapped size, or an ask of CPUs or memory, is refused for good, with
+its cause, before the loop's first model call. Warm VMs are the default
+size. A VM past its maximum age goes between runs once its work is kept;
+a warm one, at the sweep. A cold start times its boot, a warm claim
+none. Each claim counts once, by how it got its VM, and times its first
+command; a restore is timed by size class.
 
 **Source.** Placement and Workspace Hosts, The Cloud Pool.
 
@@ -654,7 +653,9 @@ enrollment; a warm claim records none.
 and what a warm claim reads of it; what the pool's cloud role allows a
 start, and a change of an attribute, to be; where a VM's age is read and
 what has run, and what is kept, when it goes; where a boot is observed,
-and what tells a cold start from a warm claim and a start again.
+and what tells a cold start from a warm claim and a start again; where a
+claim is counted and what tells a claim asked again from another, and
+where its first command and a restore are timed.
 
 **Violation.** A VM of a type the deployment never mapped, or of
 another size than its spec asked, a raw CPU or memory ask met, or a
@@ -663,7 +664,8 @@ launches, or moves a VM to, any type; a VM let go for its age under a
 running loop, or before its run's work was kept; a VM that lives across
 runs with no maximum age; a boot
 recorded for a warm claim or a start again, or a cold start recorded
-twice or not at all.
+twice or not at all; a claim counted twice, under two sources, or not at
+all; a claim's wait recorded for each command, or a restore's never.
 
 **Severity.** high
 

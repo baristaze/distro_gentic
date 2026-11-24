@@ -80,7 +80,10 @@ def count_settled(labels: SpendLabels, usage: Usage | None, settlement: SpendSet
     """A settled model call's tokens, when the provider reported them, and
     the spend its settlement took, under the matrix version its session was
     pinned to and its tenant's plan tier. The cache's share of the prompt is
-    `cache_read` against the rest: a fall in it is a cache rebuilt."""
+    `cache_read` against the rest: a fall in it is a cache rebuilt. The
+    prompt's counts are also fields of one log line a call, never its text:
+    an alarm cannot sum the counter's series across their labels, so a
+    filter turns the line into metrics of its own (the alarms module)."""
     version, tier = labels
     if usage is not None:
         for kind, tokens in (
@@ -90,6 +93,12 @@ def count_settled(labels: SpendLabels, usage: Usage | None, settlement: SpendSet
             ("output", usage.output + usage.thinking),
         ):
             MODEL_TOKENS.labels(matrix_version=version, plan_tier=tier, kind=kind).inc(tokens)
+        prompt = {
+            "input_tokens": usage.input,
+            "cache_read_tokens": usage.cache_read,
+            "cache_write_tokens": usage.cache_write,
+        }
+        log.info("model call settled", extra={"model_call": prompt})
     if settlement.spent.cost_micros:
         MODEL_SPEND_MICROS.labels(matrix_version=version, plan_tier=tier).inc(
             settlement.spent.cost_micros

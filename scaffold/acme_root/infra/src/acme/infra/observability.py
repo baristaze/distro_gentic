@@ -155,6 +155,32 @@ CLOUD_POOL_BOOT_SECONDS = Histogram(
     buckets=(5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 300, 600, 900),
 )
 
+# What a claim of the cloud pool got, and what it cost. A claim takes a warm
+# VM, starts a new one, finds the one its session held running, or starts
+# that one again on its own disk; each counts once, under its source, so the
+# warm share of claims is the warm-hit ratio. Its wait runs from the claim to
+# the first command on its VM, once a claim. A restore is timed from its
+# first part to its unpack's end, by the archive's size in a few classes.
+CLOUD_POOL_CLAIMS = Counter(
+    "acme_cloud_pool_claims_total",
+    "Claims of a VM of the cloud pool, by how the claim got it: warm, new, held, or restarted",
+    ["source"],
+)
+CLOUD_POOL_FIRST_COMMAND_SECONDS = Histogram(
+    "acme_cloud_pool_first_command_seconds",
+    "How long a claim of the cloud pool waited for the first command on its VM, by the "
+    "claim's source",
+    ["source"],
+    buckets=(0.5, 1, 2, 5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 300, 600, 900),
+)
+CLOUD_POOL_RESTORE_SECONDS = Histogram(
+    "acme_cloud_pool_restore_seconds",
+    "How long a VM of the cloud pool took to take its session's files back, by the "
+    "archive's size class",
+    ["size"],
+    buckets=(1, 2, 5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 300, 600, 900),
+)
+
 
 @dataclass(frozen=True)
 class ProcessIdentity:
@@ -304,6 +330,10 @@ class JsonFormatter(logging.Formatter):
         sweep = getattr(record, "sweep", None)
         if isinstance(sweep, dict):
             line["sweep"] = sweep
+        # So does a settled model call's line its token counts, no text of it.
+        model_call = getattr(record, "model_call", None)
+        if isinstance(model_call, dict):
+            line["model_call"] = model_call
         if record.exc_info and record.exc_info[1] is not None:
             line["exception"] = traceback_of(record.exc_info[1])
         return json.dumps(line)

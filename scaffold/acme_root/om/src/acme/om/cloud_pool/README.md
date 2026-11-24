@@ -66,6 +66,16 @@ let go, whether it runs, starts, or stands stopped for its session.
   is warm it is told to ask again. A cold start records its boot, from
   its start to here, as `acme_cloud_pool_boot_seconds`; a warm claim
   records none.
+- **Count a claim.** Each claim counts once in
+  `acme_cloud_pool_claims_total`, by how it got its VM: `warm`, `new`,
+  `held` (its session's own, found running), or `restarted` (that one
+  started again). A prepare asked again before its claim's returned is
+  that claim. The first command on the VM, as the runner's transport
+  says it starts, records the claim's wait from the claim in
+  `acme_cloud_pool_first_command_seconds`, under the same source; any
+  later command records none. A restore that ends records its time,
+  from its first part to its unpack's end, in
+  `acme_cloud_pool_restore_seconds`, by its archive's size class.
 - **Archive.** At a loop's end, for a session kept by snapshots, what
   the workspace holds is pushed, the pool records the session's
   archives, and the platform's tools keep its directory. The run's
