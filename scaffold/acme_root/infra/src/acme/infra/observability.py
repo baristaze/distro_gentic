@@ -64,10 +64,21 @@ OUTCOMES = Counter(
     "Outcomes of queues, caches, rate limits, and sweeps",
     ["subsystem", "outcome"],
 )
+WORKSPACE_PREPARES_UNUSED = Counter(
+    "acme_workspace_prepares_unused_total",
+    "Workspaces a run prepared early that none of its calls reached, by kind",
+    ["kind"],
+)
 SWEEP_SECONDS = Histogram(
     "acme_sweep_seconds",
     "How long one maintenance sweep pass took",
     buckets=(0.1, 0.5, 1, 2.5, 5, 10, 20, 30, 60, 120),
+)
+MODEL_FIRST_TOKEN = Histogram(
+    "acme_model_first_token_seconds",
+    "Time from a model call's request sent to the first part its provider streamed back",
+    ["provider"],
+    buckets=(0.25, 0.5, 1, 2, 4, 8, 15, 30, 60, 120),
 )
 # The sweep's reads of the work queue and the outbox, one each per pass, as
 # the pass read them. The same four numbers are fields of the pass's log
