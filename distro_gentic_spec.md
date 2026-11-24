@@ -380,16 +380,21 @@ that only reads, plans, or answers starts none.
 - **Its files are its snapshot, never its disk.** For a session kept
   by snapshots, the run's end pushes what the workspace holds, then
   keeps the workspace's directory as the engine keeps a VM's
-  ([`agentic_core` Workspace Snapshots][e-snapshots]): measured and
-  packed in the VM, refused past its bound before any byte leaves,
-  and read out through the relay in parts, each sealed under the
+  ([`agentic_core` Workspace Snapshots][e-snapshots]): measured,
+  packed, and compressed in the VM, refused past its bound before any
+  byte leaves, and read out through the relay in parts. Each part is
+  sealed under a key of its own, which the archive keeps under the
   session's key in the object store. An archive that fails part way
   keeps no part. The VM then goes, and the pool keeps no image of any
   disk: a disk costs about ten times its files, is bound to one zone,
   and is sealed under no session's key. The next loop's VM boots the
-  pool's image and takes the files back, so what its commands
-  installed outside the directory comes from the image again. A
-  restore that fails lets its VM go and touches nothing kept.
+  pool's image, and its host fetches the parts itself, several at once,
+  straight from the store, each by its key and a link signed for it
+  alone: no part crosses the runner. What its commands installed
+  outside the directory comes from the image again. A restore that
+  fails lets its VM go and touches nothing kept. An archive in the
+  engine's own format, and any archive whose VM's host fetches none,
+  restores through the relay, a part at a time.
 - **Kept while its session is active.** A session's archives stay 30
   days after its last activity, by default, then the sweep removes
   them. Its purge removes them, and its key's revocation leaves them
@@ -470,15 +475,17 @@ A tool call into a customer's wall travels as `exec` work:
 
 No file and no output rides in an item or its result. Each crosses the
 store as an object, by URLs signed for it alone, as every blob does
-([Buckets][g-buckets]): a file a write hands its host, a file a read
-uploads, and what a command printed. The item names each object, its
-size, and its digest, and the result names what its host uploaded the
-same way, so it stays small whatever the command printed. An object is
-sealed under a key of its own, which the item keeps under the session's
-key, so revoking that key leaves it noise. Nothing of a file reaches a
-workspace, or the runner, until it matches its digest. A file leaves the
-store once its item settles; an output is the item's record, and goes
-with it.
+([Buckets][g-buckets]): a file a write hands its host, a part of its
+session's archive a fetch hands it, a file a read uploads, and what a
+command printed. The item names each object, its size, and its digest,
+and the result names what its host uploaded the same way, so it stays
+small whatever the command printed. An object is sealed under a key of
+its own, which the item, or the archive a part belongs to, keeps under
+the session's key, so revoking that key leaves it noise. Nothing of a
+file reaches a workspace, or the runner, until it matches its digest. A
+written file leaves the store once its item settles; a fetched part
+stays with its archive; an output is the item's record, and goes with
+it.
 
 A host also holds one long-lived outbound stream to the control plane,
 which carries wake-ups, cancels, interrupts, deadline cuts, and lease

@@ -96,7 +96,10 @@ platform's cloud. Each call crosses the wall as `exec`
   crash attaches to the first execution or reads its result. A command
   that names the user it runs as goes only to a host that reads `exec`
   work at `USER_VERSION` or later; an older host would run it as its
-  workspace's own user, so it is refused before it is sent.
+  workspace's own user, so it is refused before it is sent. A fetch
+  names parts of its own session's archives alone, which the item never
+  moves or removes, and goes only to a host at `FETCH_VERSION` or later;
+  its detail signs a link for each part alone.
 - **Claim and run.** The host claims the item under a lease, reads what
   it runs, runs it through its own transport, streams the output back,
   and pushes the result. It renews the lease from the claim until the

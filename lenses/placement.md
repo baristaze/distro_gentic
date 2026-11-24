@@ -502,10 +502,11 @@ lets it go.
 claims are held to; what a VM's image, its settings, its seed, and
 its role hold; the network rules a VM starts in; what a run's end
 keeps of a VM, where, and under whose key, and what the pool's role
-may copy of a disk; what a restore starts its VM from, and what it
-lets go when it fails; each path that starts a VM and the one that
-lets it go, the sweep's among them; what a VM with no host to work
-for comes to; what removes a session's archives, and when.
+may copy of a disk; what a restore starts its VM from, what it hands
+the VM's host to fetch, and what it lets go when it fails; each path
+that starts a VM and the one that lets it go, the sweep's among them;
+what a VM with no host to work for comes to; what removes a session's
+archives, and when.
 
 **Violation.** A VM's host enrolled with a tenant's token, or handed
 another session's work; a database credential, a model key, a platform
@@ -514,10 +515,11 @@ disk; egress closed by a rule inside the guest, or open to more than
 the gateway and the session's egress; the platform calling into a VM;
 an image or a volume snapshot of a VM's disk, made by the pool or
 allowed by its role; a session's files kept outside its key's seal, or
-sent before their size was checked; a failed archive whose parts
-remain, or a failed restore that changes what is kept or leaves its VM
-half-restored; a VM that nothing lets go, warm or bound; a VM that runs
-with no host; a disk a live session's VM ran on destroyed by the
+sent before their size was checked; a VM's host handed a link or a key
+to another session's part; a failed archive whose parts remain, or a
+failed restore that changes what is kept or leaves its VM
+half-restored; a VM that nothing lets go, warm or bound; a VM that
+runs with no host; a disk a live session's VM ran on destroyed by the
 sweep; a session's archives kept past their bound after its last
 activity, or removed while it is active.
 
@@ -529,13 +531,14 @@ activity, or removed while it is active.
 
 **Principle.** No file and no output rides in an `exec` item or its
 result. Each crosses the store as an object, by URLs signed for it
-alone: a file a write hands its host, a file a read uploads, and what a
-command printed. The item names each object, its size, and its digest,
-and the result names what its host uploaded the same way. An object is
-sealed under a key of its own, which the item keeps under the session's
+alone: a file a write or a fetch hands its host, a file a read uploads,
+and what a command printed. The item names each object, its size, and
+its digest, and the result names what its host uploaded the same way.
+An object is sealed under a key of its own, kept under the session's
 key. Nothing of a file reaches a workspace, or the runner, until it
-matches its digest. A file leaves the store once its item settles; an
-output goes with the item.
+matches its digest. A written file leaves the store once its item
+settles, a fetched part stays with its archive, an output with the
+item.
 
 **Source.** Placement and Workspace Hosts, The Exec Relay Transport.
 
@@ -548,9 +551,10 @@ object when its item settles or its session is purged.
 request to the API; an object sealed under the session's key itself, or
 under none, so a host could open another object; a URL signed for more
 than one object, or with no expiry; bytes written into a workspace, or
-handed to the runner, before their digest matched; a file left in the
-store after its item settled. (A holder's call that carries bulk bytes
-is the guideline's NET-37.)
+handed to the runner, before their digest matched; a written file left
+in the store after its item settled; a fetch that names an object other
+than its own session's archive's parts, or that removes one. (A
+holder's call that carries bulk bytes is the guideline's NET-37.)
 
 **Severity.** high
 
