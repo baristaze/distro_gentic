@@ -41,8 +41,8 @@ of another tenant. The seed and the host's home sit on the guest's
 memory-backed `/run`, so a disk the pool keeps holds neither; a warm
 VM that hibernates sleeps holding a key ended first, and no credential
 ([ADR 2075](2075-the-cloud-pool-keeps-warm-vms-hibernated-holding-no-key.md)).
-The host holds no database credential, no model key, and no history; a cloud
-VM holds no instance role, so its metadata endpoint has no
+The host holds no database credential, no model key, and no history; a
+cloud VM holds no instance role, so its metadata endpoint has no
 credential to hand out.
 
 **The cloud's VMs are a backend of the same interface.** `ec2` runs
@@ -50,7 +50,10 @@ each VM as an instance of the pool's launch template
 (`deployment/terraform/modules/cloud_pool`), in a security group by its
 egress: the closed group reaches the gateway alone, and the open group
 adds the open egress a session's policy chose; neither admits anything
-in. A new VM boots the pool's image, named by its AMI id, the
+in. The network is the pool's alone, and resolves the names a closed VM
+needs and no other
+([ADR 2074](2074-the-cloud-pools-network-resolves-the-names-a-closed-vm-needs-alone.md)).
+A new VM boots the pool's image, named by its AMI id, the
 module's `image_id`; the template maps that image's own root device, so
 the root disk itself is encrypted under the pool's key. Its seed is its
 first-boot data, which the image reads at each boot, and its metadata
@@ -114,8 +117,8 @@ with its VM.
 - A VM's host credential sits in its memory, where the session's
   commands, which hold the VM whole, can read it. It claims that
   session's work alone, and ends when the VM stops.
-- The open group reaches the platform's network too: the platform's
-  insides admit only their own groups, and a VM is in none.
+- The platform's insides run in another network, and admit only their
+  own groups, so the open group reaches them only as the internet does.
 - A warm VM reads its metadata endpoint until a session claims it,
   and runs nothing of a session's until then.
 - No deployment runs a VM yet: the runner keeps

@@ -378,7 +378,11 @@ that only reads, plans, or answers starts none.
   VM whole: the VM is the session's wall.
 - **Closed at its network.** A VM's egress is closed outside its
   guest, to the gateway and what its session's egress allows, never by a
-  rule its own commands could undo.
+  rule its own commands could undo. Its lookups are closed there too. The
+  pool's network is its own, and resolves the names a closed VM needs
+  and no other, so no command carries data out in the names it asks. A
+  VM whose session chose open egress resolves the rest through a public
+  resolver its egress reaches.
 - **Its files are its snapshot, never its disk.** For a session kept
   by snapshots, the run's end pushes what the workspace holds, then
   keeps the workspace's directory as the engine keeps a VM's

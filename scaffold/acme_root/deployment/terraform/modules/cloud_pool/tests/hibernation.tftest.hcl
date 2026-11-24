@@ -34,6 +34,7 @@ variables {
   subnet_ids                = ["subnet-0a", "subnet-0b"]
   gateway_security_group_id = "sg-0gateway"
   image_id                  = "ami-0host"
+  allowed_names             = ["gateway.pool.acme.internal"]
   disk_gb                   = 64
   sizes = {
     xs = { type = "m7g.medium", cpus = 1, memory_mb = 4096 }

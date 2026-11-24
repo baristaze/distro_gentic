@@ -4,8 +4,23 @@ variable "environment" {
 }
 
 variable "vpc_id" {
-  description = "The network the VMs run in."
+  description = "The network the VMs run in, which only the pool uses: its resolver answers `allowed_names` alone, so nothing else in it resolves another name."
   type        = string
+}
+
+variable "allowed_names" {
+  description = "Every name the pool's network resolves, each whole: the gateway's, as `ACME_CLOUD_POOL_API_URL` names it, and the store's, as `ACME_CLOUD_POOL_S3_ENDPOINT_URL` names it, when a VM reaches the store at a name of its own. The network's resolver refuses every other name."
+  type        = list(string)
+
+  validation {
+    condition     = length(var.allowed_names) > 0
+    error_message = "The pool's network resolves at least the gateway's name, or no VM reaches it."
+  }
+
+  validation {
+    condition     = alltrue([for name in var.allowed_names : trimspace(name) != "" && !strcontains(name, "*")])
+    error_message = "Each name is whole, never a wildcard: a VM could spell what it carries out in the names one allows."
+  }
 }
 
 variable "subnet_ids" {

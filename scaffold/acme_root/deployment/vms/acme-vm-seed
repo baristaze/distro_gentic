@@ -1,10 +1,11 @@
 #!/bin/sh
 # Writes the cloud's first-boot data, the seed the cloud pool handed this
-# VM, to /run/acme-vm/seed.json for the host's user alone. It asks
-# the metadata endpoint with a session token (IMDSv2), and does nothing when
-# the endpoint does not answer. Its one argument is how many times it asks
-# again for the token, a second apart: none at boot, where the network is
-# up first, and some after a resume, where it comes back a moment later.
+# VM, to /run/acme-vm/seed.json for the host's user alone, then routes the
+# VM's lookups by it (acme-vm-dns). It asks the metadata endpoint with a
+# session token (IMDSv2), and does nothing when the endpoint does not answer.
+# Its one argument is how many times it asks again for the token, a second
+# apart: none at boot, where the network is up first, and some after a
+# resume, where it comes back a moment later.
 set -eu
 retries=${1:-0}
 dir=/run/acme-vm
@@ -18,3 +19,4 @@ curl -sf -m 5 -H "X-aws-ec2-metadata-token: $token" "$endpoint/user-data" \
   > "$dir/seed.json.partial" || { rm -f "$dir/seed.json.partial"; exit 0; }
 chown acme-host:acme-host "$dir/seed.json.partial"
 mv "$dir/seed.json.partial" "$dir/seed.json"
+/usr/local/libexec/acme-vm-dns "$dir/seed.json"

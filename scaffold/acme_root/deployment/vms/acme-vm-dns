@@ -1,0 +1,44 @@
+#!/bin/sh
+# Routes this VM's lookups in the cloud: the platform's own name, the host
+# the seed's api_url names, to the network's resolver, and every other name
+# to a public resolver. The pool's network resolves the platform's names
+# alone (ADR 2074), so a VM whose session chose open egress resolves the
+# rest where that egress reaches, and a closed VM, which reaches the
+# gateway alone, resolves nothing else. acme-vm-seed runs it once the
+# cloud has handed the seed; on Lima it never runs, and the guest keeps
+# the resolver its hypervisor gives it.
+#
+#   acme-vm-dns /run/acme-vm/seed.json
+#
+# It writes under /run alone, so each boot routes by the seed it was handed.
+set -eu
+seed=${1:?the seed}
+# Two providers, so one that is down stops no lookup.
+public="1.1.1.1 8.8.8.8"
+dropin=/run/systemd/resolved.conf.d/acme-vm.conf
+
+# The platform's name, or nothing when the seed names it by address.
+host=$(/opt/acme-host/venv/bin/python -I -c '
+import ipaddress, json, sys, urllib.parse
+host = urllib.parse.urlsplit(json.load(open(sys.argv[1]))["api_url"]).hostname or ""
+try:
+    ipaddress.ip_address(host)
+except ValueError:
+    print(host)
+' "$seed")
+# The link the network's resolver answers on: the one DHCP configured.
+link=$(ip -o route show default | awk '{ print $5; exit }')
+if [ -z "$link" ]; then
+  echo "acme-vm-dns: no default route, so no link to the network's resolver" >&2
+  exit 1
+fi
+
+# systemd-resolved reads the drop-in as its own user, so any user may read
+# it, whatever umask the caller set: acme-vm-seed's is 077.
+umask 022
+install -d -m 0755 "$(dirname "$dropin")"
+printf '[Resolve]\nDNS=%s\nDomains=~.\n' "$public" > "$dropin"
+systemctl restart systemd-resolved
+if [ -n "$host" ]; then
+  resolvectl domain "$link" "~$host"
+fi
