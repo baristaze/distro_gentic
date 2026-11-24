@@ -92,10 +92,11 @@ it is a twin.
 **Principle.** A session's isolation is pinned when it is created and
 enforced by the host. A spec its placement can never meet is refused
 before the loop's first model call, with its cause, and nothing is made.
-The workspace is prepared at the first call that reaches it: a host that
-cannot provide it now refuses the `workspace` work there, and the loop
-parks on `resource`, the call open, until a host in its placement can.
-Isolation is never weakened.
+The workspace is prepared at the first call that reaches it, or beside
+the run's first model call for a kind that prepares early: a host that
+cannot provide it now refuses the `workspace` work, and the loop parks
+on `resource` at the call that reaches it, the call open, until a host
+in its placement can. Isolation is never weakened.
 
 **Source.** Workspaces and Isolation, Pinned, Probed, Refused.
 
@@ -103,14 +104,16 @@ Isolation is never weakened.
 changes it later; what a host does with `workspace` work whose isolation
 it cannot provide; when in the loop each refusal comes: a provider's
 `check` before the first model call, a prepare at the first call that
-reaches the workspace.
+reaches the workspace, or beside the first model call for a kind that
+prepares early.
 
 **Violation.** Isolation chosen per loop or per host rather than pinned
 at creation; a host that prepares a weaker level than the pinned one; a
 spec the placement can never meet refused after the loop's first model
 call, or once an instance is made; a workspace prepared before a call
-reaches it; a refused session that fails instead of parking on
-`resource`.
+reaches it, unless its kind prepares early, and then before the run's
+first model call goes out; a refused session that fails instead of
+parking on `resource`.
 
 **Severity.** high
 

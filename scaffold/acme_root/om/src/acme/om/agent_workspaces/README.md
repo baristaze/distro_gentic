@@ -59,11 +59,12 @@ rebuilt from.
 - **Prepare.** Before a loop's first model call, a spec the cloud pool's
   VMs can never hold is refused, and nothing is made. The workspace is
   prepared to the pin, whatever the loop asks, at the first call that
-  reaches it. The host refuses what it cannot give before its provider is
-  reached, and the provider refuses what it cannot meet: either way the
-  loop parks on `resource` with that call open and asks again after a
-  wait, and no weaker workspace is made ([ADR
-  2005](../../../../../docs/adr/2005-a-workspace-no-host-can-give-parks-the-loop-and-a-lost-one-waits-for-a-person.md)).
+  reaches it, or beside the run's first model call for a kind that
+  prepares early. The host refuses what it cannot give before its
+  provider is reached, and the provider refuses what it cannot meet:
+  either way the loop parks on `resource` with the call that reaches the
+  workspace open and asks again after a wait, and no weaker workspace is
+  made ([ADR 2005](../../../../../docs/adr/2005-a-workspace-no-host-can-give-parks-the-loop-and-a-lost-one-waits-for-a-person.md)).
   Then the checkout is brought up to the session's branch on the
   repository its agent project binds, from a bundle the platform reads
   on its own host with the agent project's fetch credential; the

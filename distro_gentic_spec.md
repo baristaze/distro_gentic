@@ -367,7 +367,11 @@ container engine inside. The runner reaches it through the exec relay,
 as it reaches any host: the VM pulls, and the platform never calls
 in. A run claims or starts its session's VM at its first call that
 reaches the workspace, so no model call waits for a boot, and a run
-that only reads, plans, or answers starts none.
+that only reads, plans, or answers starts none. A run of a kind that
+prepares early ([`agentic_core` The Runtime][e-runtime]) claims or
+starts it beside its first model call instead: the call that reaches
+the workspace waits only for what is left of the boot, and a run that
+reaches none lets the VM go at its end, as any run's end does.
 
 - **Its own credential, for one session.** The pool hands each VM,
   as it starts, a one-use key, and its host trades the key once for a
@@ -664,11 +668,13 @@ A session's isolation is pinned when it is created and enforced by the
 host. A spec its placement can never meet, such as a VM size the cloud
 pool's deployment does not map, is refused before the loop's first
 model call, with its cause, and nothing is made. The workspace is
-prepared at the first call that reaches it, and only that call waits: a
-host that cannot provide it now refuses the `workspace` work there, and
-the loop parks on `resource`, the call open, until a host in its
-placement can. Every level runs from a process environment
-stripped of every platform credential. The cloud never runs a session
+prepared at the first call that reaches it, or beside the run's first
+model call for a kind that prepares early, and only the call that
+reaches it waits. A host that cannot provide it now refuses the
+`workspace` work, and the loop parks on `resource` at the call that
+reaches it, the call open, until a host in its placement can. Every
+level runs from a process environment stripped of every platform
+credential. The cloud never runs a session
 directly on a shared host, and a bare directory exists only inside a
 customer's wall.
 
@@ -1514,6 +1520,7 @@ price table; and the threat model each deployment writes.
 [e-provider-errors]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#provider-errors
 [e-roles]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#roles-and-fills
 [e-kinds]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#agent-kinds
+[e-runtime]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#the-runtime
 [e-where]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#where-a-loop-runs
 [e-rendering]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#rendering
 [e-history]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#history
