@@ -432,9 +432,7 @@ class TransportPlacedImpl(TransportInterface):
     """The runner's one transport: per session, the exec relay when its placement
     is inside its tenant's wall, or when its workspace runs on a VM of
     the cloud pool (`pooled`), and the direct transport otherwise. The
-    engine and its tools see this alone, and never what is behind it. Each
-    command it sends is told to `commanded` first, by its session, so the
-    cloud pool times a claim's wait for its first."""
+    engine and its tools see this alone, and never what is behind it."""
 
     def __init__(
         self,
@@ -442,13 +440,11 @@ class TransportPlacedImpl(TransportInterface):
         relayed: TransportInterface,
         placement: PlacementInterface,
         pooled: Callable[[IsolationSpec], Awaitable[bool]] | None = None,
-        commanded: Callable[[UUID], Awaitable[None]] | None = None,
     ) -> None:
         self._direct = direct
         self._relayed = relayed
         self._placement = placement
         self._pooled = pooled
-        self._commanded = commanded
 
     async def run(
         self,
@@ -459,8 +455,6 @@ class TransportPlacedImpl(TransportInterface):
         seal: RecordSeal,
     ) -> CommandResult:
         transport = await self._for(workspace)
-        if self._commanded is not None:
-            await self._commanded(workspace.id)
         return await transport.run(workspace, command, on_output, seal=seal)
 
     async def outcome(

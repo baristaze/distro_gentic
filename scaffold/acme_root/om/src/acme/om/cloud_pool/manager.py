@@ -68,7 +68,8 @@ class CloudPoolManagerInterface(ABC):
         counts once, by how it got its VM: a warm one, a new one, the one
         the session held, or that one started again. A prepare asked again
         before this process's claim returned its workspace is that claim,
-        and counts none."""
+        and counts none. The prepare that returns it records how long the
+        claim waited, from the claim to this return, once a claim."""
         ...
 
     @abstractmethod
@@ -157,15 +158,6 @@ class CloudPoolManagerInterface(ABC):
         its VM, so a session that claimed it meanwhile keeps it. Answers how
         many sessions' archives it removed and how many VMs it let go or
         stopped."""
-        ...
-
-    @abstractmethod
-    @stageless
-    async def commanded(self, agent_session_id: UUID) -> None:
-        """System-internal: a command starts on the session's workspace,
-        which the transport says before it sends it. The first since this
-        process's claim of the session's VM records how long the claim
-        waited for it; any other records nothing."""
         ...
 
     @abstractmethod

@@ -453,10 +453,13 @@ reaches none lets the VM go at its end, as any run's end does.
   none, so that time is what the warm count is set by. Each claim counts
   once, by how it got its VM: a warm one, a new one, the one its session
   held, or that one started again. The warm share of claims is the
-  warm-hit ratio. Each claim records its wait, from the claim to the
-  first command on its VM, and each restore its time, by its archive's
-  size in a few classes. These readings say which of the warm VMs, the
-  restore, or the image needs work.
+  warm-hit ratio. Each claim records its wait once, from the claim
+  until its prepare hands the session the workspace. The model's turns
+  before a call reaches the workspace are no part of it, so it reads
+  what the pool costs even when the VM boots beside them. Each restore
+  records its time, by its archive's size in a few classes. These
+  readings say which of the warm VMs, the restore, or the image needs
+  work.
 - **No race between a claim and the sweep.** A VM's host is handed
   its session's work only once it holds the session's workspace. The
   sweep takes a warm VM's record before it destroys the VM, under the
