@@ -114,6 +114,7 @@ class Claim:
     at: datetime
     prepared: bool = False
 
+
 FULL_CAUSES = {
     Full.POOL: "no VM of the cloud pool is free yet",
     Full.TENANT: "this tenant holds as many VMs of the cloud pool as it may at once",

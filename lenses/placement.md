@@ -630,21 +630,17 @@ other.
 
 **Check.** review
 
-## PLC-25 A cloud VM is its kind's size, recycled between runs, its boot and its claims timed
+## PLC-25 A cloud VM is its kind's size, recycled between runs, its boot timed
 
 **Principle.** A kind asks its VM's size by name, `s` when it asks none,
 and the deployment maps each name it allows onto a machine type; the
-pool's cloud role launches no other type and moves no VM to one. A size
-the deployment does not map, or an ask of CPUs or memory, is refused
-for good, with its cause, before the loop's first model call. Warm VMs
-are the default size. A VM past its maximum age goes at its run's end
-once its work is kept, never under a running loop; a warm one goes at
-the sweep.
-Each cold start, of the pool's image, records its time to its host's
-enrollment; a warm claim records none. Each claim counts once, by how
-it got its VM (warm, new, held, or started again), and records its wait
-to the first command on its VM; each restore records its time under its
-archive's size class.
+pool's cloud role launches no other type and moves no VM to one. An
+unmapped size, or an ask of CPUs or memory, is refused for good, with
+its cause, before the loop's first model call. Warm VMs are the default
+size. A VM past its maximum age goes between runs once its work is kept;
+a warm one, at the sweep. A cold start times its boot, a warm claim
+none. Each claim counts once, by how it got its VM, and times its first
+command; a restore is timed by size class.
 
 **Source.** Placement and Workspace Hosts, The Cloud Pool.
 
