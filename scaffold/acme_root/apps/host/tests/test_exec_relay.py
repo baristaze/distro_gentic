@@ -14,7 +14,7 @@ import shutil
 import subprocess
 import time
 from collections.abc import AsyncIterator, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -461,6 +461,57 @@ async def test_a_result_whose_times_a_replica_refuses_is_pushed_again_without_th
     refused, taken = wire.answered
     assert "times" in refused
     assert taken == {key: value for key, value in refused.items() if key != "times"}
+
+
+class Slowed(httpx.AsyncBaseTransport):
+    """The store, answering each GET `seconds` late."""
+
+    def __init__(self, inner: httpx.AsyncBaseTransport, seconds: float) -> None:
+        self._inner = inner
+        self._seconds = seconds
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            await asyncio.sleep(self._seconds)
+        return await self._inner.handle_async_request(request)
+
+
+async def test_a_relayed_writes_download_is_in_its_overhead_and_not_in_its_command(
+    api: Stack, tmp_path: Path
+) -> None:
+    fetch = 0.3
+    assert api.store is not None
+    wire = Crossed(api.transport)
+    relayed = await relay_to(replace(api, store=Slowed(api.store, fetch)), tmp_path, wire=wire)
+    clock = Read()
+    runner = TransportRelayImpl(
+        lambda: api.container.managers.exec_relay,
+        lambda: RequestContext(request_id=new_id(), app=RUNNER),
+        first_poll=timedelta(milliseconds=5),
+        last_poll=timedelta(milliseconds=20),
+        clock=clock,
+    )
+    before = observed("write_file")
+    waiting = asyncio.ensure_future(
+        runner.write_file(relayed.workspace, "in.txt", b"written", relayed.epoch)
+    )
+    await claims(relayed.host, waiting)
+    await waiting
+    assert (tmp_path / "workspace" / "in.txt").read_bytes() == b"written"
+    # The download lands in the start, before the command, by the host's
+    # own clock.
+    (answered,) = wire.answered
+    times = answered["times"]
+    assert times["command"] < fetch <= times["start"]
+    gained = {name: total - before[name][1] for name, (_, total) in observed("write_file").items()}
+    assert gained["command"] == pytest.approx(times["command"])
+    # The overhead is the send to the read less the command alone, so it
+    # holds the download. The runner's first read of its clock sets the
+    # write's deadline, a moment before its send.
+    sent_at, read_at = clock.reads[0], clock.reads[-1]
+    overhead = (read_at - sent_at).total_seconds() - times["command"]
+    assert gained["overhead"] == pytest.approx(overhead, abs=1e-3)
+    assert gained["overhead"] >= fetch
 
 
 class Sized(httpx.AsyncBaseTransport):

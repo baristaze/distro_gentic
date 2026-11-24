@@ -504,7 +504,8 @@ The runner measures each item it sends by its phases, once it reads how
 the item ended. It is **queued** from its send to its claim, the host's
 wake included. **Detail** runs from the claim to the host's read of the
 item, and **start** from that read to the command's start, the
-workspace's prepare included. Then comes the **command** itself, then
+workspace's prepare and a write's download included. Then comes the
+**command** itself, then
 **store**, from the command's end to its result stored, its uploads
 included. **Read** runs from the result stored to the runner's read of
 it. The item's **overhead** is its time from the send to the read, less
