@@ -744,12 +744,12 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
     async def _sleeper(self, vm: PoolVm, now: datetime) -> bool:
         """Whether the sweep acted on a warm VM started to sleep. Once it
         has run `settle`, its key ends, on the condition that it is still
-        the one read, so one sweep alone takes it; then it hibernates,
-        holding no key that enrolls, and from its mark a claim may take it.
-        One asleep goes before the longest its VMs keep one so, and one
-        whose VMs hibernate none any more goes. One whose key ended and
-        that never slept, its sweep gone or its hibernation failed, goes
-        once that sweep's wait is surely over."""
+        the one read, so one sweep alone takes it; then it hibernates in
+        the background, holding no key that enrolls, and from its mark a
+        claim may take it. One asleep goes before the longest its VMs keep
+        one so, and one whose VMs hibernate none any more goes. One whose
+        key ended and that never slept, the process that took it gone,
+        goes once its hibernation's wait is surely over."""
         assert vm.started_at is not None  # a start that never ran is let go before
         most = self._vms.hibernation()
         if vm.hibernated_at is not None:
@@ -768,15 +768,25 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
             return False
         if not await self._storage.take_to_sleep(vm.id, vm.key_digest):
             return False
+        self._spawn(self._hibernate(vm))
+        return True
+
+    async def _hibernate(self, vm: PoolVm) -> None:
+        """A warm VM whose key ended, hibernated in the background, since
+        nothing waits on it and its memory takes a while to reach its disk,
+        then marked asleep. One that cannot hibernate goes, rather than
+        stay awake."""
         try:
             await self._vms.hibernate(vm.name)
+            await self._storage.mark_hibernated(vm.id, self._clock())
         except Exception:
-            log.warning("warm VM %s did not hibernate, and goes", vm.name, exc_info=True)
-            await self._drop_warm(vm)
-            return True
-        await self._storage.mark_hibernated(vm.id, self._clock())
+            log.exception("warm VM %s did not hibernate, and goes", vm.name)
+            try:
+                await self._drop_warm(vm)
+            except Exception:
+                log.exception("warm VM %s did not go: the sweep lets it go", vm.name)
+            return
         log.info("warm VM %s hibernated, holding no key", vm.name)
-        return True
 
     async def _drop_warm(self, vm: PoolVm) -> bool:
         """A warm VM goes: its row first, under the lock its claims take,

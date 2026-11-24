@@ -280,8 +280,9 @@ async def test_a_vm_that_cannot_hibernate_goes_and_vms_that_hibernate_none_keep_
 
     monkeypatch.setattr(pool.vms, "hibernate", refused)
     pool.now += pool.options.settle
-    await pool.manager.sweep(stage())
-    await pool.manager.close()
+    await swept(pool)
     assert await pool.vms.state(settling.name) is VmState.ABSENT, "never kept awake instead"
+    assert await pool.rows() == []
+    await swept(pool)
     (another,) = await pool.rows()
-    assert another.id != settling.id and another.hibernates
+    assert another.id != settling.id and another.hibernates, "the next sweep starts another"
