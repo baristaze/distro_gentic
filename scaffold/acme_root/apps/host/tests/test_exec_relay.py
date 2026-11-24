@@ -297,10 +297,12 @@ async def test_a_relayed_read_from_an_offset_answers_only_what_follows_it(
 
 class Crossed(httpx.AsyncBaseTransport):
     """The stack, noting the operation each `exec` item's detail hands the
-    host, and each result the host pushes."""
+    host, and each result the host pushes. With `earlier`, each detail is
+    as a platform of an earlier release answers it: it keeps no times."""
 
-    def __init__(self, inner: httpx.AsyncBaseTransport) -> None:
+    def __init__(self, inner: httpx.AsyncBaseTransport, *, earlier: bool = False) -> None:
         self._inner = inner
+        self._earlier = earlier
         self.asked: list[dict[str, Any]] = []
         self.answered: list[dict[str, Any]] = []
 
@@ -313,7 +315,11 @@ class Crossed(httpx.AsyncBaseTransport):
         if request.method != "GET" or DETAIL.fullmatch(path) is None:
             return response
         body = await response.aread()
-        self.asked.append(json.loads(body)["request"])
+        detail = json.loads(body)
+        self.asked.append(detail["request"])
+        if self._earlier:
+            detail.pop("times", None)
+            body = json.dumps(detail).encode()
         headers = [(k, v) for k, v in response.headers.raw if k.lower() != b"content-length"]
         return httpx.Response(response.status_code, headers=headers, content=body)
 
@@ -414,6 +420,19 @@ async def test_a_relayed_command_is_measured_through_every_phase_and_its_overhea
     overhead = (read_at - sent_at).total_seconds() - times["command"]
     assert gained["overhead"][1] == pytest.approx(overhead)
     assert gained["overhead"][1] < whole
+
+
+async def test_a_host_sends_no_times_to_a_platform_that_keeps_none(
+    api: Stack, tmp_path: Path
+) -> None:
+    wire = Crossed(api.transport, earlier=True)
+    relayed = await relay_to(api, tmp_path, wire=wire)
+    spec = command(relayed.epoch, "true")
+    waiting = asyncio.ensure_future(relayed.runner.run(relayed.workspace, spec, seal=NO_SEAL))
+    await claims(relayed.host, waiting)
+    assert (await waiting).exit_code == 0
+    (answered,) = wire.answered
+    assert "times" not in answered
 
 
 class Sized(httpx.AsyncBaseTransport):

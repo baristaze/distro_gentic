@@ -149,7 +149,10 @@ class ExecDetailView(View):
     """An item the host holds: the call, the workspace, the operation, and
     the objects it moves. A write's `file_in` comes by `url`, signed for a
     GET of it alone until `url_expires_at`; an `output` and a read's
-    `file_out` go by the parts `POST .../upload` signs."""
+    `file_out` go by the parts `POST .../upload` signs. `times` says the
+    platform keeps the times a host sends with the item's result; a host
+    sends them only when it does, so a platform of an earlier release,
+    which keeps none, is never sent a result it refuses."""
 
     item_id: UUID
     call_id: UUID  # the tool request's id: the call's idempotency key
@@ -166,6 +169,7 @@ class ExecDetailView(View):
     file_out: IssuedObjectSlotView | None = None
     url: str | None = None
     url_expires_at: datetime | None = None
+    times: bool = False
 
 
 class IssuedObjectPartView(View):

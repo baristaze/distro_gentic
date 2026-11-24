@@ -23,7 +23,8 @@ at a time and the result is pushed once, each with the hash the host
 declares of the bytes it sends. The result carries how long the item's
 parts took here, by the host's own clock: from its claim to its detail's
 read, from there to its operation's start, and the operation, which the
-platform measures the relay by. From its claim until its result, its
+platform measures the relay by, when the item's detail says it keeps
+them. From its claim until its result, its
 detail's read and its prepare included, the host renews its lease, and a
 stop from the control stream ends the command at once: the transport ends
 its whole process tree.
@@ -336,8 +337,10 @@ class ExecutorRelayImpl(ExecutorInterface):
             if running.stopped == "revoke":
                 log.info("item %s: its lease was revoked, so nothing is pushed", item_id)
                 return
+            # Its times go only to a platform that keeps them: an earlier
+            # release refuses a result that carries them.
             times = running.times()
-            if times is not None:
+            if times is not None and detail is not None and detail.times:
                 result["times"] = times
             await self._push(item_id, result, running.held_until)
         finally:
