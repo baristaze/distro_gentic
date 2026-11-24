@@ -494,6 +494,19 @@ revocations, so a command starts at once and stops at once. The work row
 stays the record. A person's terminal is a recorded terminal session over
 the same stream, never a remote desktop.
 
+The runner that waits on an item is woken the same way. Each part and the
+result wake it as they land, and it reads the item at once, so a call
+ends when its command does. A wake names the item alone and wakes no
+other runner; the runner reads the item as it always does. Its own slow
+timer is only the fallback for a wake that never comes.
+
+<!-- agents-only
+The wake is the engine's `Topics.STREAM_APPENDED` of kind
+`exec_relay.exec_output`, its group the item's id. The scaffold's
+`exec_relay/impl/manager.py` sends it and holds the waits
+(`waiting`); the runner's wait is `TransportRelayImpl._wait`.
+-->
+
 Because an item is keyed, a run that resumes after a crash attaches to
 the first execution, or reads its stored result, and never starts a
 second one. An item whose lease expires is requeued only when its effect

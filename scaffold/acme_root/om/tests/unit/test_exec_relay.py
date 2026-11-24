@@ -1048,9 +1048,7 @@ async def test_a_wake_for_another_item_or_tenant_wakes_no_runner_but_the_one_tha
     theirs, theirs_reads = polling(wall)
     ours_spec, theirs_spec = command(wall.epoch), command(theirs_epoch)
     ours_run = asyncio.ensure_future(ours.run(wall.workspace, ours_spec, seal=NO_SEAL))
-    theirs_run = asyncio.ensure_future(
-        theirs.run(theirs_workspace, theirs_spec, seal=NO_SEAL)
-    )
+    theirs_run = asyncio.ensure_future(theirs.run(theirs_workspace, theirs_spec, seal=NO_SEAL))
     rows = [await host.claim_soon(), await host.claim_soon()]
     by_key = {ExecPayload.model_validate(row.payload).key: row for row in rows}
     ours_row, theirs_row = by_key[ours_spec.key], by_key[theirs_spec.key]

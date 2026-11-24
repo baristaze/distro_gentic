@@ -104,6 +104,11 @@ platform's cloud. Each call crosses the wall as `exec`
   it runs, runs it through its own transport, streams the output back,
   and pushes the result. It renews the lease from the claim until the
   result is ready, so a long read or prepare never lets it lapse.
+- **Wake the runner.** Each part and the result, as they land, wake the
+  runner that waits on the item, in whichever process it waits, and it
+  reads the item at once. The wake names the item and its tenant alone,
+  and wakes no other runner. The runner's own poll is the fallback for a
+  wake the bus drops.
 - **Measure.** Once the runner reads how an item it sent ended, it
   observes where the item's time went: queued, the host's read of it,
   the start, the command, the store, and the runner's read. It also
