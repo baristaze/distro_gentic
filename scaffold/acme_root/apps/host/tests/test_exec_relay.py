@@ -306,11 +306,12 @@ class Crossed(httpx.AsyncBaseTransport):
     """The stack, noting the operation each `exec` item's detail hands the
     host, as its claim carries it or its own route answers it, each call
     the host makes, by its method and the end of its path, and each result
-    it pushes. With `earlier`, each claim and detail are as a platform of
-    an earlier release answers them: a claim carries no detail, and a
-    detail keeps no times and takes nothing inline. With `rolling`, they
-    are this release's, but each result that carries times or bytes inline
-    reaches a replica of an earlier release, which refuses it."""
+    it pushes. With `earlier`, the platform is of an earlier release: a
+    claim carries no detail, a detail keeps no times and takes nothing
+    inline, and a result that carries times or bytes inline is refused.
+    With `rolling`, the claim and the detail are this release's, but each
+    result that carries times or bytes inline reaches a replica of an
+    earlier release, which refuses it."""
 
     def __init__(
         self, inner: httpx.AsyncBaseTransport, *, earlier: bool = False, rolling: bool = False
@@ -330,7 +331,7 @@ class Crossed(httpx.AsyncBaseTransport):
         if request.method == "POST" and path.endswith("/result"):
             pushed = json.loads(await request.aread())["data"]
             self.answered.append(json.loads(base64.b64decode(pushed)))
-            if self._rolling and newer(self.answered[-1]):
+            if (self._earlier or self._rolling) and newer(self.answered[-1]):
                 refused = {
                     "code": "validation_failed",
                     "message": "a result that is no exec result",
@@ -516,6 +517,26 @@ async def test_a_read_within_the_bound_rides_its_result_and_one_past_it_crosses_
             await pace.after(await relayed.host.tick() is not None)
         assert await reading == (within + b"!")[:asked]
         assert ("POST upload" in wire.calls) is crosses, wire.calls
+
+
+async def test_an_empty_read_to_a_platform_that_takes_nothing_inline_lands_from_the_store(
+    api: Stack, tmp_path: Path
+) -> None:
+    wire = Crossed(api.transport, earlier=True)
+    relayed = await relay_to(api, tmp_path, wire=wire)
+    (tmp_path / "workspace" / "empty.log").write_bytes(b"")
+    reading = asyncio.ensure_future(relayed.runner.read_file(relayed.workspace, "empty.log", 64))
+    # The read lands with its file: one refused would leave it to its lease.
+    async with asyncio.timeout(20):
+        pace = Pace()
+        while not reading.done():
+            await pace.after(await relayed.host.tick() is not None)
+        assert await reading == b""
+    # Its one result named the file it sent to the store, with no bytes
+    # inline, not even an empty file's.
+    (answered,) = wire.answered
+    assert "data" not in answered["file"] and answered["file"]["size"] == 0
+    assert "POST upload" in wire.calls
 
 
 class Handed(Crossed):

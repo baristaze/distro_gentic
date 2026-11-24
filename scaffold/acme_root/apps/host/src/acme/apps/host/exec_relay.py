@@ -463,12 +463,12 @@ class ExecutorRelayImpl(ExecutorInterface):
                 separators=(",", ":"),
             ).encode()
         if parts is not None:
-            if printed is not None and len(printed) <= within and not parts.pushed:
+            if printed is not None and _rides(len(printed), within) and not parts.pushed:
                 parts.drop()
             else:
                 await parts.flush()
         if detail.output is not None and printed is not None:
-            if len(printed) <= within:
+            if _rides(len(printed), within):
                 small["output"] = _inline(printed)
             else:
                 try:
@@ -481,7 +481,7 @@ class ExecutorRelayImpl(ExecutorInterface):
                 else:
                     small["output"] = {"size": size, "digest": digest}
         if detail.file_out is not None and ended.file is not None:
-            if ended.file.size <= within:
+            if _rides(ended.file.size, within):
                 small["file"] = _inline(await asyncio.to_thread(ended.file.path.read_bytes))
                 return small
             try:
@@ -1160,6 +1160,13 @@ def _result(
             "detail": detail,
         },
     }
+
+
+def _rides(size: int, within: int) -> bool:
+    """Whether `size` bytes ride in the result: within the bound the detail
+    names, `within`. Nothing rides there, not even an empty file, when it
+    names none, as a platform or a runner of an earlier release does."""
+    return 0 < within and size <= within
 
 
 def _inlined(result: dict[str, Any]) -> bool:
