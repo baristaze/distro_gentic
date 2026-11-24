@@ -23,19 +23,23 @@ platform's own. Each kind runs where its environment is, claimed from
 its lane, and a lane is the guideline's work-item lane, so every kind is
 one queue with one shape. A runner claims from the queue directly; a
 host outside the cloud claims through the gateway, and the control plane
-claims the row on its behalf. A tool call to a cloud workspace needs no
-item: the runner reaches it by the direct transport.
+claims the row on its behalf; a VM of the cloud pool is such a host.
+Only a workspace on the runner's own machine needs no item: the runner
+reaches it by the direct transport.
 
 **Source.** Sessions Are Work, Kinds of Work.
 
 **Look for.** The work kinds and the lane each is claimed from; the
 claim path of a runner, and of a host outside the cloud; how a tool call
-reaches a cloud workspace.
+reaches a VM of the cloud pool, and a workspace on the runner's own
+machine.
 
 **Violation.** A second queue, or a work row of the platform's own shape
 beside the guideline's; a kind claimed from a lane other than the one
-where its environment is; an `exec` item made for a tool call to a cloud
-workspace. (A host that reaches the queue's storage itself holds a
+where its environment is; a tool call to a VM of the cloud pool sent by
+any way but an `exec` item, or an `exec` item made for a tool call to a
+workspace on the runner's own machine. (A host that reaches the queue's
+storage itself holds a
 database credential, which is PLC-16.)
 
 **Severity.** medium
@@ -157,18 +161,19 @@ accepted.
 
 ## PLC-07 A runner picks the transport by placement, behind one interface
 
-**Principle.** A runner chooses the transport by the session's
-placement: a direct transport to a cloud workspace, or an exec relay
-transport to a host inside a customer's wall. The engine sees one
-transport interface either way.
+**Principle.** A runner chooses the transport by where the session's
+workspace is: an exec relay transport to a host, inside a customer's
+wall or on a VM of the cloud pool, or a direct transport to a workspace
+on the runner's own machine, such as a container beside it. The engine
+sees one transport interface either way.
 
 **Source.** Agent Session Runners.
 
 **Look for.** Where the runner picks a transport; any code in the engine
 or in a tool that branches on where the workspace is.
 
-**Violation.** A transport chosen by anything but the session's
-placement; the engine or a tool that branches on cloud or wall, or
+**Violation.** A transport chosen by anything but where the session's
+workspace is; the engine or a tool that branches on cloud or wall, or
 reaches a host other than through the transport interface. (A tool that
 reaches past the transport is the engine's TOL-13, which grades it
 high.)
