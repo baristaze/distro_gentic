@@ -413,7 +413,8 @@ export interface paths {
         put?: never;
         /**
          * Claim
-         * @description The next item pinned to this host or its pool, or none. The body
+         * @description The next item pinned to this host or its pool, or none, with what
+         *     its kind hands beyond the payload: an `exec` item's detail. The body
          *     states the version the host reads, and nothing it is handed.
          */
         post: operations["claim"];

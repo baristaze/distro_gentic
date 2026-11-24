@@ -3144,7 +3144,7 @@
     },
     "/v1/hosts/me/claims": {
       "post": {
-        "description": "The next item pinned to this host or its pool, or none. The body\nstates the version the host reads, and nothing it is handed.",
+        "description": "The next item pinned to this host or its pool, or none, with what\nits kind hands beyond the payload: an `exec` item's detail. The body\nstates the version the host reads, and nothing it is handed.",
         "operationId": "claim",
         "parameters": [
           {

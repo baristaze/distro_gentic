@@ -194,7 +194,8 @@ async def heartbeat(
 
 @router.post("/hosts/me/claims", response_model=ClaimView)
 async def claim(rctx: Rctx, hosts: HostsService, host: Host, body: ClaimRequest) -> ClaimView:
-    """The next item pinned to this host or its pool, or none. The body
+    """The next item pinned to this host or its pool, or none, with what
+    its kind hands beyond the payload: an `exec` item's detail. The body
     states the version the host reads, and nothing it is handed."""
     return await hosts.claim(rctx, host, body)
 
