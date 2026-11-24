@@ -9,6 +9,8 @@
 #
 # It writes no secret: the host's settings name where its seed and its home
 # are, both on /run, and the pool hands each VM its seed as it starts.
+# HIBERNATION=1 adds the cloud's hibernation agent, for a cloud whose VMs
+# hibernate.
 set -eu
 
 SOURCE=${1:?the source tree, with its uv.lock}
@@ -30,6 +32,11 @@ fi
 command -v curl >/dev/null 2>&1 || apt-get install -y -q curl
 command -v git >/dev/null 2>&1 || apt-get install -y -q git
 command -v rg >/dev/null 2>&1 || apt-get install -y -q ripgrep
+# An image for a cloud whose VMs hibernate holds the cloud's agent that
+# readies a VM for it at its first boot: HIBERNATION=1 installs it.
+if [ "${HIBERNATION:-0}" = 1 ]; then
+  apt-get install -y -q ec2-hibinit-agent
+fi
 
 # The host's own user, in Docker's group: its session's commands run as it,
 # and the VM is the session's wall.
@@ -63,11 +70,13 @@ install -d -m 0755 /etc/acme-host
 install -m 0644 "$HERE/host.env" /etc/acme-host/host.env
 install -m 0644 "$HERE/ceilings.toml" /etc/acme-host/ceilings.toml
 
-# Its units: the seed read from the cloud's first-boot data, and the host.
+# Its units: the seed read from the cloud's first-boot data, at a boot and
+# again after a resume from hibernation, and the host.
 install -d -m 0755 /usr/local/libexec
 install -m 0755 "$HERE/acme-vm-seed" /usr/local/libexec/acme-vm-seed
 install -m 0644 "$HERE/acme-vm-seed.service" /etc/systemd/system/
+install -m 0644 "$HERE/acme-vm-resume.service" /etc/systemd/system/
 install -m 0644 "$HERE/acme-host.service" /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable acme-vm-seed.service acme-host.service
+systemctl enable acme-vm-seed.service acme-vm-resume.service acme-host.service
 echo "the host is installed; keep this VM's disk as the cloud pool's image"

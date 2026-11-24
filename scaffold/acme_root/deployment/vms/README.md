@@ -22,7 +22,9 @@ The files here make the image every such VM starts from.
   each VM as it starts: where the platform answers, and a one-use key
   the host trades for its credential. On Lima the pool writes it through
   the hypervisor's channel; in the cloud it is the instance's first-boot
-  data, which [`acme-vm-seed`](acme-vm-seed) reads at each boot.
+  data, which [`acme-vm-seed`](acme-vm-seed) reads at each boot, and again
+  after a resume from hibernation
+  ([`acme-vm-resume.service`](acme-vm-resume.service)).
 - **Its home**, on `/run/acme-host`: its credential lives in memory, so
   the VM's disk holds none.
 
@@ -54,4 +56,9 @@ Linux whose packages hold Docker, `install.sh` run in it, then an image
 made of it. The [cloud pool's module](../terraform/modules/cloud_pool/)
 takes its id as `image_id`, and maps its root device in the launch
 template, encrypted under the pool's key. Set `ACME_CLOUD_POOL_IMAGE` to
-the same id, `ami-` and its hex: a new VM boots the image by it.
+the same id, `ami-` and its hex: a new VM boots the image by it. For a
+pool whose VMs hibernate (the module's `hibernation`), run `install.sh`
+with `HIBERNATION=1`, which adds the cloud's hibernation agent, on a Linux
+the cloud's hibernation guide supports. A warm VM then sleeps holding a key
+the pool ended, and wakes with the fresh one its claim wrote
+([ADR 2075](../../docs/adr/2075-the-cloud-pool-keeps-warm-vms-hibernated-holding-no-key.md)).

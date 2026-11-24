@@ -1,9 +1,10 @@
 """The host as a VM of the cloud pool runs it: its settings come from
 the seed the pool handed the VM, and from a file that names nothing
 secret; it trades the seed's key once, asking again while its VM is
-warm, and forgets the key once traded; its workspace is a folder of the
-VM at the VM's level, which it neither snapshots nor starts from one,
-and its commands run there as its own user."""
+warm, and forgets the key once traded; after a resume from hibernation
+the image reads its seed again and starts the host on it; its workspace
+is a folder of the VM at the VM's level, which it neither snapshots nor
+starts from one, and its commands run there as its own user."""
 
 import base64
 import json
@@ -90,6 +91,16 @@ def test_a_vm_names_nothing_secret_in_its_settings_and_its_seed_holds_two_things
     ], "the unit reads that file and sets nothing more"
     assert "/run/acme-host" in (VMS / "host.env").read_text(), "its home is in memory"
     assert "seed.json" in GUEST_WRITE and "systemctl restart acme-host" in GUEST_WRITE
+
+
+def test_after_a_resume_the_image_reads_its_seed_again_and_starts_the_host_on_it() -> None:
+    unit = (VMS / "acme-vm-resume.service").read_text()
+    assert "After=hibernate.target" in unit and "WantedBy=hibernate.target" in unit
+    started = re.findall(r"^ExecStart=(.*)$", unit, flags=re.MULTILINE)
+    assert started[0].startswith("/usr/local/libexec/acme-vm-seed "), "the fresh seed first"
+    assert started[1].endswith("restart acme-host.service"), "then the host, on its fresh key"
+    installed = (VMS / "install.sh").read_text()
+    assert "acme-vm-resume.service" in re.findall(r"^systemctl enable (.*)$", installed, re.M)[0]
 
 
 def resolved(location: str) -> Path:

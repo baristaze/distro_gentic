@@ -1,0 +1,17 @@
+# Reads the seed again after a resume from hibernation, then starts the host
+# on it. A warm VM of the cloud pool sleeps holding a key the pool ended
+# before it slept, and a claim writes a fresh one into its first-boot data
+# while it sleeps; no boot runs at a resume, so this reads it, as
+# acme-vm-seed.service does at a boot, and the host enrolls with it. Lima
+# hibernates no VM, so it never runs there.
+[Unit]
+Description=The seed the cloud pool handed this VM as it woke
+After=hibernate.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/acme-vm-seed 30
+ExecStart=/bin/systemctl --no-block restart acme-host.service
+
+[Install]
+WantedBy=hibernate.target
