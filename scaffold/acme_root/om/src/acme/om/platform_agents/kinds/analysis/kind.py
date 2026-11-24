@@ -84,17 +84,30 @@ ANALYSIS_V3 = revised(
 """Analysis before it read back a result kept outside its window: kept
 while a session may still run it."""
 
-ANALYSIS_KIND = revised(
+ANALYSIS_V4 = revised(
     ANALYSIS_V3,
     version=4,
     toolsets=(*ANALYSIS_V3.toolsets, TOOL_OUTPUTS_TOOLSET),
     prompts=(prompt_of(__file__, 4),),
 )
+"""Analysis before its runs prepared their workspace beside their first
+model call: kept while a session may still run it."""
+
+ANALYSIS_KIND = revised(
+    ANALYSIS_V4,
+    version=5,
+    prompts=(prompt_of(__file__, 5),),
+    # What it reads is in its workspace, and each finding cites the files
+    # and the commands there that show it, so nearly every run works in
+    # it. Its prepare starts beside the run's first model call.
+    prepares_early=True,
+)
 """Analysis. It starts sub-agents of its own, and a spawn may start it, the
 way a software engineer splits a question, so it names an agent among those
 who may start it, and a share. A result too large for its window, or one
 compaction elided, it reads back with `read_tool_output`, by the handle the
-notice names."""
+notice names. Its runs prepare the workspace early, beside their first
+model call."""
 
-VERSIONS = (ANALYSIS_V1, ANALYSIS_V2, ANALYSIS_V3, ANALYSIS_KIND)
+VERSIONS = (ANALYSIS_V1, ANALYSIS_V2, ANALYSIS_V3, ANALYSIS_V4, ANALYSIS_KIND)
 """Every version of analysis the platform still runs."""

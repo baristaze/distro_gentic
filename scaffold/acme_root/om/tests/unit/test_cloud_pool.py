@@ -9,8 +9,8 @@ A spec the VMs cannot hold is refused for good, a size the deployment
 does not allow among them; a VM is the machine type its size maps to,
 and a warm one the default size's. A cold start records its boot once, a
 warm claim none. Each claim counts once, by how it got its VM, a prepare
-asked again before it returned counting none, and records its wait at
-the first command on its VM, never at a later one; a restore is timed by
+asked again before it returned counting none, and records its wait once,
+as its prepare returns, never at a command; a restore is timed by
 its archive's size in a few classes. A VM past its maximum age goes between runs and never
 under a running loop, and a warm one past it goes at the sweep. The sweep reads every
 row, a page at a time: it lets go of a first start that died, one whose
@@ -458,8 +458,7 @@ async def test_a_cold_start_records_one_boot_from_its_start_to_enrollment_and_a_
     assert boots() == (before[0] + 1, before[1] + 42), "a warm claim records none"
 
 
-# Each claim counts once, by how it got its VM, and waits for its first
-# command.
+# Each claim counts once, by how it got its VM, and waits for its prepare.
 
 
 def claims() -> dict[str, float]:
@@ -488,13 +487,16 @@ async def test_a_warm_claim_a_new_vm_a_held_one_and_one_started_again_each_count
     pool.placed = holding
 
     before = claims()
+    waited = waits(ClaimSource.WARM)
     warm = new_id()
     with pytest.raises(IsolationRefused):
         await pool.prepare(ctx, warm)
+    assert waits(ClaimSource.WARM) == waited, "no wait until a prepare returns"
     holding.holds = True
     await pool.prepare(ctx, warm)
     await pool.manager.close()
     assert counted_since(before) == {"warm": 1}, "a claim asked again before it returned is one"
+    assert waits(ClaimSource.WARM) == (waited[0] + 1, waited[1] + 10), "its wait, across the asks"
 
     before = claims()
     session = new_id()
@@ -537,35 +539,45 @@ async def _unread(data: bytes) -> bytes | None:
 
 
 def waits(source: ClaimSource) -> tuple[float, float]:
-    """The claims' waits for their first command the process recorded
-    under `source`: how many, and their seconds together."""
-    name = "acme_cloud_pool_first_command_seconds"
+    """The claims' waits the process recorded under `source`: how many, and
+    their seconds together."""
+    name = "acme_cloud_pool_claim_wait_seconds"
     labels = {"source": source.value}
     count = REGISTRY.get_sample_value(f"{name}_count", labels) or 0.0
     total = REGISTRY.get_sample_value(f"{name}_sum", labels) or 0.0
     return count, total
 
 
-async def test_a_claim_records_its_wait_once_at_the_first_command_on_its_vm(
-    pool: Pool, ctx: TenantContext
+async def test_a_claim_records_its_wait_once_as_its_prepare_returns_never_at_a_command(
+    pool: Pool, ctx: TenantContext, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """A kind that prepares early claims its VM beside its run's first model
+    call, so its first command may come long after the prepare returned.
+    The wait is the prepare's time, from the claim to the workspace handed
+    over, and the model's turns before the command are no part of it."""
     ran = Ran()
     # The runner's transport: a session of the pool's commands go to its VM.
-    placed = TransportPlacedImpl(
-        TransportNullImpl(), ran, cast(Any, None), pool.manager.runs, pool.manager.commanded
-    )
+    placed = TransportPlacedImpl(TransportNullImpl(), ran, cast(Any, None), pool.manager.runs)
     seal = RecordSeal(seal=_unread, open=_unread)
-    before = waits(ClaimSource.NEW)
-    agent_session_id = new_id()
-    workspace = await pool.prepare(ctx, agent_session_id)
+    launch = pool.vms.launch
 
-    for seconds in (12, 30):
+    async def booting(name: str, spec: VmSpec, snapshot: str | None = None) -> None:
+        await launch(name, spec, snapshot)
+        pool.now += timedelta(seconds=12)  # it boots, and then its host calls
+
+    monkeypatch.setattr(pool.vms, "launch", booting)
+    before = waits(ClaimSource.NEW)
+    workspace = await pool.prepare(ctx, new_id())
+    monkeypatch.undo()
+    assert waits(ClaimSource.NEW) == (before[0] + 1, before[1] + 12), "the prepare's time"
+
+    for seconds in (300, 30):  # the model's turns, then its commands
         pool.now += timedelta(seconds=seconds)
         command = CommandSpec(argv=("true",), key=new_id(), epoch=0, deadline=pool.now)
         await placed.run(workspace, command, seal=seal)
 
     assert len(ran.commands) == 2
-    assert waits(ClaimSource.NEW) == (before[0] + 1, before[1] + 12), "the first command's wait"
+    assert waits(ClaimSource.NEW) == (before[0] + 1, before[1] + 12), "once, and no command's"
 
 
 def test_an_archive_is_timed_under_one_of_a_few_size_classes() -> None:

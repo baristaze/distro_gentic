@@ -16,7 +16,13 @@ from uuid import UUID
 import pytest
 from unit.platform_tools import REVIEWED, reviewing, unbound
 
-from acme.infra.agent_workspaces import IsolationMode
+from acme.infra.agent_workspaces import (
+    Durability,
+    EgressMode,
+    EgressPolicy,
+    IsolationMode,
+    IsolationSpec,
+)
 from acme.infra.impl.local import InfraLocalImpl
 from acme.integrations.model_providers.calls import ModelCall
 from acme.om.agent_root import AgentRootOptions, native_tools
@@ -72,6 +78,7 @@ from acme.om.platform_agents.kinds.analysis.kind import (
     ANALYSIS_LOOPS,
     ANALYSIS_SHARE,
     ANALYSIS_V3,
+    ANALYSIS_V4,
 )
 from acme.om.platform_agents.kinds.ops_analyst.kind import OPS_ANALYST_KIND
 from acme.om.platform_agents.kinds.planner.kind import PLANNER_KIND
@@ -84,6 +91,7 @@ from acme.om.platform_agents.kinds.software_engineer.kind import (
     SOFTWARE_ENGINEER_STEP_GUARD,
     SOFTWARE_ENGINEER_V6,
     SOFTWARE_ENGINEER_V7,
+    SOFTWARE_ENGINEER_V8,
 )
 from acme.om.platform_agents.kinds.support_assistant.kind import SUPPORT_ASSISTANT_KIND
 from acme.om.platform_agents.shipped import SHIPPED
@@ -210,10 +218,12 @@ def test_every_shipped_agent_is_a_profile_that_sets_its_powers() -> None:
         ("software_engineer", 6),
         ("software_engineer", 7),
         ("software_engineer", 8),
+        ("software_engineer", 9),
         ("analysis", 1),
         ("analysis", 2),
         ("analysis", 3),
         ("analysis", 4),
+        ("analysis", 5),
         ("planner", 1),
         ("platform_assistant", 1),
         ("platform_assistant", 2),
@@ -305,7 +315,7 @@ def test_the_software_engineer_takes_a_baseline_again_when_its_base_moves() -> N
 
 @pytest.mark.parametrize(
     ("latest", "before"),
-    [(SOFTWARE_ENGINEER_V7, SOFTWARE_ENGINEER_V6), (ANALYSIS_KIND, ANALYSIS_V3)],
+    [(SOFTWARE_ENGINEER_V7, SOFTWARE_ENGINEER_V6), (ANALYSIS_V4, ANALYSIS_V3)],
     ids=["software_engineer", "analysis"],
 )
 def test_the_software_engineer_and_analysis_read_back_a_kept_result_in_a_version_of_their_own(
@@ -321,6 +331,66 @@ def test_the_software_engineer_and_analysis_read_back_a_kept_result_in_a_version
     assert latest.model_copy(update=same) == before
     assert latest in SHIPPED and before in SHIPPED
     assert READ_TOOL_OUTPUT in {tool.spec.name for tool in shipped_catalog()}
+
+
+@pytest.mark.parametrize(
+    ("latest", "before"),
+    [(SOFTWARE_ENGINEER_KIND, SOFTWARE_ENGINEER_V8), (ANALYSIS_KIND, ANALYSIS_V4)],
+    ids=["software_engineer", "analysis"],
+)
+def test_the_software_engineer_and_analysis_prepare_their_workspace_early_in_a_version_of_their_own(
+    latest: AgentKind, before: AgentKind
+) -> None:
+    """Nearly every run of either works in its workspace, so its prepare
+    starts beside the run's first model call, and the call that first
+    reaches the workspace waits only for what is left of it. A session
+    starts on the version that says so, which changes nothing else, and
+    the version before it stays shipped for the sessions pinned to it."""
+    assert AgentKindCatalog(kinds=SHIPPED).latest(latest.name) == latest
+    assert latest.prepares_early and not before.prepares_early
+    assert latest.version == before.version + 1
+    same = {"version": before.version, "prompts": before.prompts, "prepares_early": False}
+    assert latest.model_copy(update=same) == before
+    assert latest.prompts == before.prompts, "the same prompt, in a file of its own"
+    assert before in SHIPPED
+
+
+def test_no_other_shipped_kind_prepares_its_workspace_early() -> None:
+    """A run of a kind that prepares early boots its VM before it knows it
+    needs one, and lets it go unused when no call reaches it. The kinds
+    with no workspace cannot say so, and no version a session may still be
+    pinned to does."""
+    early = {(kind.name, kind.version) for kind in SHIPPED if kind.prepares_early}
+    assert early == {
+        (kinds.SOFTWARE_ENGINEER, SOFTWARE_ENGINEER_KIND.version),
+        (kinds.ANALYSIS, ANALYSIS_KIND.version),
+    }
+    assert all(rules.early_refusal(kind) is None for kind in SHIPPED)
+
+
+def test_a_kind_kept_by_snapshots_that_prepares_early_is_refused_at_load(tmp_path: Path) -> None:
+    """A run that reaches no workspace lets its early prepare go with no
+    snapshot, and the platform lets go only an instance a snapshot holds,
+    so a VM of the cloud pool would stay running for no call. Whoever
+    declares such a kind, an adopter or a product, the platform refuses it
+    as it loads, with its cause; the same kind kept as a cache loads."""
+    vm = IsolationSpec(mode=IsolationMode.VM, egress=EgressPolicy(mode=EgressMode.NONE))
+    cached = a_product_kind().model_copy(update={"isolation": vm, "prepares_early": True})
+    kept = cached.model_copy(
+        update={"isolation": vm.model_copy(update={"durability": Durability.SNAPSHOT})}
+    )
+    cause = "triage v1 is kept by snapshots, so it never prepares its workspace early"
+
+    assert rules.early_refusal(cached) is None
+    assert rules.early_refusal(kept) == (
+        f"{cause}: a run that reaches none takes no snapshot, and an instance no snapshot "
+        "holds is never let go"
+    )
+    with pytest.raises(ValueError, match=cause):
+        platform_over(tmp_path, kinds=(kept,))
+    with pytest.raises(ValueError, match=cause):
+        platform_over(tmp_path, product_kinds=ProductKinds(agents=(kept,)))
+    platform_over(tmp_path, product_kinds=ProductKinds(agents=(cached,)))
 
 
 def test_analysis_waits_for_every_report_before_it_answers() -> None:
@@ -563,9 +633,9 @@ async def test_analysis_the_planner_and_the_assistant_end_by_their_answer(
 RENDERED = {
     (
         kinds.SOFTWARE_ENGINEER,
-        8,
+        9,
     ): "04fd4cbcacddf156e91f07743eb35987cffb54f08748850f2c52cacf6dfc65fd",
-    (kinds.ANALYSIS, 4): "5bb9c28b157e286d0ed62826b215ea2e6c429758b85cd190bfbc5f5b74ed59eb",
+    (kinds.ANALYSIS, 5): "5bb9c28b157e286d0ed62826b215ea2e6c429758b85cd190bfbc5f5b74ed59eb",
     (kinds.PLANNER, 1): "0dd1fd420a048131aa4d74acf6c9ec9f4bada79429cddecc11db15ba439ea7a0",
     (
         kinds.PLATFORM_ASSISTANT,
@@ -669,7 +739,7 @@ NAMED_ONE_BY_ONE: dict[tuple[str, int], tuple[str, ...]] = {
             "submit_result",
             *(("read_tool_output",) if version >= 7 else ()),
         )
-        for version in (5, 6, 7, 8)
+        for version in (5, 6, 7, 8, 9)
     },
     (kinds.ANALYSIS, 1): ("list_files", "read_file", "run_command"),
     **{
@@ -683,7 +753,7 @@ NAMED_ONE_BY_ONE: dict[tuple[str, int], tuple[str, ...]] = {
             *(("spawn_sub_agent", "wait_for_sub_agents") if version >= 3 else ()),
             *(("read_tool_output",) if version >= 4 else ()),
         )
-        for version in (2, 3, 4)
+        for version in (2, 3, 4, 5)
     },
     (kinds.PLANNER, 1): ("read_agent_session", "hand_off_to_software_engineer"),
     (kinds.PLATFORM_ASSISTANT, 1): (

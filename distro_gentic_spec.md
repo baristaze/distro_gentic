@@ -371,7 +371,13 @@ that only reads, plans, or answers starts none. A run of a kind that
 prepares early ([`agentic_core` The Runtime][e-runtime]) claims or
 starts it beside its first model call instead: the call that reaches
 the workspace waits only for what is left of the boot, and a run that
-reaches none lets the VM go at its end, as any run's end does.
+reaches none lets the VM go at its end, as any run's end does. A kind
+kept by snapshots never prepares early, and the platform refuses one
+that says it does as it loads the kind, with its cause: a run that
+reaches no workspace takes no snapshot, and an instance no snapshot
+holds is never let go ([A Snapshot Is Durable
+State](#a-snapshot-is-durable-state)), so its VM would stay running for
+no call.
 
 - **Its own credential, for one session.** The pool hands each VM,
   as it starts, a one-use key, and its host trades the key once for a
@@ -456,10 +462,13 @@ reaches none lets the VM go at its end, as any run's end does.
   none, so that time is what the warm count is set by. Each claim counts
   once, by how it got its VM: a warm one, a new one, the one its session
   held, or that one started again. The warm share of claims is the
-  warm-hit ratio. Each claim records its wait, from the claim to the
-  first command on its VM, and each restore its time, by its archive's
-  size in a few classes. These readings say which of the warm VMs, the
-  restore, or the image needs work.
+  warm-hit ratio. Each claim records its wait once, from the claim
+  until its prepare hands the session the workspace. The model's turns
+  before a call reaches the workspace are no part of it, so it reads
+  what the pool costs even when the VM boots beside them. Each restore
+  records its time, by its archive's size in a few classes. These
+  readings say which of the warm VMs, the restore, or the image needs
+  work.
 - **No race between a claim and the sweep.** A VM's host is handed
   its session's work only once it holds the session's workspace. The
   sweep takes a warm VM's record before it destroys the VM, under the
@@ -590,9 +599,11 @@ workspace itself stays a cache.
 - **When.** The run that holds the workspace snapshots it at its end,
   before its instance goes, and its release pushes uncommitted work to a
   snapshot ref as any release does. An instance no snapshot holds as it
-  stands is never let go. The next loop starts from the latest
-  snapshot, and the restored tree stands: the session's branch is not
-  brought over it. A person who takes control gets that tree too.
+  stands is never let go, so a kind kept by snapshots never prepares
+  its workspace early ([The Cloud Pool](#the-cloud-pool)). The next loop
+  starts from the latest snapshot, and the restored tree stands: the
+  session's branch is not brought over it. A person who takes control
+  gets that tree too.
 - **Where it lives follows the wall.** A workspace in the platform's
   cloud, a VM of the cloud pool's included, keeps its snapshots in the
   platform's object store, sealed under the session's key. A workspace
@@ -1254,9 +1265,12 @@ keeps its own kinds as folders the same way.
 - The **software engineer** takes an objective to a validated,
   reviewable change. Its workspace has no network and starts from its
   agent project's workspace base ([An Agent Project's Workspace
-  Base](#an-agent-projects-workspace-base)).
+  Base](#an-agent-projects-workspace-base)). Nearly every run of it
+  works there, so it prepares the workspace early, beside the run's
+  first model call ([`agentic_core` The Runtime][e-runtime]).
 - **Analysis** agents read what a run produced (telemetry, logs, video)
-  and turn it into findings.
+  in their workspace and turn it into findings, each citing the files
+  and commands that show it. They prepare the workspace early too.
 - A **planner** turns findings into tasks and decides whether an
   existing session should continue or a new one should start.
 - A **validation session** runs a work product's checks with no agent at

@@ -286,7 +286,9 @@ XL_CALL_FACTOR = 2
 """What one call of a main role at XL costs against one at L, at the list
 prices of the models the two sizes run on: twice. A choice."""
 
-WORKSPACE_BASE_KINDS: frozenset[tuple[str, int]] = frozenset({(SOFTWARE_ENGINEER, 8)})
+WORKSPACE_BASE_KINDS: frozenset[tuple[str, int]] = frozenset(
+    {(SOFTWARE_ENGINEER, 8), (SOFTWARE_ENGINEER, 9)}
+)
 """The platform's kinds, by name and version, whose workspace starts from
 the workspace base its session's agent project names: the software engineer from version 8.
 A later version that takes it joins here; the versions before it keep

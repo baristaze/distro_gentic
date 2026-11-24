@@ -77,10 +77,15 @@ SETTINGS = {
         kinds.SOFTWARE_ENGINEER,
         8,
     ): "32ecd898fb3eb4e3c3cc3307e4c70d5a881cc5b0744d75a5638ed236bd657ade",
+    (
+        kinds.SOFTWARE_ENGINEER,
+        9,
+    ): "1b67ff9641af298836d9ad8df4bb0d69b1f915869aac1ae444078a1ff0153b91",
     (kinds.ANALYSIS, 1): "8c3d3e8a2366fcc45c72ab4540edfe5c8757fd238fecbd21c3cb78a2733d01f0",
     (kinds.ANALYSIS, 2): "214b4701510954d9ac7649d615131358a70e1e2fa4ecdc7e7f74faadb3cee07c",
     (kinds.ANALYSIS, 3): "4d1dc9bc365a292f77ed3b4e520a5d985b5a970ce564a697b467ef6a825e05b8",
     (kinds.ANALYSIS, 4): "f47404eae06af6c8ea9eae5048b31554068c0cf3c8e81c107e0e510f9af26ca5",
+    (kinds.ANALYSIS, 5): "8d49e4524eaef5a11c2d1f24325ecb786b4b84957999212770968ea73a98d029",
     (kinds.PLANNER, 1): "799ffc01e5c6d4f2774c3bd1ddac713d2083fa2ea89aa78f6bfa623d8a409a16",
     (
         kinds.PLATFORM_ASSISTANT,

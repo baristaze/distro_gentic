@@ -183,14 +183,9 @@ def build_runner_platform(
         # the edge is bound at call time.
         relayed = TransportRelayImpl(lambda: built[0].exec_relay, stage)
         # A session on a VM of the cloud pool runs its calls on that
-        # VM's host, through the exec relay too, and its first command
-        # ends its claim's wait.
+        # VM's host, through the exec relay too.
         return TransportPlacedImpl(
-            direct,
-            relayed,
-            placement,
-            lambda spec: built[0].cloud_pool.runs(spec),
-            lambda agent_session_id: built[0].cloud_pool.commanded(agent_session_id),
+            direct, relayed, placement, lambda spec: built[0].cloud_pool.runs(spec)
         )
 
     # Every part the loop streams goes to the shared cache, where the API

@@ -297,19 +297,23 @@ created. A host advertises snapshots at a level only when its probe
 showed it can keep one there; a session kept by snapshots and pinned to
 a pool with no such host waits on the resource, and says why. The next
 loop starts from the latest snapshot, and the restored tree stands. An
-instance no snapshot holds as it stands is never let go.
+instance no snapshot holds as it stands is never let go, so a kind kept
+by snapshots that prepares early is refused as it loads.
 
 **Source.** Workspaces and Isolation, A Snapshot Is Durable State.
 
 **Look for.** Where durability is chosen and pinned; the check of a
 pool's hosts before a prepare; a host's probe and what it advertises;
-what a prepare that restored does with the session's branch.
+what a prepare that restored does with the session's branch; where a
+kind's durability and its early prepare are read as the platform loads
+it.
 
 **Violation.** A session kept by snapshots prepared as a cache, run
 with no snapshot, or created where no content is kept at rest; a host
 that advertises snapshots it never probed; a refusal that can never
 clear left waiting; a restored tree that the branch's sync or cut
-replaces; an instance no snapshot holds let go.
+replaces; an instance no snapshot holds let go; a kind kept by
+snapshots that prepares early, loaded.
 
 **Severity.** high
 
