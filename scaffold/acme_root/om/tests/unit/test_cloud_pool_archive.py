@@ -13,7 +13,8 @@ part is opened by the runner and relayed. An archive kept before, the
 engine's plain tar with its parts under the session's key, restores as it
 did. A part that opens to bytes other than its digest loses the restore,
 and its VM goes, touching nothing kept. A directory past the bound is
-refused before it is packed. An archive that fails part way keeps no part, the
+refused before it is packed, and a compressed pack whose tar passes it, or
+that ends part way, is refused as it is read out. An archive that fails part way keeps no part, the
 snapshot before stays the latest, and its VM stays; a restore that fails
 part way lets its new VM go and touches nothing kept. A restore that ends
 is timed once, under its archive's size class, and one that fails is not.
@@ -26,7 +27,8 @@ import asyncio
 import base64
 import os
 import shutil
-from collections.abc import AsyncGenerator, Awaitable, Callable
+from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable
+from compression import zstd
 from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -61,7 +63,7 @@ from acme.om.agent_steps.types.header import AgentWorkspaceSnapshot, SnapshotHea
 from acme.om.agent_workspaces.impl import pool_directory
 from acme.om.agent_workspaces.impl.pool_archive import PoolManifest, opened
 from acme.om.agent_workspaces.impl.pool_directory import KEPT as PACKS
-from acme.om.agent_workspaces.impl.pool_directory import TAR, TAR_ZSTD
+from acme.om.agent_workspaces.impl.pool_directory import TAR, TAR_ZSTD, unpacked
 from acme.om.agent_workspaces.impl.tools import (
     PinnedToolsOptions,
     ToolsManagerAgentWorkspacesImpl,
@@ -485,6 +487,29 @@ async def test_a_directory_past_the_bound_is_refused_before_it_is_packed(
     assert not (directory / PACKS).exists(), "nothing packed"
     await kept.tools.release_agent_workspace(kept.owner, workspace)
     assert len(await kept.pool.rows()) == 1, "a VM no snapshot holds stays"
+
+
+async def sliced(data: bytes, size: int) -> AsyncIterator[bytes]:
+    for start in range(0, len(data), size):
+        yield data[start : start + size]
+
+
+async def tar_of(parts: AsyncIterator[bytes], bound: int) -> bytes:
+    return b"".join([data async for data in unpacked(parts, TAR_ZSTD, bound)])
+
+
+async def test_a_compressed_pack_reads_out_as_its_tar_and_never_past_the_bound() -> None:
+    tar = os.urandom(3000) + bytes(50_000)
+    # Two frames, read out in parts that end anywhere in them.
+    frames = zstd.compress(tar[:4000]) + zstd.compress(tar[4000:])
+    assert await tar_of(sliced(frames, 7), len(tar)) == tar
+
+    with pytest.raises(SnapshotRefused, match="unpacks past the bound of 1000"):
+        await tar_of(sliced(zstd.compress(bytes(1_000_000)), 64), 1000)
+    with pytest.raises(SnapshotRefused, match="ends part way"):
+        await tar_of(sliced(frames[:-4], 64), len(tar))
+    with pytest.raises(SnapshotRefused, match="does not decompress"):
+        await tar_of(sliced(b"not a pack at all", 64), len(tar))
 
 
 async def test_an_archive_that_fails_part_way_keeps_no_part_and_the_snapshot_before_stays(
