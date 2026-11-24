@@ -179,8 +179,11 @@ purge removes it, with its files and its transport's records, and is
 answered the same way. The fields a host reads
 of an item are `agent_project_id`, `isolation`, `egress`, `reads`, and
 `by_person` in its payload (`ceilings.ask_of`); a payload without them is
-refused. What the item runs it reads from the gateway while it holds it
-(`ApiClient.exec_detail`), never from the payload (ADR 2004).
+refused. What the item runs it reads from the gateway while it holds it:
+from the claim's `detail`, or, from a claim that carries none, by
+`ApiClient.exec_detail`; never from the payload (ADR 2004). A file or an
+output within the detail's `inline` rides in the item or its result
+(ADR 2076).
 -->
 
 ## Conventions

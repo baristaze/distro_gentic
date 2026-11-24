@@ -77,9 +77,10 @@ class PartsRequest(RequestBody):
 
 
 class ResultRequest(RequestBody):
-    """How an item ended: the JSON of an exec result, in base64. It names
-    the objects its host uploaded, by their size and their digest, and
-    holds none of their bytes, so it is a few KiB."""
+    """How an item ended: the JSON of an exec result, in base64. It carries
+    its output or a read's file within the bound the item's detail names
+    (`inline`), or names the object its host uploaded, by its size and its
+    digest, so it stays bounded whatever the command printed."""
 
     data: str = Field(max_length=RESULT_CHARS)
     crossing: CrossingBody

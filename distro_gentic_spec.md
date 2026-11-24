@@ -474,23 +474,38 @@ pool, travels as `exec` work:
    the tool request's idempotency key ([Identifiers][g-ids]). It carries
    the command or file operation, the tool's effect, the deadline, the
    writer epoch, and the session's isolation spec.
-2. The host claims it under a lease, runs it through its local
-   transport, and streams output parts back.
+2. The host claims it under a lease, and the claim hands it what it
+   runs in the same call. It runs it through its local transport and
+   streams output parts back.
 3. The host pushes the result, and the control plane stores it under
    the key.
 4. The runner writes the `tool_response` from that result.
 
-No file and no output rides in an item or its result. Each crosses the
-store as an object, by URLs signed for it alone, as every blob does
+A file or an output of at most 64 KiB rides in its item or its result,
+as what most commands print does. It is the session's content, like the
+operation, and is sealed with it under the session's key, so revoking
+that key leaves it noise. One past that crosses the store as an object,
+by URLs signed for it alone, as every blob does
 ([Buckets][g-buckets]): a file a write hands its host, a file a read
 uploads, and what a command printed. The item names each object, its
 size, and its digest, and the result names what its host uploaded the
-same way, so it stays small whatever the command printed. An object is
-sealed under a key of its own, which the item keeps under the session's
-key, so revoking that key leaves it noise. Nothing of a file reaches a
-workspace, or the runner, until it matches its digest. A file leaves the
-store once its item settles; an output is the item's record, and goes
-with it.
+same way, so a result stays bounded whatever the command printed. An
+object is sealed under a key of its own, which the item keeps under the
+session's key, so revoking that key leaves the object noise too. Nothing
+of a file reaches a workspace, or the runner, until it matches its
+digest, and a result whose inline bytes miss theirs is refused. A file
+leaves the store once its item settles; an output is the item's record,
+and goes with it. A command whose output rides in its result, and which
+ends before its first part is sent, sends that output there alone.
+
+<!-- agents-only
+The bound is the scaffold's `INLINE_BYTES` (`exec_relay/types/exec.py`).
+A write's file rides inline only to a host that reads `exec` work at
+`INLINE_VERSION` or later; the detail's `inline` names what the platform
+takes in a result, and a host sends nothing inline past it. The claim's
+`detail` comes from the gateway's hosts service, by work kind
+(`details`).
+-->
 
 A host also holds one long-lived outbound stream to the control plane,
 which carries wake-ups, cancels, interrupts, deadline cuts, and lease
@@ -520,7 +535,8 @@ workspace; an `unsafe` one completes `interrupted`, outcome unknown.
 The runner measures each item it sends by its phases, once it reads how
 the item ended. It is **queued** from its send to its claim, the host's
 wake included. **Detail** runs from the claim to the host's read of the
-item, and **start** from that read to the command's start, the
+item, at once when the claim hands it, and **start** from that read to
+the command's start, the
 workspace's prepare and a write's download included. Then comes the
 **command** itself, then
 **store**, from the command's end to its result stored, its uploads

@@ -488,7 +488,7 @@
       },
       "ResultRequest": {
         "additionalProperties": false,
-        "description": "How an item ended: the JSON of an exec result, in base64. It names\nthe objects its host uploaded, by their size and their digest, and\nholds none of their bytes, so it is a few KiB.",
+        "description": "How an item ended: the JSON of an exec result, in base64. It carries\nits output or a read's file within the bound the item's detail names\n(`inline`), or names the object its host uploaded, by its size and its\ndigest, so it stays bounded whatever the command printed.",
         "properties": {
           "crossing": {
             "$ref": "#/components/schemas/CrossingBody"

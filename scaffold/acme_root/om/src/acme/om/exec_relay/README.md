@@ -18,6 +18,11 @@ platform's cloud. Each call crosses the wall as `exec`
   session's content, sealed under the session's key.
 - **Its result**: how the command ended, kept under the call's key, and
   what it printed, sealed the same way.
+- **What it moves**: a file a write hands its host, a file a read sends
+  back, and what a command printed. One of at most 64 KiB rides in the
+  item or its result, sealed with the rest of it. One past that is an
+  object of the store, sealed under a key of its own that the item keeps,
+  which its host reaches by links signed for it alone.
 - **Its times**: when a host's claim last took it, and how long its host
   took, by its own clock, to read it, to start its command, and to run
   it, which the runner measures the relay by.
@@ -100,9 +105,12 @@ platform's cloud. Each call crosses the wall as `exec`
   that names the user it runs as goes only to a host that reads `exec`
   work at `USER_VERSION` or later; an older host would run it as its
   workspace's own user, so it is refused before it is sent.
-- **Claim and run.** The host claims the item under a lease, reads what
-  it runs, runs it through its own transport, streams the output back,
-  and pushes the result. It renews the lease from the claim until the
+- **Claim and run.** The host claims the item under a lease, and the
+  claim hands it what it runs, in the one call. It runs it through its
+  own transport, streams the output back, and pushes the result, which
+  carries what the command printed when it is small enough to ride in it.
+  A command that ends before its first part is sent sends its output in
+  the result alone. The host renews the lease from the claim until the
   result is ready, so a long read or prepare never lets it lapse.
 - **Wake the runner.** Each part and the result, as they land, wake the
   runner that waits on the item, in whichever process it waits, and it
@@ -135,7 +143,9 @@ platform's cloud. Each call crosses the wall as `exec`
   from a run below the session's writer epoch is refused, and a command
   a lost run sent is refused at its claim.
 - **What crosses is checked.** A part or a result whose bytes do not
-  match the hash the host declared is refused before it is read.
+  match the hash the host declared is refused before it is read, and so
+  is a result whose inline bytes pass the bound or miss their own size
+  and digest.
 - **A read crosses whole.** A file is read in one item, and a file longer
   than one result carries is refused at once, never waited on.
 - **The first settlement wins.** A result for an item a stop, its lease,
@@ -153,7 +163,12 @@ answers trust's executor with the bound host, and
 `max_attempts` 1, so the queue's own sweep fails it, never requeues it;
 `settle_expired` writes the `interrupted` result and the revoke. The
 engine's file operations carry no call key, so each is an item keyed by
-itself. ADR 2004 records the decisions.
+itself. ADR 2004 records the decisions. The bound is `INLINE_BYTES`
+(`types/exec.py`); a write's file rides inline only to a host that reads
+`exec` work at `hosts.rules.INLINE_VERSION`, and an object's upload
+starts at its host's first `issue_upload`. The gateway's claim carries
+an `exec` item's detail through the hosts service's `details`, keyed by
+work kind. ADRs 2066 and 2076 record the objects and what rides inline.
 -->
 
 ## How another namespace composes it
