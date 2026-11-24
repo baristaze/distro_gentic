@@ -503,8 +503,8 @@ timer is only the fallback for a wake that never comes.
 <!-- agents-only
 The wake is the engine's `Topics.STREAM_APPENDED` of kind
 `exec_relay.exec_output`, its group the item's id. The scaffold's
-`exec_relay/impl/manager.py` sends it and holds the waits
-(`waiting`); the runner's wait is `TransportRelayImpl._wait`.
+`exec_relay/impl/manager.py` sends it, and its `watch` waits on it;
+the runner's wait is `TransportRelayImpl._wait`.
 -->
 
 Because an item is keyed, a run that resumes after a crash attaches to

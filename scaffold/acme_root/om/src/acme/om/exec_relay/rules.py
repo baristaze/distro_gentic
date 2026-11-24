@@ -37,6 +37,9 @@ it lands (`Topics.STREAM_APPENDED`, its group the item's id): the runner
 that waits on that item reads it at once. It names the item alone and
 carries nothing of it, and no claimant reads it."""
 
+SETTLED = frozenset({ExecState.DONE, ExecState.INTERRUPTED})
+"""The states an item ends in, which nothing moves it out of."""
+
 REPEATABLE_ATTEMPTS = 3
 """The claims a repeatable item's queue row may spend: a lost lease puts it
 back on its host's lane, and the third loss fails it."""

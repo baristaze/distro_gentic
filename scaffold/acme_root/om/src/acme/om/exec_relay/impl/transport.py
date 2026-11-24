@@ -40,7 +40,7 @@ from acme.om.exec_relay.exceptions import (
     UserNotRead,
 )
 from acme.om.exec_relay.manager import ExecRelayManagerInterface
-from acme.om.exec_relay.rules import exec_id, phases
+from acme.om.exec_relay.rules import SETTLED, exec_id, phases
 from acme.om.exec_relay.types.exec import (
     OUTPUT_CHARS,
     REQUESTS,
@@ -64,8 +64,6 @@ from acme.om.trust.placement import PlacementInterface
 from acme.timing import Retries, RetryPolicy
 
 log = logging.getLogger(__name__)
-
-SETTLED = frozenset({ExecState.DONE, ExecState.INTERRUPTED})
 
 
 class HostRefused(InfraException):
@@ -366,73 +364,60 @@ class TransportRelayImpl(TransportInterface):
         *,
         attach: bool,
     ) -> ExecProgress | None:
-        """Waits for the item to settle, streaming its parts. Each part and
-        the result wake it as they land, and it reads the item at once; its
-        poll, from `first_poll` doubling to `last_poll`, is the fallback for
-        a wake that never comes. Past its deadline by this clock the item
-        is cut on its host; an attaching wait gives up a grace after that,
-        and answers None.
+        """Waits for the item to settle, streaming its parts. Each read that
+        finds nothing new waits for what lands next, and each part and the
+        result wake it as they land, so it reads them at once. The poll's
+        wait, from `first_poll` doubling to `last_poll`, bounds each read's
+        wait, the fallback for a wake that never comes. Past its deadline by
+        this clock the item is cut on its host; an attaching wait gives up a
+        grace after that, and answers None.
 
         A read of its progress that fails for now is waited out until a
-        grace past the deadline, at the poll's pace whatever wakes it. One
-        that fails for good, or still fails then, stops the item on its
-        host, so nothing runs on that no call waits for: the call answers
-        interrupted, and an attaching wait answers None."""
+        grace past the deadline, at the poll's pace. One that fails for
+        good, or still fails then, stops the item on its host, so nothing
+        runs on that no call waits for: the call answers interrupted, and an
+        attaching wait answers None."""
         after = -1
         polls = Retries(self._poll)
         cut = False
-        with self._exec_relay().waiting(org_id, item.id) as woken:
-            while True:
-                # A wake from here on reads again; one before it is in this read.
-                woken.clear()
-                failed = False
-                try:
-                    progress = await self._exec_relay().watch(rctx, org_id, item.id, after)
-                except Exception as error:
-                    if _final(error) or self._clock() >= item.deadline + self._grace:
-                        log.warning("exec item %s: its progress is lost", item.id, exc_info=True)
-                        await self._stop(rctx, org_id, item.id, StopKind.INTERRUPT, epoch)
-                        if attach:
-                            return None
-                        raise ToolFailed(
-                            ToolFailure.INTERRUPTED,
-                            "the platform lost track of the command while it ran, and stopped "
-                            "it; check the workspace before you run it again",
-                        ) from error
-                    log.warning("exec item %s: its progress was not read: %s", item.id, error)
-                    failed = True
-                else:
-                    for part in progress.parts:
-                        if on_output is not None:
-                            await on_output(part.stream, part.text)
-                        after = part.seq
-                    if progress.parts:
-                        polls.reset()
-                        continue  # more may wait behind a full page
-                    if progress.state in SETTLED:
-                        return progress
-                now = self._clock()
-                if not cut and now >= item.deadline:
-                    cut = True
-                    await self._stop(rctx, org_id, item.id, StopKind.DEADLINE, epoch)
-                if attach and now >= item.deadline + self._grace:
-                    return None
-                await self._pause(None if failed else woken, polls.failed())
-
-    async def _pause(self, woken: asyncio.Event | None, seconds: float) -> None:
-        """Sleeps for `seconds`, or until `woken` is set, if sooner."""
-        if woken is None:
-            await self._sleep(seconds)
-            return
-        if woken.is_set():
-            return
-        sleeping = asyncio.ensure_future(self._sleep(seconds))
-        waking = asyncio.ensure_future(woken.wait())
-        try:
-            await asyncio.wait((sleeping, waking), return_when=asyncio.FIRST_COMPLETED)
-        finally:
-            sleeping.cancel()
-            waking.cancel()
+        while True:
+            wait = polls.failed()
+            failed = False
+            try:
+                progress = await self._exec_relay().watch(
+                    rctx, org_id, item.id, after, timedelta(seconds=wait)
+                )
+            except Exception as error:
+                if _final(error) or self._clock() >= item.deadline + self._grace:
+                    log.warning("exec item %s: its progress is lost", item.id, exc_info=True)
+                    await self._stop(rctx, org_id, item.id, StopKind.INTERRUPT, epoch)
+                    if attach:
+                        return None
+                    raise ToolFailed(
+                        ToolFailure.INTERRUPTED,
+                        "the platform lost track of the command while it ran, and stopped it; "
+                        "check the workspace before you run it again",
+                    ) from error
+                log.warning("exec item %s: its progress was not read: %s", item.id, error)
+                failed = True
+            else:
+                for part in progress.parts:
+                    if on_output is not None:
+                        await on_output(part.stream, part.text)
+                    after = part.seq
+                if progress.parts:
+                    polls.reset()
+                    continue  # more may wait behind a full page
+                if progress.state in SETTLED:
+                    return progress
+            now = self._clock()
+            if not cut and now >= item.deadline:
+                cut = True
+                await self._stop(rctx, org_id, item.id, StopKind.DEADLINE, epoch)
+            if attach and now >= item.deadline + self._grace:
+                return None
+            if failed:
+                await self._sleep(wait)  # a read that failed waited for nothing
 
     async def _stop(
         self, rctx: RequestContext, org_id: UUID, item_id: UUID, kind: StopKind, epoch: int | None

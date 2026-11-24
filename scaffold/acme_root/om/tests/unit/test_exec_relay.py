@@ -916,7 +916,7 @@ async def test_a_run_that_loses_its_items_progress_stops_it_and_answers_interrup
 # on it.
 
 FAR = timedelta(seconds=30)
-"""A poll's every wait, far past what any command here takes."""
+"""A poll's every wait, far past what any test here takes."""
 
 AT_ONCE = 0.1
 """The most seconds a woken runner takes to read what landed, in a test
@@ -925,7 +925,7 @@ whose poll waits `FAR`: anything read sooner was read on its wake."""
 
 class Reads:
     """The exec relay, counting each read of an item's progress by the item
-    it read."""
+    it reads, as it begins."""
 
     def __init__(self, relay: ExecRelayManagerInterface) -> None:
         self._relay = relay
@@ -935,15 +935,22 @@ class Reads:
         return getattr(self._relay, name)
 
     async def watch(
-        self, rctx: RequestContext, org_id: UUID, item_id: UUID, after_seq: int
+        self,
+        rctx: RequestContext,
+        org_id: UUID,
+        item_id: UUID,
+        after_seq: int,
+        wait: timedelta = timedelta(0),
     ) -> ExecProgress:
-        progress = await self._relay.watch(rctx, org_id, item_id, after_seq)
         self.of[item_id] += 1
-        return progress
+        return await self._relay.watch(rctx, org_id, item_id, after_seq, wait)
 
-    async def read_once(self, item_id: UUID) -> None:
+    async def waiting(self, item_id: UUID) -> None:
+        """Returns once a read of the item began and had the time to read:
+        the runner waits on what lands next now."""
         for _ in range(500):
             if self.of[item_id]:
+                await asyncio.sleep(0.02)
                 return
             await asyncio.sleep(0.002)
         raise AssertionError(f"exec item {item_id} was never read")
@@ -986,7 +993,7 @@ async def test_a_runner_reads_a_part_and_the_result_as_each_lands_never_on_its_p
         runner.run(wall.workspace, command(wall.epoch), sink, seal=NO_SEAL)
     )
     row = await host.claim_soon()
-    await relay.read_once(host.item_id(row))  # and it waits on its poll now
+    await relay.waiting(host.item_id(row))
     pushed = time.monotonic()
     await host.push(row, (0, "building\n"))
     await asyncio.wait_for(printed.wait(), 5)
@@ -1022,7 +1029,7 @@ async def test_a_runner_whose_wake_is_dropped_reads_the_result_on_its_poll(
     runner, relay = polling(wall, every)
     running = asyncio.ensure_future(runner.run(wall.workspace, command(wall.epoch), seal=NO_SEAL))
     row = await host.claim_soon()
-    await relay.read_once(host.item_id(row))
+    await relay.waiting(host.item_id(row))
     finished = time.monotonic()
     await host.finish(row, 0, "ok\n")
     ran = await asyncio.wait_for(running, 5)
@@ -1053,8 +1060,8 @@ async def test_a_wake_for_another_item_or_tenant_wakes_no_runner_but_the_one_tha
     by_key = {ExecPayload.model_validate(row.payload).key: row for row in rows}
     ours_row, theirs_row = by_key[ours_spec.key], by_key[theirs_spec.key]
     ours_id, theirs_id = host.item_id(ours_row), host.item_id(theirs_row)
-    await ours_reads.read_once(ours_id)
-    await theirs_reads.read_once(theirs_id)
+    await ours_reads.waiting(ours_id)
+    await theirs_reads.waiting(theirs_id)
     read = ours_reads.of[ours_id]
     # A wake for an item no runner waits on, one for ours under another
     # tenant, and the other session's result.

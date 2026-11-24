@@ -51,6 +51,7 @@ from acme.om.exec_relay.rules import (
     OUTPUT_KIND,
     PUSH_BYTES,
     PUSH_PARTS,
+    SETTLED,
     asks,
     claimed_row,
     dispatch_objects,
@@ -743,9 +744,32 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             await self._delete(org_id, slot.reference)
 
     async def watch(
-        self, rctx: RequestContext, org_id: UUID, item_id: UUID, after_seq: int
+        self,
+        rctx: RequestContext,
+        org_id: UUID,
+        item_id: UUID,
+        after_seq: int,
+        wait: timedelta = timedelta(0),
     ) -> ExecProgress:
         ctx = await self._service(rctx, org_id)
+        if wait <= timedelta(0):
+            return await self._progress(ctx, org_id, item_id, after_seq)
+        # The wait is held before the read, so a part or a result that lands
+        # once the read is past wakes it.
+        with self._waiting(org_id, item_id) as woken:
+            progress = await self._progress(ctx, org_id, item_id, after_seq)
+            if progress.parts or progress.state in SETTLED:
+                return progress
+            try:
+                await asyncio.wait_for(woken.wait(), wait.total_seconds())
+            except TimeoutError:
+                return progress
+        return await self._progress(ctx, org_id, item_id, after_seq)
+
+    async def _progress(
+        self, ctx: TenantContext, org_id: UUID, item_id: UUID, after_seq: int
+    ) -> ExecProgress:
+        """One read of the item's progress, as `watch` answers it."""
         item = await self._item(org_id, item_id)
         texts: list[PartText] = []
         held = await self._streams.read(item.id, {item.row_id: after_seq}, self._options.output)
@@ -775,7 +799,9 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         )
 
     @contextmanager
-    def waiting(self, org_id: UUID, item_id: UUID) -> Iterator[asyncio.Event]:
+    def _waiting(self, org_id: UUID, item_id: UUID) -> Iterator[asyncio.Event]:
+        """An event set each time a part or the result of the item lands,
+        while it is open."""
         woken = asyncio.Event()
         waits = self._waits.setdefault((org_id, item_id), set())
         waits.add(woken)

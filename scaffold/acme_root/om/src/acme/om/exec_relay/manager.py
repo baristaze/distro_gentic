@@ -7,11 +7,9 @@ file an item moves crosses as an object in the store, sealed under a key of
 its own, by URLs signed for that object alone; it leaves the store once
 its item settles and what it held was taken."""
 
-import asyncio
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from contextlib import AbstractContextManager
-from datetime import datetime
+from datetime import datetime, timedelta
 from uuid import UUID
 
 from acme.infra.agent_workspaces import IsolationSpec
@@ -260,23 +258,24 @@ class ExecRelayManagerInterface(ABC):
     @abstractmethod
     @transition
     async def watch(
-        self, rctx: RequestContext, org_id: UUID, item_id: UUID, after_seq: int
+        self,
+        rctx: RequestContext,
+        org_id: UUID,
+        item_id: UUID,
+        after_seq: int,
+        wait: timedelta = timedelta(0),
     ) -> ExecProgress:
         """System-internal: the item's state, the parts of its output after
         `after_seq` the shared cache still holds, opened, and how it ended
         once it has, with all it printed: its output object, read from the
-        store and opened once it matches what its host declared."""
-        ...
+        store and opened once it matches what its host declared.
 
-    @abstractmethod
-    @stageless
-    def waiting(self, org_id: UUID, item_id: UUID) -> AbstractContextManager[asyncio.Event]:
-        """System-internal: while it is open, an event set each time a part
-        of the item's output or its result lands, in whichever process the
-        host pushed it, for no principal. It names the item alone and carries
-        nothing of it: the waiter reads the item through `watch`, as it
-        would unwoken. A wake is best effort, so a waiter still reads on a
-        slow timer of its own."""
+        With `wait`, a read that finds no new part of an item still running
+        waits up to that long for a part or its result to land, in
+        whichever process its host pushed it, and reads again at once when
+        one does. The wake names the item alone and wakes no other reader.
+        It is best effort: a read that waited it out answers what it found,
+        and its caller reads again on its own."""
         ...
 
     @abstractmethod
