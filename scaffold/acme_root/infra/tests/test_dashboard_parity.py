@@ -65,11 +65,13 @@ BOUNDED_LABELS = {
     "kind",
     "source",
     "size",
+    "provider",
 }
 """Every label a process exports, each with a closed set of values: a route
 template, a status, an outcome, a park's reason and age, a plan's tier, a
 host's state, a published matrix version, a kind of token, how a claim got
-its VM, an archive's size class. Any other label is a new review."""
+its VM, an archive's size class, a model provider's name. Any other label
+is a new review."""
 
 CLOUD_DIMENSIONS = {"environment", "service", "OTelLib"}
 """The dimensions the collector adds to every series in the cloud."""
