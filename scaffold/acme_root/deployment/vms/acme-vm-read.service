@@ -1,0 +1,17 @@
+# Reads the files a session's first commands read, once at each boot, in
+# the background (acme-vm-read): a VM no session waits on reads them
+# before its host asks for one, and one a session waits on reads them
+# while its host enrolls. Nothing orders the host after it: the host's
+# unit waits for it on a warm VM alone.
+[Unit]
+Description=The files a session's first commands read, read ahead
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/libexec/acme-vm-read
+IOSchedulingClass=idle
+Nice=19
+
+[Install]
+WantedBy=multi-user.target

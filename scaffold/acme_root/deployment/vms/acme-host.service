@@ -3,6 +3,10 @@
 # first-boot data; on Lima the pool writes it and restarts this unit), runs
 # as its own user in Docker's group, so its session's commands build and run
 # containers, and keeps its home on /run, so no credential reaches the disk.
+# On a warm VM, whose seed says no session waits on it yet, it starts once
+# the boot's read of the files a session's first commands read is done
+# (acme-vm-read), so the pool counts the VM warm only then; on any other,
+# it starts at once.
 [Unit]
 Description=Acme host of a VM of the cloud pool
 After=network-online.target docker.service acme-vm-seed.service
@@ -18,6 +22,7 @@ EnvironmentFile=/etc/acme-host/host.env
 RuntimeDirectory=acme-host
 RuntimeDirectoryMode=0700
 RuntimeDirectoryPreserve=yes
+ExecStartPre=+/usr/local/libexec/acme-vm-read --warm /run/acme-vm/seed.json
 ExecStartPre=+/usr/bin/install -o acme-host -g acme-host -m 0400 /etc/acme-host/ceilings.toml /run/acme-host/ceilings.toml
 ExecStart=/opt/acme-host/venv/bin/acme-host run
 # 2 a setting is wrong, 3 not enrolled, 5 a probe a person must fix, 7

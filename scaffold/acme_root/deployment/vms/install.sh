@@ -64,12 +64,15 @@ install -m 0644 "$HERE/host.env" /etc/acme-host/host.env
 install -m 0644 "$HERE/ceilings.toml" /etc/acme-host/ceilings.toml
 
 # Its units: the seed read from the cloud's first-boot data, with the
-# lookups it routes, and the host.
+# lookups it routes, the read of the files a session's first commands read,
+# and the host.
 install -d -m 0755 /usr/local/libexec
 install -m 0755 "$HERE/acme-vm-seed" /usr/local/libexec/acme-vm-seed
 install -m 0755 "$HERE/acme-vm-dns" /usr/local/libexec/acme-vm-dns
+install -m 0755 "$HERE/acme-vm-read" /usr/local/libexec/acme-vm-read
 install -m 0644 "$HERE/acme-vm-seed.service" /etc/systemd/system/
+install -m 0644 "$HERE/acme-vm-read.service" /etc/systemd/system/
 install -m 0644 "$HERE/acme-host.service" /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable acme-vm-seed.service acme-host.service
+systemctl enable acme-vm-seed.service acme-vm-read.service acme-host.service
 echo "the host is installed; keep this VM's disk as the cloud pool's image"

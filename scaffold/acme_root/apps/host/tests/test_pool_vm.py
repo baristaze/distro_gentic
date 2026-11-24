@@ -92,6 +92,34 @@ def test_a_vm_names_nothing_secret_in_its_settings_and_its_seed_holds_two_things
     assert "seed.json" in GUEST_WRITE and "systemctl restart acme-host" in GUEST_WRITE
 
 
+def test_a_warm_vm_reads_ahead_before_its_host_asks_and_any_other_while_it_enrolls() -> None:
+    host = (VMS / "acme-host.service").read_text()
+    pre = re.findall(r"^ExecStartPre=(.*)$", host, flags=re.MULTILINE)
+    assert pre[0] == "+/usr/local/libexec/acme-vm-read --warm /run/acme-vm/seed.json", (
+        "the host starts once a warm VM's read is done"
+    )
+    assert "acme-vm-read" not in "".join(
+        re.findall(r"^(?:After|Requires|Wants|BindsTo)=(.*)$", host, flags=re.MULTILINE)
+    ), "nothing else holds the host for the read"
+    read = (VMS / "acme-vm-read.service").read_text()
+    assert re.findall(r"^(\w+)=(.*)$", read, flags=re.MULTILINE) == [
+        ("Description", "The files a session's first commands read, read ahead"),
+        ("Type", "oneshot"),
+        ("RemainAfterExit", "yes"),
+        ("ExecStart", "/usr/local/libexec/acme-vm-read"),
+        ("IOSchedulingClass", "idle"),
+        ("Nice", "19"),
+        ("WantedBy", "multi-user.target"),
+    ], "read once at each boot, in the background, ordered before nothing"
+    script = (VMS / "acme-vm-read").read_text()
+    assert "systemctl start acme-vm-read.service" in script and '.get("warm") is True' in script
+    assert re.search(r"^bound=\d+$", script, flags=re.MULTILINE), "the read has a bound"
+    assert 'timeout -k 5 "$bound"' in script
+    install = (VMS / "install.sh").read_text()
+    assert '"$HERE/acme-vm-read" /usr/local/libexec/acme-vm-read' in install
+    assert "systemctl enable acme-vm-seed.service acme-vm-read.service acme-host.service" in install
+
+
 def resolved(location: str) -> Path:
     return Path(location).resolve()
 
@@ -116,6 +144,17 @@ def test_the_seed_says_where_to_call_and_its_key_goes_once_traded(tmp_path: Path
     (tmp_path / "bad.json").write_text("{")
     with pytest.raises(BadSetting):
         read_seed(tmp_path / "bad.json")
+
+
+def test_a_warm_vms_seed_says_so_until_its_host_trades_the_key(tmp_path: Path) -> None:
+    warm = tmp_path / "seed.json"
+    warm.write_bytes(seed("http://gateway.test/", "hmk_the-key", warm=True))
+    assert json.loads(warm.read_text())["warm"] is True
+    assert read_seed(warm) == ("http://gateway.test", "hmk_the-key")
+    forget_key(warm)
+    assert json.loads(warm.read_text()) == {"api_url": "http://gateway.test"}, (
+        "a start of the host after its claim never waits on the read"
+    )
 
 
 class Ec2Wire:

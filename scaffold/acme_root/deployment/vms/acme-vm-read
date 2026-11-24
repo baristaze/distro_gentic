@@ -1,0 +1,55 @@
+#!/bin/sh
+# Reads the files a session's first commands read, so this VM's disk holds
+# their blocks before a session waits on them: a disk made from the pool's
+# image loads each block from the cloud's store the first time it is read.
+# The files are the host program and its runtime, git, ripgrep, and
+# Docker's own. The read stops at its bound, whole or not, and never fails.
+#
+#   acme-vm-read                 the read, at once: as acme-vm-read.service
+#                                runs it, in the background, once at each
+#                                boot, and as any other caller runs it
+#   acme-vm-read --warm <seed>   before the host starts: on a warm VM,
+#                                which no session waits on yet, it waits for
+#                                this boot's read, so the host asks for a
+#                                session, and the pool counts the VM warm,
+#                                only once it is read; on any other VM it
+#                                returns at once, and the host enrolls
+#                                while the read goes on
+set -u
+bound=60
+
+if [ "${1:-}" = --warm ]; then
+  seed=${2:?the seed}
+  warm=$(/opt/acme-host/venv/bin/python -I -c '
+import json, sys
+print(json.load(open(sys.argv[1])).get("warm") is True)
+' "$seed" 2>/dev/null) || exit 0
+  if [ "$warm" = True ]; then
+    systemctl start acme-vm-read.service || true
+  fi
+  exit 0
+fi
+
+# Each path that stands, the tools found wherever the Linux puts them.
+set --
+for path in /opt/acme-host /usr/lib/git-core /usr/libexec/docker; do
+  if [ -e "$path" ]; then set -- "$@" "$path"; fi
+done
+for tool in git rg docker dockerd docker-proxy docker-init containerd \
+  containerd-shim-runc-v2 runc; do
+  if found=$(command -v "$tool"); then set -- "$@" "$found"; fi
+done
+# None stands: find, given no path, would read its working directory.
+if [ "$#" = 0 ]; then exit 0; fi
+
+began=$(date +%s)
+timeout -k 5 "$bound" \
+  sh -c 'find -H "$@" -xdev -type f -print0 | xargs -0r cat >/dev/null' sh "$@"
+status=$?
+took=$(($(date +%s) - began))
+case $status in
+0) echo "acme-vm-read: read the image's hot paths in ${took}s" ;;
+124 | 137) echo "acme-vm-read: stopped at its bound, ${bound}s" ;;
+*) echo "acme-vm-read: read the image's hot paths in ${took}s, some unread ($status)" ;;
+esac
+exit 0
