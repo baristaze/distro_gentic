@@ -486,33 +486,36 @@ host other than the one that holds its workspace.
 ## PLC-21 A cloud VM is its session's alone, holds nothing, and goes
 
 **Principle.** A cloud session whose workspace is a VM runs on a VM
-of its own, which runs the host program and pulls its work through the
-exec relay. Its host trades a one-use key for a credential of the
-session's own pool, and is handed that session's work alone. It holds no
-database credential, model key, history, or cloud role, and its key and
-credential never reach its disk. Its egress is closed outside its guest.
-A session kept by snapshots keeps its directory sealed under its key in
-the object store, 30 days by default past its last activity, and no
-disk is imaged. A VM with no host stops; every path that starts a VM
-lets it go.
+of its own, whose host program pulls its work through the exec relay.
+Its host trades a one-use key for a credential of the session's own
+pool, and is handed that session's work alone. It holds no database
+credential, model key, history, or cloud role, and its key and
+credential never reach its disk. Its egress and lookups are closed
+outside its guest. A session kept by snapshots keeps its directory
+sealed under its key in the object store, 30 days by default past its
+last activity, and no disk is imaged. A VM with no host stops; every
+path that starts a VM lets it go.
 
 **Source.** Placement and Workspace Hosts, The Cloud Pool.
 
 **Look for.** How a VM's host gets its credential and what its
 claims are held to; what a VM's image, its settings, its seed, and
-its role hold; the network rules a VM starts in; what a run's end
-keeps of a VM, where, and under whose key, and what the pool's role
-may copy of a disk; what a restore starts its VM from, what it hands
-the VM's host to fetch, and what it lets go when it fails; each path
-that starts a VM and the one that lets it go, the sweep's among them;
-what a VM with no host to work for comes to; what removes a session's
-archives, and when.
+its role hold; the network rules a VM starts in, and the names its
+network resolves; what a run's end keeps of a VM, where, and under
+whose key, and what the pool's role may copy of a disk; what a restore
+starts its VM from, what it hands the VM's host to fetch, and what it
+lets go when it fails; each path that starts a VM and the one that
+lets it go, the sweep's among them; what a VM with no host to work for
+comes to; what removes a session's archives, and when.
 
 **Violation.** A VM's host enrolled with a tenant's token, or handed
 another session's work; a database credential, a model key, a platform
 secret, or a cloud role in a VM; a key or a live credential on a
 disk; egress closed by a rule inside the guest, or open to more than
-the gateway and the session's egress; the platform calling into a VM;
+the gateway and the session's egress; a pool's network that resolves a
+name a closed VM does not need, lets through a lookup its firewall
+cannot judge, or runs the platform's other services; the platform
+calling into a VM;
 an image or a volume snapshot of a VM's disk, made by the pool or
 allowed by its role; a session's files kept outside its key's seal, or
 sent before their size was checked; a VM's host handed a link or a key

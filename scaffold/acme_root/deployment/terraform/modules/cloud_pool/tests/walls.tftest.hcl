@@ -1,5 +1,6 @@
 # A VM of the cloud pool reaches nothing but the gateway, and what its
-# session's policy opened; nothing reaches in; it holds no role; its disk is
+# session's policy opened; nothing reaches in; its network resolves the
+# names it allows alone, and fails closed; it holds no role; its disk is
 # encrypted under the pool's key; and the platform's hold on the VMs
 # starts them from the template alone and passes no role. The mock image
 # boots from /dev/sda1, as many Linux images do.
@@ -32,6 +33,7 @@ variables {
   subnet_ids                = ["subnet-0a", "subnet-0b"]
   gateway_security_group_id = "sg-0gateway"
   image_id                  = "ami-0host"
+  allowed_names             = ["gateway.pool.acme.internal", "store.pool.acme.internal"]
 }
 
 run "a_closed_vm_reaches_the_gateway_alone" {
@@ -66,6 +68,74 @@ run "an_open_vm_adds_open_egress_and_nothing_reaches_in" {
     condition     = length([for rule in [aws_security_group.closed, aws_security_group.open] : rule if length(rule.ingress) > 0]) == 0
     error_message = "neither group admits anything in"
   }
+}
+
+run "the_pools_network_resolves_the_allowed_names_alone_and_fails_closed" {
+  # Applied against the mock provider, so the rules name their lists by id.
+  command = apply
+
+  assert {
+    condition     = aws_route53_resolver_firewall_domain_list.allowed.domains == toset(["gateway.pool.acme.internal", "store.pool.acme.internal"])
+    error_message = "the allowed list is the input's names, exactly"
+  }
+
+  assert {
+    condition     = aws_route53_resolver_firewall_rule.allow.action == "ALLOW" && aws_route53_resolver_firewall_rule.allow.firewall_domain_list_id == aws_route53_resolver_firewall_domain_list.allowed.id
+    error_message = "the allow rule names the allowed list"
+  }
+
+  assert {
+    condition     = aws_route53_resolver_firewall_rule.allow.firewall_domain_redirection_action == "TRUST_REDIRECTION_DOMAIN"
+    error_message = "an allowed name answers through the alias its zone names"
+  }
+
+  assert {
+    condition     = aws_route53_resolver_firewall_rule.block.action == "BLOCK" && aws_route53_resolver_firewall_rule.block.firewall_domain_list_id == aws_route53_resolver_firewall_domain_list.every_name.id && aws_route53_resolver_firewall_domain_list.every_name.domains == toset(["*"])
+    error_message = "the block rule names every other name"
+  }
+
+  assert {
+    condition     = aws_route53_resolver_firewall_rule.allow.priority < aws_route53_resolver_firewall_rule.block.priority
+    error_message = "the allowed names are judged before the block on every name"
+  }
+
+  assert {
+    condition = (
+      aws_route53_resolver_firewall_rule.allow.firewall_rule_group_id == aws_route53_resolver_firewall_rule_group.names.id
+      && aws_route53_resolver_firewall_rule.block.firewall_rule_group_id == aws_route53_resolver_firewall_rule_group.names.id
+    )
+    error_message = "both rules are the one group's"
+  }
+
+  assert {
+    condition     = aws_route53_resolver_firewall_rule_group_association.names.vpc_id == "vpc-0pool" && aws_route53_resolver_firewall_rule_group_association.names.firewall_rule_group_id == aws_route53_resolver_firewall_rule_group.names.id
+    error_message = "the group holds the pool's network"
+  }
+
+  assert {
+    condition     = aws_route53_resolver_firewall_config.closed.resource_id == "vpc-0pool" && aws_route53_resolver_firewall_config.closed.firewall_fail_open == "DISABLED"
+    error_message = "a lookup the firewall cannot judge is refused, never let through"
+  }
+}
+
+run "a_network_that_resolves_no_name_is_refused" {
+  command = plan
+
+  variables {
+    allowed_names = []
+  }
+
+  expect_failures = [var.allowed_names]
+}
+
+run "a_wildcard_name_is_refused" {
+  command = plan
+
+  variables {
+    allowed_names = ["gateway.pool.acme.internal", "*.acme.example"]
+  }
+
+  expect_failures = [var.allowed_names]
 }
 
 run "a_vm_holds_no_role_and_its_disk_is_sealed_under_the_pools_key" {

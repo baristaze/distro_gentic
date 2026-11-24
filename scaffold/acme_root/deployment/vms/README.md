@@ -26,6 +26,13 @@ The files here make the image every such VM starts from.
   data, which [`acme-vm-seed`](acme-vm-seed) reads at each boot.
 - **Its home**, on `/run/acme-host`: its credential lives in memory, so
   the VM's disk holds none.
+- **Its lookups**, in the cloud: [`acme-vm-dns`](acme-vm-dns) sends the
+  platform's name, the host the seed's `api_url` names, to the network's
+  resolver, and every other name to a public resolver. The pool's
+  network resolves the platform's names alone
+  ([ADR 2074](../../docs/adr/2074-the-cloud-pools-network-resolves-the-names-a-closed-vm-needs-alone.md)),
+  so only a VM whose session chose open egress resolves the rest. On
+  Lima it never runs, and the guest keeps its hypervisor's resolver.
 
 No database login, no model key, no credential of the platform's, and no
 instance role.

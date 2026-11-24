@@ -65,9 +65,11 @@ install -d -m 0755 /etc/acme-host
 install -m 0644 "$HERE/host.env" /etc/acme-host/host.env
 install -m 0644 "$HERE/ceilings.toml" /etc/acme-host/ceilings.toml
 
-# Its units: the seed read from the cloud's first-boot data, and the host.
+# Its units: the seed read from the cloud's first-boot data, with the
+# lookups it routes, and the host.
 install -d -m 0755 /usr/local/libexec
 install -m 0755 "$HERE/acme-vm-seed" /usr/local/libexec/acme-vm-seed
+install -m 0755 "$HERE/acme-vm-dns" /usr/local/libexec/acme-vm-dns
 install -m 0644 "$HERE/acme-vm-seed.service" /etc/systemd/system/
 install -m 0644 "$HERE/acme-host.service" /etc/systemd/system/
 systemctl daemon-reload

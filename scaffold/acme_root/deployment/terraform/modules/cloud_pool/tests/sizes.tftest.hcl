@@ -28,6 +28,7 @@ variables {
   vpc_id                    = "vpc-0pool"
   subnet_ids                = ["subnet-0a", "subnet-0b"]
   gateway_security_group_id = "sg-0gateway"
+  allowed_names             = ["gateway.pool.acme.internal"]
   image_id                  = "ami-0host"
   sizes = {
     xs = { type = "m7g.large", cpus = 2, memory_mb = 8192 }
