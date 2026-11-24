@@ -3,6 +3,7 @@ VM that runs the host program for one session. A warm VM
 was started ahead of the session that claims it, and names none yet."""
 
 from datetime import datetime
+from enum import StrEnum
 from uuid import UUID
 
 from pydantic import Field
@@ -71,3 +72,14 @@ class PoolClaim(OmBase):
 
     vm: PoolVm
     displaced: PoolVm | None = None
+
+
+class ClaimSource(StrEnum):
+    """How a claim got its session's VM: a warm one it took, a new one it
+    started from the pool's image, the one its session held, found
+    running, or that one started again on its own disk."""
+
+    WARM = "warm"
+    NEW = "new"
+    HELD = "held"
+    RESTARTED = "restarted"

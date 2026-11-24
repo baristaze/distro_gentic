@@ -33,6 +33,9 @@ if [ -z "$link" ]; then
   exit 1
 fi
 
+# systemd-resolved reads the drop-in as its own user, so any user may read
+# it, whatever umask the caller set: acme-vm-seed's is 077.
+umask 022
 install -d -m 0755 "$(dirname "$dropin")"
 printf '[Resolve]\nDNS=%s\nDomains=~.\n' "$public" > "$dropin"
 systemctl restart systemd-resolved

@@ -38,6 +38,11 @@ variable "maintenance_log_group_name" {
   type        = string
 }
 
+variable "runner_log_group_name" {
+  description = "The runner's log group; each settled model call's prompt tokens are read from its line there."
+  type        = string
+}
+
 variable "queue_names" {
   description = "The inbound queues, prefix included; each gets a backlog alarm, and its -dead twin a dead-letter alarm."
   type        = list(string)
@@ -121,4 +126,16 @@ variable "outbox_oldest_pending_seconds" {
   description = "How long ago the oldest outbox row not yet relayed may have landed before the outbox lag alarm fires. Five minutes: a row relays at once, so this long is a relay that failed at the request and on about four sweep passes since, 30, 60, and 120 seconds apart."
   type        = number
   default     = 300
+}
+
+variable "prompt_cache_read_percent" {
+  description = "The prompt cache's share of settled model calls' prompt tokens, in percent, below which the prompt cache alarm fires. Half: a loop's calls after its first read most of their prompt from the cache, so less is a cache rebuilt on most calls."
+  type        = number
+  default     = 50
+}
+
+variable "prompt_cache_period_seconds" {
+  description = "How long one period of the prompt cache alarm is. An hour: long enough that a quiet system's few first calls, which read no cache, do not fire it alone."
+  type        = number
+  default     = 3600
 }

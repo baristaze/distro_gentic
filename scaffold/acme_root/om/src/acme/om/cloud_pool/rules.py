@@ -1,6 +1,7 @@
 """Pure rules of the cloud pool: how its VMs are named, the key a VM is
 handed, what a session's spec may ask of the pool's VMs and the size it
-gets, and how many warm VMs to start. Values in, values out; no clock, no
+gets, how many warm VMs to start, and the size class a restore is timed
+under. Values in, values out; no clock, no
 storage, no settings."""
 
 import json
@@ -26,6 +27,18 @@ HASHED = 16
 DEFAULT_SIZE = VmSize.S
 """The size of a VM whose session's spec asks none, and of every warm
 VM: a claim of another size starts a VM of its own."""
+
+
+MIB = 1024 * 1024
+
+ARCHIVE_SIZES = (
+    (10 * MIB, "under_10mib"),
+    (100 * MIB, "under_100mib"),
+    (1024 * MIB, "under_1gib"),
+)
+"""The classes a restore is timed under, by its archive's bytes: each
+class's bound and its label, a few, so the label stays bounded. An archive
+at the last bound or past it is `1gib_and_over`."""
 
 
 def vm_name(prefix: str) -> str:
@@ -99,3 +112,12 @@ def warm_to_start(wanted: int, warm: int, room: int) -> int:
     when `warm` stand or start already, and never past the `room` the
     pool's maximum leaves."""
     return max(0, min(wanted - warm, room))
+
+
+def archive_size(size: int) -> str:
+    """The class of an archive of `size` bytes, which a restore of it is
+    timed under: never the bytes themselves."""
+    for bound, label in ARCHIVE_SIZES:
+        if size < bound:
+            return label
+    return "1gib_and_over"

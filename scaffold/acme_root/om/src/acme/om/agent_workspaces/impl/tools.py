@@ -65,6 +65,7 @@ from acme.infra.agent_workspaces import (
     SnapshotRefused,
 )
 from acme.infra.exceptions import InfraException
+from acme.infra.observability import CLOUD_POOL_RESTORE_SECONDS
 from acme.infra.transports import OutputSink, TransportInterface
 from acme.om.agent_steps import AgentStepsManagerInterface
 from acme.om.agent_steps.types.agent_step import AgentStep
@@ -78,6 +79,7 @@ from acme.om.agent_workspaces.types.host import HostOffer
 from acme.om.agent_workspaces.types.snapshot import HostSnapshot, KeptSnapshot
 from acme.om.base import OmBase, new_id, utcnow
 from acme.om.cloud_pool import CloudPoolManagerInterface
+from acme.om.cloud_pool.rules import archive_size
 from acme.om.context import Permission, TenantContext
 from acme.om.exceptions import NotFound
 from acme.om.tools.impl.snapshots import SnapshotStore, snapshot_key
@@ -717,7 +719,9 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface, PinnedWorkspacesInt
         gives is emptied and filled from the parts, each trusted only once
         it opens under the session's key and matches its hash. One that
         fails part way lets that VM go, so no half-restored directory is
-        ever found again, and touches nothing kept."""
+        ever found again, and touches nothing kept. One that ends is timed,
+        from its first part to its unpack's end, under its archive's size
+        class."""
         assert self._cloud is not None
         snapshots, transport, record_seal = self._archives()
         await self._in_bucket(ctx, agent_session_id, restore)
@@ -728,6 +732,7 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface, PinnedWorkspacesInt
             )
         manifest = await snapshots.manifest(ctx, agent_session_id, restore)
         held = await self._cloud.prepare(ctx, agent_session_id, pinned, restore.id)
+        began = self._clock()
         try:
             await pool_directory.unpack(
                 ctx,
@@ -745,6 +750,8 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface, PinnedWorkspacesInt
             except Exception:
                 log.exception("session %s: the VM of a lost restore stays", agent_session_id)
             raise
+        took = (self._clock() - began).total_seconds()
+        CLOUD_POOL_RESTORE_SECONDS.labels(size=archive_size(restore.size)).observe(took)
         return held
 
     async def _recycled(self, ctx: TenantContext, agent_session_id: UUID) -> None:

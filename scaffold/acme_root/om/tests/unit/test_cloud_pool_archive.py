@@ -9,9 +9,10 @@ starts from the pool's image and holds the same files, and nothing of what
 was written outside the directory. A directory past the bound is refused
 before it is packed. An archive that fails part way keeps no part, the
 snapshot before stays the latest, and its VM stays; a restore that fails
-part way lets its new VM go and touches nothing kept. A restore whose
-parts take longer to move than the pack's bound still unpacks, its bound
-counted from the unpack's start. The sweep removes
+part way lets its new VM go and touches nothing kept. A restore that ends
+is timed once, under its archive's size class, and one that fails is not.
+A restore whose parts take longer to move than the pack's bound still
+unpacks, its bound counted from the unpack's start. The sweep removes
 the archives of a session idle past 30 days, by its last activity, and
 keeps a newer one's."""
 
@@ -24,6 +25,7 @@ from typing import Any, cast
 from uuid import UUID
 
 import pytest
+from prometheus_client import REGISTRY
 from unit.test_cloud_pool import IMAGE, PREFIX, Placed, Pool, stage
 
 from acme.infra.agent_workspaces import (
@@ -53,6 +55,7 @@ from acme.om.agent_workspaces.impl.tools import (
 from acme.om.agent_workspaces.types.host import HostOffer
 from acme.om.base import new_id, utcnow
 from acme.om.cloud_pool.impl.manager import CloudPoolOptions
+from acme.om.cloud_pool.rules import ARCHIVE_SIZES, archive_size
 from acme.om.cloud_pool.types.archive import PoolArchive
 from acme.om.context import TenantContext
 from acme.om.hosts.types.placement import PlacementState
@@ -315,6 +318,31 @@ async def test_a_run_keeps_the_directory_in_sealed_parts_its_vm_goes_and_the_nex
     assert no_disk_kept(kept.pool)
 
 
+def restores() -> dict[str, float]:
+    """The restores the process timed, by size class."""
+    name = "acme_cloud_pool_restore_seconds_count"
+    classes = [label for _, label in ARCHIVE_SIZES] + ["1gib_and_over"]
+    return {size: REGISTRY.get_sample_value(name, {"size": size}) or 0.0 for size in classes}
+
+
+def timed_since(before: dict[str, float]) -> dict[str, float]:
+    now = restores()
+    return {size: now[size] - before[size] for size in now if now[size] != before[size]}
+
+
+async def test_a_restore_is_timed_once_under_its_archives_size_class(kept: Kept) -> None:
+    agent_session_id = await kept.loop.start(KEEPER.name)
+    workspace, epoch = await kept.prepared(agent_session_id)
+    written(workspace, PLAIN)
+    snapshot = await kept.kept(workspace, epoch)
+    before = restores()
+
+    await kept.prepared(agent_session_id, restore=snapshot)
+
+    assert archive_size(snapshot.size) == "under_10mib"
+    assert timed_since(before) == {"under_10mib": 1}, "one restore, under its size class"
+
+
 async def test_a_directory_past_the_bound_is_refused_before_it_is_packed(
     tmp_path: Path,
 ) -> None:
@@ -380,10 +408,12 @@ async def test_a_restore_that_fails_part_way_lets_its_vm_go_and_touches_nothing_
         await write(workspace, path, data, epoch)
 
     monkeypatch.setattr(kept.transport, "write_file", cut)
+    timed = restores()
     with pytest.raises(BackendFailed, match="the host went away"):
         await kept.prepared(agent_session_id, restore=snapshot)
     monkeypatch.undo()
 
+    assert timed_since(timed) == {}, "a restore that failed is not timed"
     assert await kept.pool.rows() == [], "its VM went: no half-restored directory stands"
     assert await kept.stored(agent_session_id) == before, "the archive as it was"
     assert [s.id for s in await kept.history(agent_session_id)] == [snapshot.id]
