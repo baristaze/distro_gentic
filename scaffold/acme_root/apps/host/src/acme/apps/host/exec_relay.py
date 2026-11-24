@@ -20,7 +20,12 @@ runs through its own local transport, in the workspace it holds,
 prepared again first, on its base when it has one, so an instance that
 stopped since starts anew over its files. The output streams back a part
 at a time and the result is pushed once, each with the hash the host
-declares of the bytes it sends. From its claim until its result, its
+declares of the bytes it sends. The result carries how long the item's
+parts took here, by the host's own clock: from its claim to its detail's
+read, from there to its command's start, a write's download included,
+and the command, which the
+platform measures the relay by, when the item's detail says it keeps
+them. From its claim until its result, its
 detail's read and its prepare included, the host renews its lease, and a
 stop from the control stream ends the command at once: the transport ends
 its whole process tree.
@@ -183,17 +188,40 @@ class Ended:
 @dataclass
 class Running:
     """One item while it is here: the operation in flight, what stopped it,
-    and what it printed so far, for the result a stop answers with."""
+    and what it printed so far, for the result a stop answers with; and
+    when, by this host's clock, it was claimed, its detail read, and its
+    operation started and ended."""
 
     operation: asyncio.Future[Ended] | None = None
     stopped: str | None = None
     held_until: float = 0.0  # when its lease ends, by this host's clock
     printed: dict[str, list[str]] = field(default_factory=lambda: {"stdout": [], "stderr": []})
+    claimed: float = field(default_factory=time.monotonic)
+    read: float | None = None
+    started: float | None = None
+    ended: float | None = None
 
     def lease_end(self) -> float:
         """When its lease ends as it was last renewed: what a transfer that
         outlasts one lease is tried again within."""
         return self.held_until
+
+    def begin(self) -> None:
+        """Marks its command's start: a write's once its file is downloaded."""
+        self.started = time.monotonic()
+
+    def times(self) -> dict[str, float] | None:
+        """How long each part of it took here, in seconds, which its result
+        carries: from its claim to its detail read, from that read to its
+        command's start, a write's download included, and the command. None
+        when it never started."""
+        if self.read is None or self.started is None or self.ended is None:
+            return None
+        return {
+            "detail": self.read - self.claimed,
+            "start": self.started - self.read,
+            "command": self.ended - self.started,
+        }
 
 
 class ExecutorRelayImpl(ExecutorInterface):
@@ -315,6 +343,11 @@ class ExecutorRelayImpl(ExecutorInterface):
             if running.stopped == "revoke":
                 log.info("item %s: its lease was revoked, so nothing is pushed", item_id)
                 return
+            # Its times go only to a platform that keeps them: an earlier
+            # release refuses a result that carries them.
+            times = running.times()
+            if times is not None and detail is not None and detail.times:
+                result["times"] = times
             await self._push(item_id, result, running.held_until)
         finally:
             renewal.cancel()
@@ -328,6 +361,7 @@ class ExecutorRelayImpl(ExecutorInterface):
         detail it was read by."""
         async with self._client() as client:
             detail = await client.exec_detail(item_id)
+        running.read = time.monotonic()
         spec = IsolationSpec.model_validate(detail.spec)
         reads = (detail.location,) if spec.mode is IsolationMode.HOST else ()
         differs = unlike(ask, spec, reads)
@@ -348,10 +382,12 @@ class ExecutorRelayImpl(ExecutorInterface):
             ended = Ended(_result(refused=(error.code, error.http_status), detail=error.message))
         else:
             if running.stopped is None:
+                running.begin()
                 running.operation = asyncio.ensure_future(
-                    _operate(transport, self._objects, workspace, detail, parts.take)
+                    _operate(transport, self._objects, workspace, detail, parts.take, running.begin)
                 )
                 await asyncio.wait({running.operation})
+                running.ended = time.monotonic()
                 ended = _ended(running.operation)
         await parts.flush()
         if ended is None:
@@ -413,8 +449,10 @@ class ExecutorRelayImpl(ExecutorInterface):
         and no transport. The server starts for the call, and a stop ends
         it with its process."""
         if running.stopped is None:
+            running.started = time.monotonic()
             running.operation = asyncio.ensure_future(self._answered(detail))
             await asyncio.wait({running.operation})
+            running.ended = time.monotonic()
             ended = _ended(running.operation)
             if ended is not None:
                 return ended
@@ -792,16 +830,27 @@ class ExecutorRelayImpl(ExecutorInterface):
 
     async def _push(self, item_id: UUID, result: dict[str, Any], held_until: float) -> None:
         """Pushes how the item ended, tried again while its lease lasts: its
-        JSON as UTF-8."""
-        data = json.dumps(result, ensure_ascii=False, separators=(",", ":")).encode()
+        JSON as UTF-8. A result whose times are refused as invalid is pushed
+        once more without them: during a roll, the push may reach a replica
+        of an earlier release than the one that answered its detail, which
+        keeps no times, and the outcome still lands."""
         try:
-            await self._outlasting(
-                lambda client: client.push_exec_result(item_id, data), held_until
-            )
+            try:
+                await self._pushed(item_id, result, held_until)
+            except ApiError as error:
+                if error.status != 422 or "times" not in result:
+                    raise
+                log.info("item %s: its times were refused (%s), so it goes without", item_id, error)
+                plain = {key: value for key, value in result.items() if key != "times"}
+                await self._pushed(item_id, plain, held_until)
         except (ApiError, *WIRE_FAILURES) as error:
             # Settled already, by its lease, a stop, or the sweep: the first
             # settlement stands. One the platform never took is the sweep's.
             log.warning("item %s: its result was not taken: %s", item_id, error)
+
+    async def _pushed(self, item_id: UUID, result: dict[str, Any], held_until: float) -> None:
+        data = json.dumps(result, ensure_ascii=False, separators=(",", ":")).encode()
+        await self._outlasting(lambda client: client.push_exec_result(item_id, data), held_until)
 
     async def _outlasting(
         self, call: Callable[[ApiClient], Awaitable[object]], until: float
@@ -833,10 +882,13 @@ async def _operate(
     workspace: AgentWorkspace,
     detail: ExecDetailView,
     on_output: Sink,
+    fetched: Callable[[], None],
 ) -> Ended:
     """The one operation the item names, through the host's transport. A
     read's file is spooled for its upload; a write's is downloaded and
-    checked before a byte of it reaches the workspace."""
+    checked before a byte of it reaches the workspace, and `fetched` marks
+    its command's start there: the download crosses the store, as a read's
+    upload does, and is no part of the command's time."""
     request = detail.request
     match request["operation"]:
         case "run":
@@ -879,6 +931,7 @@ async def _operate(
             if not isinstance(transport, WritesFromFile):
                 raise CapabilityMissing(f"{transport.describe()} writes no file from disk")
             spooled = await objects.fetch(detail.file_in, detail.url)
+            fetched()
             try:
                 await transport.write_file_from(
                     workspace, request["path"], spooled.path, detail.epoch or 0

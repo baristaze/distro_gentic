@@ -9,7 +9,7 @@ its item settles and what it held was taken."""
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import datetime, timedelta
 from uuid import UUID
 
 from acme.infra.agent_workspaces import IsolationSpec
@@ -258,12 +258,24 @@ class ExecRelayManagerInterface(ABC):
     @abstractmethod
     @transition
     async def watch(
-        self, rctx: RequestContext, org_id: UUID, item_id: UUID, after_seq: int
+        self,
+        rctx: RequestContext,
+        org_id: UUID,
+        item_id: UUID,
+        after_seq: int,
+        wait: timedelta = timedelta(0),
     ) -> ExecProgress:
         """System-internal: the item's state, the parts of its output after
         `after_seq` the shared cache still holds, opened, and how it ended
         once it has, with all it printed: its output object, read from the
-        store and opened once it matches what its host declared."""
+        store and opened once it matches what its host declared.
+
+        With `wait`, a read that finds no new part of an item still running
+        waits up to that long for a part or its result to land, in
+        whichever process its host pushed it, and reads again at once when
+        one does. The wake names the item alone and wakes no other reader.
+        It is best effort: a read that waited it out answers what it found,
+        and its caller reads again on its own."""
         ...
 
     @abstractmethod

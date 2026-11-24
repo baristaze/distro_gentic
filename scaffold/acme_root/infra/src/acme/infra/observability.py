@@ -129,6 +129,33 @@ MODEL_SPEND_MICROS = Counter(
     ["matrix_version", "plan_tier"],
 )
 
+# A relayed item the runner sent and read, by where its time went: its
+# queue, its host's read of it, its start, its command, its store, and the
+# runner's read, each by its operation; and its overhead, the whole from
+# the runner's send to its read less the command's own time as its host
+# timed it. A host's times count only while they agree with the platform's
+# clock, so an item whose host sent none, or bad ones, records its queue
+# and its read alone, and no overhead. The runner observes them, at its
+# read.
+RELAY_BUCKETS = (
+    0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.15, 0.2, 0.3, 0.5, 0.75,
+    1, 1.5, 2, 2.5, 3, 5, 10, 30, 60, 120, 300,
+)  # fmt: skip
+EXEC_RELAY_PHASE_SECONDS = Histogram(
+    "acme_exec_relay_phase_seconds",
+    "How long a relayed item spent in each phase from its send to the runner's read of it, "
+    "by phase and operation",
+    ["phase", "operation"],
+    buckets=RELAY_BUCKETS,
+)
+EXEC_RELAY_OVERHEAD_SECONDS = Histogram(
+    "acme_exec_relay_overhead_seconds",
+    "A relayed item's time from the runner's send to its read, less its command's own, "
+    "by operation",
+    ["operation"],
+    buckets=RELAY_BUCKETS,
+)
+
 # A cold start of a VM of the cloud pool, from its start to its host's
 # enrollment. Every VM boots the pool's image, which a warm VM stands in
 # for; a warm claim, and a VM started again on its own disk, record none,

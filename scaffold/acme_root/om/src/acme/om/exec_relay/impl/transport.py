@@ -1,8 +1,10 @@
 """The runner's transports. The engine sees one transport interface; behind
-it the runner picks, per session, by its placement: the direct transport to
-a cloud workspace, or the exec relay into a customer's wall, where each
-operation of a call travels as keyed `exec` work to the host that holds the
-workspace and the runner waits for its result."""
+it the runner picks, per session: the exec relay to a host, inside a
+customer's wall or on a VM of the cloud pool, where each operation of a
+call travels as keyed `exec` work to the host that holds the workspace and
+the runner waits for its result; or the direct transport to a workspace
+the runner's own machine holds. Each relayed item the runner sent and read
+is measured by its phases."""
 
 import asyncio
 import hashlib
@@ -14,6 +16,7 @@ from uuid import UUID
 
 from acme.infra.agent_workspaces import AgentWorkspace, IsolationMode, IsolationSpec
 from acme.infra.exceptions import InfraException
+from acme.infra.observability import EXEC_RELAY_OVERHEAD_SECONDS, EXEC_RELAY_PHASE_SECONDS
 from acme.infra.transports import (
     CapabilityMissing,
     CommandResult,
@@ -37,7 +40,7 @@ from acme.om.exec_relay.exceptions import (
     UserNotRead,
 )
 from acme.om.exec_relay.manager import ExecRelayManagerInterface
-from acme.om.exec_relay.rules import exec_id
+from acme.om.exec_relay.rules import SETTLED, exec_id, phases
 from acme.om.exec_relay.types.exec import (
     OUTPUT_CHARS,
     REQUESTS,
@@ -62,8 +65,6 @@ from acme.timing import Retries, RetryPolicy
 
 log = logging.getLogger(__name__)
 
-SETTLED = frozenset({ExecState.DONE, ExecState.INTERRUPTED})
-
 
 class HostRefused(InfraException):
     """An operation its host refused, before or as it ran, with the status
@@ -81,8 +82,9 @@ class TransportRelayImpl(TransportInterface):
     """Each operation of a call is an item whose id derives from the call's
     key (`rules.exec_id`), so a run that resumes the call meets the items
     it sent before: it attaches to an execution still running, or reads its
-    stored result, and never starts a second. While it waits, the parts of
-    the output stream to `on_output`. A run cancelled while it sends or
+    stored result, and never starts a second. It waits woken by each part
+    and the result as they land, and the parts of the output stream to
+    `on_output`. A run cancelled while it sends or
     waits stops the item over its host's control stream; one whose deadline
     passes by this clock cuts it there.
 
@@ -317,11 +319,12 @@ class TransportRelayImpl(TransportInterface):
         on_output: OutputSink | None,
         content: bytes | None,
     ) -> tuple[ExecItem, ExecProgress]:
-        """The item sent, and how it settled."""
+        """The item sent, and how it settled, measured once it is read."""
         epoch = call.epoch
         rctx = self._stage()
         org_id = workspace.org_id
         item_id = exec_id(call.key, REQUESTS.dump_json(call.request), occurrence)
+        sent_at = self._clock()
         try:
             item = await self._send(rctx, org_id, call, occurrence, content)
             progress = await self._wait(rctx, org_id, item, on_output, epoch, attach=False)
@@ -332,6 +335,7 @@ class TransportRelayImpl(TransportInterface):
             await asyncio.shield(self._stop(rctx, org_id, item_id, StopKind.CANCEL, epoch))
             raise
         assert progress is not None  # a wait that does not attach never gives up
+        _measured(item, progress, sent_at, self._clock())
         return item, progress
 
     async def _send(
@@ -360,21 +364,29 @@ class TransportRelayImpl(TransportInterface):
         *,
         attach: bool,
     ) -> ExecProgress | None:
-        """Waits for the item to settle, streaming its parts. Past its
-        deadline by this clock it is cut on its host; an attaching wait
-        gives up a grace after that, and answers None.
+        """Waits for the item to settle, streaming its parts. Each read that
+        finds nothing new waits for what lands next, and each part and the
+        result wake it as they land, so it reads them at once. The poll's
+        wait, from `first_poll` doubling to `last_poll`, bounds each read's
+        wait, the fallback for a wake that never comes. Past its deadline by
+        this clock the item is cut on its host; an attaching wait gives up a
+        grace after that, and answers None.
 
         A read of its progress that fails for now is waited out until a
-        grace past the deadline. One that fails for good, or still fails
-        then, stops the item on its host, so nothing runs on that no call
-        waits for: the call answers interrupted, and an attaching wait
-        answers None."""
+        grace past the deadline, at the poll's pace. One that fails for
+        good, or still fails then, stops the item on its host, so nothing
+        runs on that no call waits for: the call answers interrupted, and an
+        attaching wait answers None."""
         after = -1
         polls = Retries(self._poll)
         cut = False
         while True:
+            wait = polls.failed()
+            failed = False
             try:
-                progress = await self._exec_relay().watch(rctx, org_id, item.id, after)
+                progress = await self._exec_relay().watch(
+                    rctx, org_id, item.id, after, timedelta(seconds=wait)
+                )
             except Exception as error:
                 if _final(error) or self._clock() >= item.deadline + self._grace:
                     log.warning("exec item %s: its progress is lost", item.id, exc_info=True)
@@ -387,6 +399,7 @@ class TransportRelayImpl(TransportInterface):
                         "check the workspace before you run it again",
                     ) from error
                 log.warning("exec item %s: its progress was not read: %s", item.id, error)
+                failed = True
             else:
                 for part in progress.parts:
                     if on_output is not None:
@@ -403,7 +416,8 @@ class TransportRelayImpl(TransportInterface):
                 await self._stop(rctx, org_id, item.id, StopKind.DEADLINE, epoch)
             if attach and now >= item.deadline + self._grace:
                 return None
-            await self._sleep(polls.failed())
+            if failed:
+                await self._sleep(wait)  # a read that failed waited for nothing
 
     async def _stop(
         self, rctx: RequestContext, org_id: UUID, item_id: UUID, kind: StopKind, epoch: int | None
@@ -501,6 +515,24 @@ class TransportPlacedImpl(TransportInterface):
         if await self._placement.inside_wall(workspace.org_id, workspace.id):
             return self._relayed
         return self._direct
+
+
+def _measured(item: ExecItem, progress: ExecProgress, sent_at: datetime, read_at: datetime) -> None:
+    """Observes where a done item's time went, by its phases, and its
+    overhead: the time from its send to its read less its command's own, as
+    its host timed it. Only an item this send made counts, so an item a
+    resumed run met is never counted twice, nor from a send that was not
+    its own."""
+    times = progress.times
+    if times is None or item.created_at < sent_at:
+        return
+    operation = item.operation.value
+    for phase, seconds in phases(times, read_at).items():
+        EXEC_RELAY_PHASE_SECONDS.labels(phase=phase.value, operation=operation).observe(seconds)
+    if times.host is not None:
+        overhead = (read_at - sent_at).total_seconds() - times.host.command
+        if overhead >= 0:
+            EXEC_RELAY_OVERHEAD_SECONDS.labels(operation=operation).observe(overhead)
 
 
 def _final(error: Exception) -> bool:

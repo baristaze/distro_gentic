@@ -1,8 +1,8 @@
 """Pure rules of the exec relay: the ids an item and its queue rows take from the
 call's key, what a repeat of an item may do, what an item asks of its host,
-which writer epoch is stale, how a settled item reads, and where the object
-a file item moves lives. Values in, values out; no clock, no storage, no
-settings."""
+which writer epoch is stale, how a settled item reads, where the object
+a file item moves lives, and where a done item's time went. Values in,
+values out; no clock, no storage, no settings."""
 
 import hashlib
 from datetime import UTC, datetime
@@ -15,7 +15,10 @@ from acme.om.exec_relay.types.exec import (
     OUTPUT_CHARS,
     SECRETS,
     ExecItem,
+    ExecPhase,
     ExecState,
+    ExecTimes,
+    HostTimes,
     ObjectKind,
 )
 from acme.om.placement.types.work import ExecEffect, HostIsolation
@@ -27,6 +30,15 @@ CONTROL_KIND = "exec_relay.exec_control.created"
 """The kind of the outbox row a control message lands with: the push of it
 wakes the control stream of the host it is for, wherever that stream is
 held open."""
+
+OUTPUT_KIND = "exec_relay.exec_output"
+"""The kind of the wake a part of an item's output, or its result, sends as
+it lands (`Topics.STREAM_APPENDED`, its group the item's id): the runner
+that waits on that item reads it at once. It names the item alone and
+carries nothing of it, and no claimant reads it."""
+
+SETTLED = frozenset({ExecState.DONE, ExecState.INTERRUPTED})
+"""The states an item ends in, which nothing moves it out of."""
 
 REPEATABLE_ATTEMPTS = 3
 """The claims a repeatable item's queue row may spend: a lost lease puts it
@@ -47,8 +59,9 @@ RESULT_CHARS = 4 * (2048 + ESCAPED_BYTES * (DETAIL_CHARS + SECRETS * (SECRET_NAM
 """The most a host's result of one item carries across the wall: the
 characters of its JSON in base64. A result holds how the item ended, the
 names of the secrets it used, why its host refused it, the offset a read
-was answered from, and the size and the digest of each object it uploaded:
-what it printed and what it read cross as those objects, never in it. So
+was answered from, the size and the digest of each object it uploaded,
+and its host's times: what it printed and what it read cross as those
+objects, never in it. So
 it is a few KiB, as a holder's call is (its route is one), whatever the
 command printed."""
 
@@ -194,3 +207,40 @@ def resent(item: ExecItem) -> bool:
         and item.outcome is not None
         and (item.outcome.stopped is not None)
     )
+
+
+def host_times(item: ExecItem, times: HostTimes | None, settled_at: datetime) -> HostTimes | None:
+    """The times a host sent with its result, kept while they agree with
+    the platform's clock: the item was claimed, and from that claim the
+    host's read, its start, and its command fit before the result was
+    stored and end by the item's deadline. Any other is dropped, and the
+    result stands without it."""
+    if times is None or item.claimed_at is None:
+        return None
+    ran = times.detail + times.start + times.command
+    if ran > (settled_at - item.claimed_at).total_seconds():
+        return None
+    if ran > (item.deadline - item.claimed_at).total_seconds():
+        return None
+    return times
+
+
+def phases(times: ExecTimes, read_at: datetime) -> dict[ExecPhase, float]:
+    """Where a done item's time went until the runner read it at `read_at`,
+    in seconds: each phase its times tell. Its queue and its read are the
+    platform's own; its host's read, start, and command are its host's
+    times, and its store is what is left of the time from its claim to its
+    result stored. An item whose host sent no times it kept tells its
+    queue and its read alone, and a phase two clocks put below zero is
+    none."""
+    seconds = {ExecPhase.READ: (read_at - times.settled_at).total_seconds()}
+    if times.claimed_at is not None:
+        seconds[ExecPhase.QUEUED] = (times.claimed_at - times.created_at).total_seconds()
+        if times.host is not None:
+            host = times.host
+            seconds[ExecPhase.DETAIL] = host.detail
+            seconds[ExecPhase.START] = host.start
+            seconds[ExecPhase.COMMAND] = host.command
+            held = (times.settled_at - times.claimed_at).total_seconds()
+            seconds[ExecPhase.STORE] = held - host.detail - host.start - host.command
+    return {phase: value for phase, value in seconds.items() if value >= 0}

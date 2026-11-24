@@ -20,6 +20,7 @@ from acme.om.exec_relay.types.exec import (
     ExecItem,
     ExecOutcome,
     ExecState,
+    HostTimes,
     StopKind,
 )
 from acme.om.placement.types.work import ExecOperation
@@ -156,6 +157,8 @@ class ExecRelayStorageContract:
                 "state": ExecState.DONE,
                 "outcome": ExecOutcome(exit_code=0),
                 "output": SEALED + b"output",
+                "claimed_at": utcnow(),
+                "host_times": HostTimes(detail=0.012, start=0.25, command=2.0),
                 "version": 2,
             }
         )
