@@ -40,7 +40,7 @@ from acme.om.exec_relay.exceptions import (
     UserNotRead,
 )
 from acme.om.exec_relay.manager import ExecRelayManagerInterface
-from acme.om.exec_relay.rules import exec_id, phases
+from acme.om.exec_relay.rules import SETTLED, exec_id, phases
 from acme.om.exec_relay.types.exec import (
     OUTPUT_CHARS,
     REQUESTS,
@@ -65,8 +65,6 @@ from acme.timing import Retries, RetryPolicy
 
 log = logging.getLogger(__name__)
 
-SETTLED = frozenset({ExecState.DONE, ExecState.INTERRUPTED})
-
 
 class HostRefused(InfraException):
     """An operation its host refused, before or as it ran, with the status
@@ -84,8 +82,9 @@ class TransportRelayImpl(TransportInterface):
     """Each operation of a call is an item whose id derives from the call's
     key (`rules.exec_id`), so a run that resumes the call meets the items
     it sent before: it attaches to an execution still running, or reads its
-    stored result, and never starts a second. While it waits, the parts of
-    the output stream to `on_output`. A run cancelled while it sends or
+    stored result, and never starts a second. It waits woken by each part
+    and the result as they land, and the parts of the output stream to
+    `on_output`. A run cancelled while it sends or
     waits stops the item over its host's control stream; one whose deadline
     passes by this clock cuts it there.
 
@@ -365,21 +364,29 @@ class TransportRelayImpl(TransportInterface):
         *,
         attach: bool,
     ) -> ExecProgress | None:
-        """Waits for the item to settle, streaming its parts. Past its
-        deadline by this clock it is cut on its host; an attaching wait
-        gives up a grace after that, and answers None.
+        """Waits for the item to settle, streaming its parts. Each read that
+        finds nothing new waits for what lands next, and each part and the
+        result wake it as they land, so it reads them at once. The poll's
+        wait, from `first_poll` doubling to `last_poll`, bounds each read's
+        wait, the fallback for a wake that never comes. Past its deadline by
+        this clock the item is cut on its host; an attaching wait gives up a
+        grace after that, and answers None.
 
         A read of its progress that fails for now is waited out until a
-        grace past the deadline. One that fails for good, or still fails
-        then, stops the item on its host, so nothing runs on that no call
-        waits for: the call answers interrupted, and an attaching wait
-        answers None."""
+        grace past the deadline, at the poll's pace. One that fails for
+        good, or still fails then, stops the item on its host, so nothing
+        runs on that no call waits for: the call answers interrupted, and an
+        attaching wait answers None."""
         after = -1
         polls = Retries(self._poll)
         cut = False
         while True:
+            wait = polls.failed()
+            failed = False
             try:
-                progress = await self._exec_relay().watch(rctx, org_id, item.id, after)
+                progress = await self._exec_relay().watch(
+                    rctx, org_id, item.id, after, timedelta(seconds=wait)
+                )
             except Exception as error:
                 if _final(error) or self._clock() >= item.deadline + self._grace:
                     log.warning("exec item %s: its progress is lost", item.id, exc_info=True)
@@ -392,6 +399,7 @@ class TransportRelayImpl(TransportInterface):
                         "check the workspace before you run it again",
                     ) from error
                 log.warning("exec item %s: its progress was not read: %s", item.id, error)
+                failed = True
             else:
                 for part in progress.parts:
                     if on_output is not None:
@@ -408,7 +416,8 @@ class TransportRelayImpl(TransportInterface):
                 await self._stop(rctx, org_id, item.id, StopKind.DEADLINE, epoch)
             if attach and now >= item.deadline + self._grace:
                 return None
-            await self._sleep(polls.failed())
+            if failed:
+                await self._sleep(wait)  # a read that failed waited for nothing
 
     async def _stop(
         self, rctx: RequestContext, org_id: UUID, item_id: UUID, kind: StopKind, epoch: int | None

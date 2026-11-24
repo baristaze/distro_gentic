@@ -1307,7 +1307,8 @@ class RootHooksPlatformImpl(RootHooksInterface):
             # A tool call into a customer's wall as keyed exec work: its items,
             # their output sealed under the session's key as its commands'
             # records are, live on the shared cache's streams while it runs,
-            # and the control messages that stop them.
+            # the wakes that tell its runner each part and result as it
+            # lands, and the control messages that stop them.
             exec_relay=ExecRelayManagerImpl(
                 storage.get_exec_relay_storage(),
                 managers.work,
@@ -1318,6 +1319,7 @@ class RootHooksPlatformImpl(RootHooksInterface):
                 outbox,
                 self._records,
                 infra.get_streams(),
+                infra.get_topics(),
                 # The files and the output its items move, each sealed under
                 # a key of its own that the item keeps under the session's.
                 infra.get_buckets(),

@@ -2,11 +2,14 @@
 Postgres, the shared cache on Valkey, a host of the pool that runs the
 command in a directory it made, and the runner's exec relay that waits on
 it. What the command prints streams to the runner through the cache while
-it runs, and its result lands on its item.
+it runs, and its result lands on its item. Each part and the result wake
+the runner over the bus on Valkey, so it reads them as they land, never
+on its poll.
 
 Needs the compose stack and a migrated database (`make infra-up migrate`)."""
 
 import asyncio
+import time
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -39,6 +42,8 @@ RUNNER = AppContext(type=AppType.WORKER, version="runner@test")
 # A directory on the host's own disk shares the host's network.
 DIRECTORY = IsolationSpec(mode=IsolationMode.HOST, egress=EgressPolicy(mode=EgressMode.OPEN))
 LINES = "".join(f"line {n}\n" for n in range(3))
+FAR = timedelta(seconds=30)
+"""The runner's every poll, far past the command's own time."""
 
 
 async def _nothing(data: bytes) -> bytes | None:
@@ -55,6 +60,7 @@ async def api(tmp_path: Path) -> AsyncIterator[Stack]:
         {
             "environment": "local",
             "cache_backend": "valkey",
+            "topics_backend": "valkey",
             "valkey_url": InfraSettings().valkey_url,
             "buckets_backend": "local",
             "buckets_root": tmp_path / "buckets",
@@ -78,8 +84,13 @@ async def test_a_hosted_commands_output_streams_through_the_cache_and_its_result
     await host.idle()
     epoch = await managers.agent_steps.begin_run(owner, session.id)
     workspace = AgentWorkspace(id=session.id, org_id=owner.org_id, spec=DIRECTORY, location="")
+    # A poll far past the command's time: the run ends in time only when
+    # each part and the result wake it.
     runner = TransportRelayImpl(
-        lambda: managers.exec_relay, lambda: RequestContext(request_id=new_id(), app=RUNNER)
+        lambda: managers.exec_relay,
+        lambda: RequestContext(request_id=new_id(), app=RUNNER),
+        first_poll=FAR,
+        last_poll=FAR,
     )
     printed: list[tuple[str, str]] = []
 
@@ -94,6 +105,7 @@ async def test_a_hosted_commands_output_streams_through_the_cache_and_its_result
         deadline=datetime.now(UTC) + timedelta(seconds=30),
         effect="unsafe",
     )
+    started = time.monotonic()
     waiting = asyncio.ensure_future(runner.run(workspace, spec, sink, seal=NO_SEAL))
     streams = api.container.infra.get_streams()
     item_id = None
@@ -112,6 +124,7 @@ async def test_a_hosted_commands_output_streams_through_the_cache_and_its_result
             on_cache = sum(len(run.entries) for run in held)
         await pace.after(one is not None)
     ran = await waiting
+    assert time.monotonic() - started < FAR.total_seconds() / 3
     assert item_id is not None
     assert live_while_running and live_while_running[0] == ("stdout", "line 0\n")
     assert on_cache >= 1
