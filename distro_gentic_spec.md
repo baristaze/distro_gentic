@@ -452,7 +452,11 @@ that only reads, plans, or answers starts none.
   warm-hit ratio. Each claim records its wait, from the claim to the
   first command on its VM, and each restore its time, by its archive's
   size in a few classes. These readings say which of the warm VMs, the
-  restore, or the image needs work.
+  restore, or the image needs work. A deployment may have its cloud
+  load each new VM's disk whole from the image, at a rate it sets, so
+  no first command waits on a block's first read; it is charged by the
+  image's size, and a start fails when the disks loading at once would
+  pass the region's total rate.
 - **No race between a claim and the sweep.** A VM's host is handed
   its session's work only once it holds the session's workspace. The
   sweep takes a warm VM's record before it destroys the VM, under the

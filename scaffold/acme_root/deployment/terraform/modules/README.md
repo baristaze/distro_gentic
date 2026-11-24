@@ -37,7 +37,7 @@ folder:
 | `service` | One process: task definition with a collector sidecar, service, autoscaling, and the migration before a rollout (`pre_rollout.sh`) |
 | `task` | One one-off task (migrate, grant), run by `aws ecs run-task` |
 | `alarms` | The default alarm set, to one SNS topic |
-| `cloud_pool` | The cloud pool's VMs: their launch template with no instance role, the closed and the open security groups, the DNS firewall by which the pool's network, which only the pool uses, resolves the names a closed VM needs alone and fails closed (ADR 2074), the key their disks are encrypted under, the size map a kind's VM is started from, and the policy the runner and the sweep hold them by, which launches the map's machine types alone (ADR 2069) and makes no disk image or volume snapshot (ADR 2070). No environment calls it until the platform's cloud account exists (ADR 2052) |
+| `cloud_pool` | The cloud pool's VMs: their launch template with no instance role, the closed and the open security groups, the DNS firewall by which the pool's network, which only the pool uses, resolves the names a closed VM needs alone and fails closed (ADR 2074), the key their disks are encrypted under, the rate a disk loads its image at when an operator sets one, the size map a kind's VM is started from, and the policy the runner and the sweep hold them by, which launches the map's machine types alone (ADR 2069) and makes no disk image or volume snapshot (ADR 2070). No environment calls it until the platform's cloud account exists (ADR 2052) |
 | `dashboard` | The CloudWatch dashboard, the twin of the local Grafana one by panel title |
 
 ## How a change reaches an environment
@@ -111,6 +111,23 @@ is `portal_sentry_dsn`, which the deploy workflows pass from the
 
 An org's own secrets live under `acme/<environment>/app/org/<org_id>/`.
 The serving tasks may create, replace, and delete there and nowhere else.
+
+## The cloud pool's disk
+
+A VM's disk is made from the pool's image, and EBS loads each of its
+blocks the first time it is read, so a new VM's first commands are
+slow. `volume_initialization_rate`, in MiB/s from 100 to 300, has EBS
+load the whole disk at that rate from its creation instead, for warm
+and cold VMs alike. It is off by default, and a rate outside the range
+is refused at the plan.
+
+While it is set, every VM's disk is charged per GiB of the image's
+snapshot at the rate, apart from the disk's own cost. AWS's example is
+$0.0036 per GiB at 300 MiB/s. A region allows 5,000 MiB/s across the
+disks it creates at once, and a launch past it fails. So set a rate
+whose share fits the most VMs the pool starts at once: 16 at 300 MiB/s,
+50 at 100. An image whose snapshot has fast snapshot restore loads at
+the rate instead.
 
 ## Checks
 
