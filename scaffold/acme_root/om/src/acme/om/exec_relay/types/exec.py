@@ -1,10 +1,11 @@
 """An `exec` item as the relay keeps it: one operation of a tool call into a
 customer's wall, the state its host moves it through, and how it ended.
 What it runs and what it printed are the session's content, sealed under
-the session's key; what recovery decides by stays in the clear. No file
-and no output rides in it or in its result: each crosses as an object in
-the store, sealed under a key of its own, and the item carries the
-object's reference, its size, its digest, and that key."""
+the session's key; what recovery decides by stays in the clear. A file or
+an output of at most `INLINE_BYTES` rides in the item or its result, in
+what it seals. One past that crosses as an object in the store, sealed
+under a key of its own, and the item carries the object's reference, its
+size, its digest, and that key."""
 
 from datetime import datetime
 from enum import StrEnum
@@ -22,6 +23,7 @@ from pydantic import (
 )
 
 from acme.infra.agent_workspaces import IsolationSpec
+from acme.infra.buckets.sealed import digest_of
 from acme.infra.transports import USER, FileEntry, SecretUse
 from acme.om.agent_workspaces.types.snapshot import DIGEST, REFERENCE
 from acme.om.base import FrozenMapping, Identifiable, OmBase, Trackable
@@ -45,6 +47,11 @@ it ended, that a result carries."""
 SECRETS = 32
 """The most secrets one relayed command uses, so a result that names them
 stays small."""
+
+INLINE_BYTES = 64 * 1024
+"""The most bytes of a file or an output that ride in an item or its
+result rather than the store: what most commands print, at a few calls
+fewer each."""
 
 
 def _from_the_start(offset: int) -> bool:
@@ -103,21 +110,36 @@ class ObjectRef(OmBase):
 
 
 class ObjectSlot(OmBase):
-    """An object an item's host uploads: where it is under the tenant, the
-    key it seals it under (base64), and the store's multipart upload of
-    it."""
+    """An object an item's host may upload: where it is under the tenant,
+    the key it seals it under (base64), and the store's multipart upload of
+    it, started once its host asks to send one. None before: an output or a
+    file that rides in the result never starts one."""
 
     reference: str = Field(min_length=1, max_length=512)
     key: str = Field(min_length=1, max_length=64)
-    upload_id: str = Field(min_length=1, max_length=1024)
+    upload_id: str | None = Field(default=None, min_length=1, max_length=1024)
 
 
 class StoredObject(OmBase):
-    """What a host declares of an object it uploaded: the size and the
-    digest of what it sealed, which what the object opens to must match."""
+    """What the sender of a file or an output declares of it: the size and
+    the digest of its bytes, which what the object opens to must match. When
+    it rides inline rather than in the store, `data` is the bytes
+    themselves, at most `INLINE_BYTES`, and holds to its size and its digest
+    before anything reads it."""
+
+    model_config = ConfigDict(ser_json_bytes="base64", val_json_bytes="base64")
 
     size: int = Field(ge=0)
     digest: str = Field(pattern=DIGEST)
+    data: bytes | None = Field(default=None, max_length=INLINE_BYTES, repr=False)
+
+    @model_validator(mode="after")
+    def _its_own_bytes(self) -> StoredObject:
+        if self.data is not None and (
+            len(self.data) != self.size or digest_of(self.data) != self.digest
+        ):
+            raise ValueError("inline bytes match the size and the digest declared of them")
+        return self
 
 
 class ReadRequest(OmBase):
@@ -172,11 +194,13 @@ class ItemContent(OmBase):
     object it moves with the key that object is sealed under, so revoking
     the session's key leaves every one of them noise. A command, a call of
     a server's tool, and a listing have an `output`; a write hands its host
-    a `file_in`, and a read's host uploads a `file_out`."""
+    a `file_in`, the object that holds it or, within `INLINE_BYTES`, the
+    file itself; and a read's host uploads a `file_out`, or sends it in its
+    result."""
 
     request: ExecRequest
     output: ObjectSlot | None = None
-    file_in: ObjectRef | None = None
+    file_in: ObjectRef | StoredObject | None = None
     file_out: ObjectSlot | None = None
 
 
@@ -211,7 +235,7 @@ class ExecOutcome(OmBase):
 
 
 class Printed(OmBase):
-    """What an item's output object holds: what it printed, or listed."""
+    """What an item's output holds: what it printed, or listed."""
 
     stdout: str = ""
     stderr: str = ""
@@ -221,8 +245,8 @@ class Printed(OmBase):
 class ResultContent(OmBase):
     """What a result says beyond how the item ended, kept sealed under the
     session's key: why its host refused it, the offset a read was answered
-    from (a host echoes the one it read from past the start), and the
-    objects it uploaded."""
+    from (a host echoes the one it read from past the start), and its output
+    and a read's file, each uploaded or inline."""
 
     detail: str = Field(default="", max_length=DETAIL_CHARS)
     offset: int = Field(default=0, ge=0, exclude_if=_from_the_start)
@@ -243,8 +267,9 @@ class HostTimes(OmBase):
 
 class ExecResult(ResultContent):
     """What a host pushes once an item ends, as it crosses the wall: how it
-    ended, and what it says of it. What it printed and what it read are in
-    the objects it names, never here. Its host's times, when it sends them,
+    ended, and what it says of it. What it printed and what it read ride
+    here within `INLINE_BYTES`, and past it are in the objects it names. Its
+    host's times, when it sends them,
     are a measure alone: times that are not a number each, or are below
     zero, read as none, and the result stands."""
 
@@ -262,8 +287,8 @@ class ExecResult(ResultContent):
 
 class ExecOutput(OmBase):
     """What it printed or read, or why its host refused it, as the runner
-    reads it: the output object opened, and the file a read uploaded, by
-    its size and its digest, which the runner takes from the store."""
+    reads it: the output opened, and the file a read sent, by its size and
+    its digest, which the runner takes from the result or the store."""
 
     stdout: str = ""
     stderr: str = ""
@@ -373,7 +398,8 @@ class ExecProgress(OmBase):
 class ExecDetail(OmBase):
     """What the host that holds an item reads of it: the call, where the
     workspace is, the operation opened, and each object it moves with the
-    key that opens that object alone."""
+    key that opens that object alone, or a write's file itself when it rides
+    in the item."""
 
     item_id: UUID
     key: UUID
@@ -386,9 +412,10 @@ class ExecDetail(OmBase):
     location: str
     request: ExecRequest
     output: ObjectSlot | None = None
-    file_in: ObjectRef | None = None
+    file_in: ObjectRef | StoredObject | None = None
     file_out: ObjectSlot | None = None
-    # A write's `file_in`, signed for a GET of it alone, and when that ends.
+    # A write's `file_in` in the store, signed for a GET of it alone, and
+    # when that ends.
     url: str | None = None
     url_expires_at: datetime | None = None
 

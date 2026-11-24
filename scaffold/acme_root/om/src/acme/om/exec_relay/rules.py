@@ -12,6 +12,7 @@ from acme.infra.agent_workspaces import EgressMode, IsolationMode, IsolationSpec
 from acme.om.base import derived_id, thaw_mapping
 from acme.om.exec_relay.types.exec import (
     DETAIL_CHARS,
+    INLINE_BYTES,
     OUTPUT_CHARS,
     SECRETS,
     ExecItem,
@@ -55,15 +56,23 @@ control character's escape."""
 SECRET_NAME_CHARS = 200
 """The longest name of a secret a command uses."""
 
-RESULT_CHARS = 4 * (2048 + ESCAPED_BYTES * (DETAIL_CHARS + SECRETS * (SECRET_NAME_CHARS + 3))) // 3
+INLINE_CHARS = 4 * -(-INLINE_BYTES // 3)
+"""The characters of the most bytes that ride inline, in base64."""
+
+RESULT_CHARS = (
+    4
+    * (2048 + INLINE_CHARS + ESCAPED_BYTES * (DETAIL_CHARS + SECRETS * (SECRET_NAME_CHARS + 3)))
+    // 3
+)
 """The most a host's result of one item carries across the wall: the
 characters of its JSON in base64. A result holds how the item ended, the
 names of the secrets it used, why its host refused it, the offset a read
-was answered from, the size and the digest of each object it uploaded,
-and its host's times: what it printed and what it read cross as those
-objects, never in it. So
-it is a few KiB, as a holder's call is (its route is one), whatever the
-command printed."""
+was answered from, the size and the digest of its output or a read's
+file, and its host's times; and that output or file itself when it is at
+most `INLINE_BYTES`, since an item has one or the other. Past that it
+crosses as an object, never in it. So a result stays under 180 KiB,
+whatever the command printed, as a holder's call does (its route is
+one)."""
 
 OUTPUT_BYTES = 2 * OUTPUT_CHARS * ESCAPED_BYTES + 1024 * 1024
 """The most an item's output object holds: both streams of a command at
