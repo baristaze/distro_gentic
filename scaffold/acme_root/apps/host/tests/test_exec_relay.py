@@ -298,11 +298,16 @@ async def test_a_relayed_read_from_an_offset_answers_only_what_follows_it(
 class Crossed(httpx.AsyncBaseTransport):
     """The stack, noting the operation each `exec` item's detail hands the
     host, and each result the host pushes. With `earlier`, each detail is
-    as a platform of an earlier release answers it: it keeps no times."""
+    as a platform of an earlier release answers it: it keeps no times. With
+    `rolling`, the detail says times are kept, but each result that carries
+    them reaches a replica of an earlier release, which refuses it."""
 
-    def __init__(self, inner: httpx.AsyncBaseTransport, *, earlier: bool = False) -> None:
+    def __init__(
+        self, inner: httpx.AsyncBaseTransport, *, earlier: bool = False, rolling: bool = False
+    ) -> None:
         self._inner = inner
         self._earlier = earlier
+        self._rolling = rolling
         self.asked: list[dict[str, Any]] = []
         self.answered: list[dict[str, Any]] = []
 
@@ -311,6 +316,12 @@ class Crossed(httpx.AsyncBaseTransport):
         if request.method == "POST" and path.endswith("/result"):
             pushed = json.loads(await request.aread())["data"]
             self.answered.append(json.loads(base64.b64decode(pushed)))
+            if self._rolling and "times" in self.answered[-1]:
+                refused = {
+                    "code": "validation_failed",
+                    "message": "a result that is no exec result",
+                }
+                return httpx.Response(422, json={"error": refused})
         response = await self._inner.handle_async_request(request)
         if request.method != "GET" or DETAIL.fullmatch(path) is None:
             return response
@@ -433,6 +444,23 @@ async def test_a_host_sends_no_times_to_a_platform_that_keeps_none(
     assert (await waiting).exit_code == 0
     (answered,) = wire.answered
     assert "times" not in answered
+
+
+async def test_a_result_whose_times_a_replica_refuses_is_pushed_again_without_them(
+    api: Stack, tmp_path: Path
+) -> None:
+    wire = Crossed(api.transport, rolling=True)
+    relayed = await relay_to(api, tmp_path, wire=wire)
+    spec = command(relayed.epoch, "false")
+    waiting = asyncio.ensure_future(relayed.runner.run(relayed.workspace, spec, seal=NO_SEAL))
+    # The item settles with the command's own outcome: a result never taken
+    # would leave it to its lease, and the runner waiting.
+    async with asyncio.timeout(20):
+        await claims(relayed.host, waiting)
+        assert (await waiting).exit_code == 1
+    refused, taken = wire.answered
+    assert "times" in refused
+    assert taken == {key: value for key, value in refused.items() if key != "times"}
 
 
 class Sized(httpx.AsyncBaseTransport):

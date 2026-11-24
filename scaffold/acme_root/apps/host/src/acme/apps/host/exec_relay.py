@@ -824,16 +824,27 @@ class ExecutorRelayImpl(ExecutorInterface):
 
     async def _push(self, item_id: UUID, result: dict[str, Any], held_until: float) -> None:
         """Pushes how the item ended, tried again while its lease lasts: its
-        JSON as UTF-8."""
-        data = json.dumps(result, ensure_ascii=False, separators=(",", ":")).encode()
+        JSON as UTF-8. A result whose times are refused as invalid is pushed
+        once more without them: during a roll, the push may reach a replica
+        of an earlier release than the one that answered its detail, which
+        keeps no times, and the outcome still lands."""
         try:
-            await self._outlasting(
-                lambda client: client.push_exec_result(item_id, data), held_until
-            )
+            try:
+                await self._pushed(item_id, result, held_until)
+            except ApiError as error:
+                if error.status != 422 or "times" not in result:
+                    raise
+                log.info("item %s: its times were refused (%s), so it goes without", item_id, error)
+                plain = {key: value for key, value in result.items() if key != "times"}
+                await self._pushed(item_id, plain, held_until)
         except (ApiError, *WIRE_FAILURES) as error:
             # Settled already, by its lease, a stop, or the sweep: the first
             # settlement stands. One the platform never took is the sweep's.
             log.warning("item %s: its result was not taken: %s", item_id, error)
+
+    async def _pushed(self, item_id: UUID, result: dict[str, Any], held_until: float) -> None:
+        data = json.dumps(result, ensure_ascii=False, separators=(",", ":")).encode()
+        await self._outlasting(lambda client: client.push_exec_result(item_id, data), held_until)
 
     async def _outlasting(
         self, call: Callable[[ApiClient], Awaitable[object]], until: float
