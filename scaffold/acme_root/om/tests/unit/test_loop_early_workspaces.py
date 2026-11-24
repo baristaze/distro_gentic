@@ -19,7 +19,7 @@ from uuid import UUID
 import pytest
 from pydantic import SecretStr, ValidationError
 from unit.test_loop_gates import NORM, Parking
-from unit.test_loop_keys import Keyless
+from unit.test_loop_keys import Keyless, keyed
 
 from acme.infra.agent_workspaces import (
     AgentWorkspace,
@@ -36,6 +36,8 @@ from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.observability import WORKSPACE_PREPARES_UNUSED
 from acme.infra.outages import Outage
 from acme.integrations.model_providers.calls import Finished, ModelCall, StreamPart
+from acme.om.agent_projects.impl.policies import SessionAgentProjectsBoundImpl
+from acme.om.agent_projects.policies import SessionAgentProjectsInterface
 from acme.om.agent_steps.rules import control_step
 from acme.om.agent_steps.types.agent_step import AgentStep, AgentStepType
 from acme.om.agent_steps.types.header import (
@@ -53,6 +55,7 @@ from acme.om.language_models.layer import LanguageModelsLayer
 from acme.om.root import Managers
 from acme.om.spend_budgets.types.amount import AmountUnit
 from acme.om.spend_budgets.types.spend_breach import Refusal, SpendBreach, SpendBreachAction
+from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tools.tool import ToolRuntime
 from acme.om.tools.types.tool import ToolInput
 
@@ -177,18 +180,31 @@ class Timed:
         monkeypatch.setattr(lookup, "run", ran)
 
 
+Gated = Callable[[Managers, Clock, SessionAgentProjectsInterface], Parking]
+"""A gate over the managers, the clock, and the agent projects' policy the
+loop's storage answers."""
+
+
 def early_loop(
     tmp_path: Path,
     *,
-    call_gate: Callable[[Managers, Clock], Parking] | None = None,
+    call_gate: Gated | None = None,
     language_models_layer: LanguageModelsLayer | None = None,
 ) -> Loop:
+    storage = StorageMemoryImpl()
+    agent_projects = SessionAgentProjectsBoundImpl(storage.get_agent_project_storage())
+
+    def gate(managers: Managers, clock: Clock) -> Parking:
+        assert call_gate is not None
+        return call_gate(managers, clock, agent_projects)
+
     return loop_over(
         tmp_path,
+        storage=storage,
         kinds=(ASSISTANT, DELIVERY, EARLY, LATE, EARLY_KEPT),
         infra=InfraLocalImpl(tmp_path),
         extra=(Lookup("ledger", workspace=False),),
-        call_gate=call_gate,
+        call_gate=None if call_gate is None else gate,
         language_models_layer=language_models_layer,
     )
 
@@ -253,10 +269,12 @@ async def test_a_kind_that_declares_nothing_prepares_at_its_first_call_and_never
     assert unused(LATE) == 0
 
 
-def gated(raised: OmException) -> Callable[[Managers, Clock], Parking]:
+def gated(raised: OmException) -> Gated:
     """The budgets' gate, behind one that raises `raised` at a model call's
     hold."""
-    return lambda managers, clock: Parking(managers, clock, turn=raised)
+    return lambda managers, clock, agent_projects: Parking(
+        managers, clock, agent_projects, turn=raised
+    )
 
 
 def over_budget() -> SpendBudgetRefused:
@@ -291,7 +309,7 @@ async def test_a_run_that_parks_before_its_model_call_goes_out_starts_no_prepare
         "budget-refused": gated(over_budget()),
         "gate-parked": gated(GateParked(NORM, "far above the session's norm")),
     }.get(stop)
-    keyless = LanguageModelsLayer(credentials=lambda providers: Keyless())
+    keyless = keyed(lambda providers: Keyless())
     loop = early_loop(
         tmp_path,
         call_gate=gate,
