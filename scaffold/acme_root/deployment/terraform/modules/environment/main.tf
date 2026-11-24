@@ -623,6 +623,7 @@ module "alarms" {
   cluster_name               = module.cluster.name
   api_log_group_name         = module.api.log_group_name
   maintenance_log_group_name = module.maintenance.log_group_name
+  runner_log_group_name      = module.agent_session_runner.log_group_name
   queue_names                = module.queue.queue_names
   service_names              = [module.api.service_name, module.maintenance.service_name, module.agent_session_runner.service_name]
 }

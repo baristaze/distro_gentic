@@ -630,7 +630,7 @@ other.
 
 **Check.** review
 
-## PLC-25 A cloud VM is its kind's size, recycled between runs, its boot timed
+## PLC-25 A cloud VM is its kind's size, recycled between runs, its boot and its claims timed
 
 **Principle.** A kind asks its VM's size by name, `s` when it asks none,
 and the deployment maps each name it allows onto a machine type; the
@@ -641,7 +641,10 @@ are the default size. A VM past its maximum age goes at its run's end
 once its work is kept, never under a running loop; a warm one goes at
 the sweep.
 Each cold start, of the pool's image, records its time to its host's
-enrollment; a warm claim records none.
+enrollment; a warm claim records none. Each claim counts once, by how
+it got its VM (warm, new, held, or started again), and records its wait
+to the first command on its VM; each restore records its time under its
+archive's size class.
 
 **Source.** Placement and Workspace Hosts, The Cloud Pool.
 
@@ -649,7 +652,9 @@ enrollment; a warm claim records none.
 and what a warm claim reads of it; what the pool's cloud role allows a
 start, and a change of an attribute, to be; where a VM's age is read and
 what has run, and what is kept, when it goes; where a boot is observed,
-and what tells a cold start from a warm claim and a start again.
+and what tells a cold start from a warm claim and a start again; where a
+claim is counted and what tells a claim asked again from another, and
+where its first command and a restore are timed.
 
 **Violation.** A VM of a type the deployment never mapped, or of
 another size than its spec asked, a raw CPU or memory ask met, or a
@@ -658,7 +663,8 @@ launches, or moves a VM to, any type; a VM let go for its age under a
 running loop, or before its run's work was kept; a VM that lives across
 runs with no maximum age; a boot
 recorded for a warm claim or a start again, or a cold start recorded
-twice or not at all.
+twice or not at all; a claim counted twice, under two sources, or not at
+all; a claim's wait recorded for each command, or a restore's never.
 
 **Severity.** high
 

@@ -439,10 +439,16 @@ that only reads, plans, or answers starts none.
   kept: a VM kept by snapshots goes at each run's end that snapshots it,
   and never for its age before one does. A warm VM past its age goes
   at the sweep.
-- **Its boot is timed.** Each cold start records how long it took
-  from its start to its host's enrollment. Every VM boots the pool's
-  image, and a warm claim records none, so that time is what the warm
-  count is set by.
+- **Its boot is timed, and so is what a claim waits for.** Each cold
+  start records how long it took from its start to its host's
+  enrollment. Every VM boots the pool's image, and a warm claim records
+  none, so that time is what the warm count is set by. Each claim counts
+  once, by how it got its VM: a warm one, a new one, the one its session
+  held, or that one started again. The warm share of claims is the
+  warm-hit ratio. Each claim records its wait, from the claim to the
+  first command on its VM, and each restore its time, by its archive's
+  size in a few classes. These readings say which of the warm VMs, the
+  restore, or the image needs work.
 - **No race between a claim and the sweep.** A VM's host is handed
   its session's work only once it holds the session's workspace. The
   sweep takes a warm VM's record before it destroys the VM, under the
@@ -1356,6 +1362,10 @@ The operator dashboard, declared as code, adds the platform's signals,
 each with a bounded label: parks by reason and age, loop lanes' depth by
 plan tier, hosts by pool, cache hit rates, and spend by matrix version.
 Views of one tenant or one host are operator-plane reads, never labels.
+The default alarm set adds one: the prompt cache's share of settled
+model calls' prompt tokens falls below its threshold, read from the
+runner's line for each call, which carries its token counts and no text
+of it.
 The guideline's telemetry round trip follows one run's request id across
 the runner, the host, and the steps it wrote ([The Telemetry Round
 Trip][g-roundtrip]).
