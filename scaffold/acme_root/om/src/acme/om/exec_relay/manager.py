@@ -7,8 +7,10 @@ file an item moves crosses as an object in the store, sealed under a key of
 its own, by URLs signed for that object alone; it leaves the store once
 its item settles and what it held was taken."""
 
+import asyncio
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
+from contextlib import AbstractContextManager
 from datetime import datetime
 from uuid import UUID
 
@@ -264,6 +266,17 @@ class ExecRelayManagerInterface(ABC):
         `after_seq` the shared cache still holds, opened, and how it ended
         once it has, with all it printed: its output object, read from the
         store and opened once it matches what its host declared."""
+        ...
+
+    @abstractmethod
+    @stageless
+    def waiting(self, org_id: UUID, item_id: UUID) -> AbstractContextManager[asyncio.Event]:
+        """System-internal: while it is open, an event set each time a part
+        of the item's output or its result lands, in whichever process the
+        host pushed it, for no principal. It names the item alone and carries
+        nothing of it: the waiter reads the item through `watch`, as it
+        would unwoken. A wake is best effort, so a waiter still reads on a
+        slow timer of its own."""
         ...
 
     @abstractmethod

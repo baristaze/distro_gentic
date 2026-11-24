@@ -31,6 +31,12 @@ CONTROL_KIND = "exec_relay.exec_control.created"
 wakes the control stream of the host it is for, wherever that stream is
 held open."""
 
+OUTPUT_KIND = "exec_relay.exec_output"
+"""The kind of the wake a part of an item's output, or its result, sends as
+it lands (`Topics.STREAM_APPENDED`, its group the item's id): the runner
+that waits on that item reads it at once. It names the item alone and
+carries nothing of it, and no claimant reads it."""
+
 REPEATABLE_ATTEMPTS = 3
 """The claims a repeatable item's queue row may spend: a lost lease puts it
 back on its host's lane, and the third loss fails it."""

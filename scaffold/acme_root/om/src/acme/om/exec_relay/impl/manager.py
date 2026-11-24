@@ -1,7 +1,8 @@
 import asyncio
 import base64
 import logging
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Iterator, Sequence
+from contextlib import contextmanager
 from datetime import datetime, timedelta
 from typing import Any
 from uuid import UUID
@@ -22,6 +23,7 @@ from acme.infra.buckets.sealed import (
 from acme.infra.exceptions import InfraException, UploadNotFound, UploadRefused
 from acme.infra.observability import OUTCOMES
 from acme.infra.streams import StreamBounds, StreamsInterface
+from acme.infra.topics import StreamAppendedPayload, TopicPayload, Topics, TopicsInterface
 from acme.om.agent_projects import AgentProjectsManagerInterface
 from acme.om.agent_steps import AgentStepsManagerInterface
 from acme.om.agent_workspaces.types.snapshot import HostSnapshot
@@ -46,6 +48,7 @@ from acme.om.exec_relay.rules import (
     CONTROL_KIND,
     OBJECTS,
     OUTPUT_BYTES,
+    OUTPUT_KIND,
     PUSH_BYTES,
     PUSH_PARTS,
     asks,
@@ -195,7 +198,8 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
     key of its own that the item keeps under the session's key. A link
     handed to a VM of the cloud pool is signed by `vm_buckets`, the same
     objects at the address a VM reaches the store at; with none, by
-    `buckets`."""
+    `buckets`. A part or a result that lands is told on `topics`, and the
+    runner that waits on its item, in whichever process, reads it at once."""
 
     def __init__(
         self,
@@ -208,6 +212,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         relay: OutboxRelayInterface,
         seal: RecordSealInterface,
         streams: StreamsInterface,
+        topics: TopicsInterface,
         buckets: BucketsInterface,
         options: ExecRelayOptions,
         clock: Callable[[], datetime] = utcnow,
@@ -227,8 +232,14 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         self._relay = relay
         self._seal = seal
         self._streams = streams
+        self._topics = topics
         self._options = options
         self._clock = clock
+        # The runners that wait in this process, by the tenant and the item
+        # each waits on. Every process hears every landing on one
+        # subscription of its own, and wakes only who waits on that item.
+        self._waits: dict[tuple[UUID, UUID], set[asyncio.Event]] = {}
+        topics.subscribe(Topics.STREAM_APPENDED, "exec-relay-waits", self._landed_for)
 
     # Where a session's workspace is.
 
@@ -763,6 +774,18 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             state=item.state, parts=tuple(texts), outcome=item.outcome, output=output, times=times
         )
 
+    @contextmanager
+    def waiting(self, org_id: UUID, item_id: UUID) -> Iterator[asyncio.Event]:
+        woken = asyncio.Event()
+        waits = self._waits.setdefault((org_id, item_id), set())
+        waits.add(woken)
+        try:
+            yield woken
+        finally:
+            waits.discard(woken)
+            if not waits:
+                del self._waits[(org_id, item_id)]
+
     async def stop(
         self, rctx: RequestContext, org_id: UUID, item_id: UUID, kind: StopKind, epoch: int | None
     ) -> ExecItem:
@@ -995,6 +1018,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         await self._streams.append(
             item.id, item.row_id, [(texts[-1].seq, sealed)], self._options.output
         )
+        await self._wake(host.org_id, item.id)
 
     async def push_result(
         self,
@@ -1054,6 +1078,9 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             ):
                 raise ItemNotHeld(f"exec item {item_id} was settled before its result arrived")
             item = moved
+        # Stored: the runner that waits on it reads it now, while the rest
+        # of the landing goes on.
+        await self._wake(host.org_id, item.id)
         if contents is None:
             await self._delete_under(
                 host.org_id, dispatch_objects(item.agent_session_id, item.id, item.dispatch)
@@ -1499,6 +1526,28 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         except NotFound:
             return
         await self._work.end_queued(ctx, row, "its command was stopped before a host took it")
+
+    async def _wake(self, org_id: UUID, item_id: UUID) -> None:
+        """Tells every process that a part or the result of the item landed,
+        naming the item alone. Best effort: a wake the bus drops leaves its
+        runner to its own timer."""
+        await self._topics.publish(
+            Topics.STREAM_APPENDED,
+            StreamAppendedPayload(
+                idempotency_key=new_id(),
+                produced_at=self._clock(),
+                org_id=org_id,
+                kind=OUTPUT_KIND,
+                group=item_id,
+            ),
+        )
+
+    async def _landed_for(self, payload: TopicPayload) -> None:
+        """Wakes each runner here that waits on the item a landing names, in
+        its tenant, and no other."""
+        if isinstance(payload, StreamAppendedPayload) and payload.kind == OUTPUT_KIND:
+            for woken in self._waits.get((payload.org_id, payload.group), ()):
+                woken.set()
 
     async def _control(self, ctx: TenantContext, item: ExecItem, kind: StopKind) -> None:
         """A control message for the host that holds the item; its row is

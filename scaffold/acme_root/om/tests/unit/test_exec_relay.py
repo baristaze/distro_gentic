@@ -12,6 +12,7 @@ import asyncio
 import base64
 import json
 import time
+from collections import Counter
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
@@ -35,6 +36,7 @@ from acme.infra.buckets.sealed import digest_of
 from acme.infra.exceptions import InfraValidationFailed
 from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.streams import StreamBounds
+from acme.infra.topics import StreamAppendedPayload, TopicPayload, Topics
 from acme.infra.transports import (
     CapabilityMissing,
     CommandResult,
@@ -53,6 +55,7 @@ from acme.om.exec_relay.impl.manager import ExecRelayOptions
 from acme.om.exec_relay.impl.placement import PlacementRelayedImpl
 from acme.om.exec_relay.impl.transport import HostRefused, TransportPlacedImpl, TransportRelayImpl
 from acme.om.exec_relay.rules import (
+    OUTPUT_KIND,
     PUSH_BYTES,
     PUSH_PARTS,
     RESULT_CHARS,
@@ -905,6 +908,183 @@ async def test_a_run_that_loses_its_items_progress_stops_it_and_answers_interrup
     controls = await wall.managers.exec_relay.controls(request(), wall.holder, None)
     assert controls[-1].item_id == host.item_id(row)
     assert controls[-1].kind is StopKind.INTERRUPT
+
+
+# The runner is woken as a part or the result of its item lands, and reads
+# it at once; its poll is the fallback for a wake that never comes. A wake
+# names one item of one tenant, and wakes no runner but the one that waits
+# on it.
+
+FAR = timedelta(seconds=30)
+"""A poll's every wait, far past what any command here takes."""
+
+AT_ONCE = 0.1
+"""The most seconds a woken runner takes to read what landed, in a test
+whose poll waits `FAR`: anything read sooner was read on its wake."""
+
+
+class Reads:
+    """The exec relay, counting each read of an item's progress by the item
+    it read."""
+
+    def __init__(self, relay: ExecRelayManagerInterface) -> None:
+        self._relay = relay
+        self.of: Counter[UUID] = Counter()
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self._relay, name)
+
+    async def watch(
+        self, rctx: RequestContext, org_id: UUID, item_id: UUID, after_seq: int
+    ) -> ExecProgress:
+        progress = await self._relay.watch(rctx, org_id, item_id, after_seq)
+        self.of[item_id] += 1
+        return progress
+
+    async def read_once(self, item_id: UUID) -> None:
+        for _ in range(500):
+            if self.of[item_id]:
+                return
+            await asyncio.sleep(0.002)
+        raise AssertionError(f"exec item {item_id} was never read")
+
+
+def polling(wall: Wall, every: timedelta = FAR) -> tuple[TransportRelayImpl, Reads]:
+    """A runner whose poll waits `every`, its first wait and each after it."""
+    relay = Reads(wall.managers.exec_relay)
+    through = cast(ExecRelayManagerInterface, relay)
+    runner = TransportRelayImpl(
+        lambda: through,
+        lambda: RequestContext(request_id=new_id(), app=RUNNER),
+        first_poll=every,
+        last_poll=every,
+    )
+    return runner, relay
+
+
+def read_phase() -> tuple[float, float]:
+    """The seconds of every run's read phase the metrics hold, and how many."""
+    labels = {"phase": "read", "operation": "run"}
+    return (
+        REGISTRY.get_sample_value("acme_exec_relay_phase_seconds_sum", labels) or 0.0,
+        REGISTRY.get_sample_value("acme_exec_relay_phase_seconds_count", labels) or 0.0,
+    )
+
+
+async def test_a_runner_reads_a_part_and_the_result_as_each_lands_never_on_its_poll(
+    wall: Wall,
+) -> None:
+    host = Host(wall, wall.holder)
+    runner, relay = polling(wall)
+    printed = asyncio.Event()
+
+    async def sink(stream: str, text: str) -> None:
+        printed.set()
+
+    before = read_phase()
+    running = asyncio.ensure_future(
+        runner.run(wall.workspace, command(wall.epoch), sink, seal=NO_SEAL)
+    )
+    row = await host.claim_soon()
+    await relay.read_once(host.item_id(row))  # and it waits on its poll now
+    pushed = time.monotonic()
+    await host.push(row, (0, "building\n"))
+    await asyncio.wait_for(printed.wait(), 5)
+    part_read = time.monotonic() - pushed
+    finished = time.monotonic()
+    await host.finish(row, 0, "building\n")
+    ran = await asyncio.wait_for(running, 5)
+    result_read = time.monotonic() - finished
+    assert (ran.exit_code, ran.stdout) == (0, "building\n")
+    assert part_read < AT_ONCE and result_read < AT_ONCE
+    # Its read phase, from the result stored to the runner's read, is the
+    # wake's: as short.
+    seconds, count = (now - then for now, then in zip(read_phase(), before, strict=True))
+    assert count == 1 and seconds < AT_ONCE
+
+
+async def test_a_runner_whose_wake_is_dropped_reads_the_result_on_its_poll(
+    wall: Wall, infra: InfraLocalImpl, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    topics = infra.get_topics()
+    publish = topics.publish
+    dropped: list[UUID] = []
+
+    async def lossy(topic: Topics, payload: TopicPayload) -> bool:
+        if isinstance(payload, StreamAppendedPayload):
+            dropped.append(payload.group)
+            return False  # the bus dropped it
+        return await publish(topic, payload)
+
+    monkeypatch.setattr(topics, "publish", lossy)
+    host = Host(wall, wall.holder)
+    every = timedelta(milliseconds=200)
+    runner, relay = polling(wall, every)
+    running = asyncio.ensure_future(runner.run(wall.workspace, command(wall.epoch), seal=NO_SEAL))
+    row = await host.claim_soon()
+    await relay.read_once(host.item_id(row))
+    finished = time.monotonic()
+    await host.finish(row, 0, "ok\n")
+    ran = await asyncio.wait_for(running, 5)
+    assert ran.stdout == "ok\n"
+    assert dropped == [host.item_id(row)]
+    # Read on its next poll: within one wait of it, and the read's own time.
+    assert time.monotonic() - finished < 2 * every.total_seconds()
+
+
+async def test_a_wake_for_another_item_or_tenant_wakes_no_runner_but_the_one_that_waits(
+    wall: Wall, infra: InfraLocalImpl
+) -> None:
+    managers, owner = wall.managers, wall.owner
+    session = await managers.agent_sessions.create_agent_session(owner, make_agent_session())
+    await managers.hosts.place_session(owner, session.id, wall.pool.id)
+    await managers.exec_relay.bind_workspace(owner, session.id, wall.holder.host_id, WHERE + "-2")
+    theirs_epoch = await managers.agent_steps.begin_run(owner, session.id)
+    theirs_workspace = AgentWorkspace(
+        id=session.id, org_id=owner.org_id, spec=CONTAINER, location=""
+    )
+    host = Host(wall, wall.holder)
+    ours, ours_reads = polling(wall)
+    theirs, theirs_reads = polling(wall)
+    ours_spec, theirs_spec = command(wall.epoch), command(theirs_epoch)
+    ours_run = asyncio.ensure_future(ours.run(wall.workspace, ours_spec, seal=NO_SEAL))
+    theirs_run = asyncio.ensure_future(
+        theirs.run(theirs_workspace, theirs_spec, seal=NO_SEAL)
+    )
+    rows = [await host.claim_soon(), await host.claim_soon()]
+    by_key = {ExecPayload.model_validate(row.payload).key: row for row in rows}
+    ours_row, theirs_row = by_key[ours_spec.key], by_key[theirs_spec.key]
+    ours_id, theirs_id = host.item_id(ours_row), host.item_id(theirs_row)
+    await ours_reads.read_once(ours_id)
+    await theirs_reads.read_once(theirs_id)
+    read = ours_reads.of[ours_id]
+    # A wake for an item no runner waits on, one for ours under another
+    # tenant, and the other session's result.
+    for org_id, item_id in ((owner.org_id, new_id()), (new_id(), ours_id)):
+        await infra.get_topics().publish(
+            Topics.STREAM_APPENDED,
+            StreamAppendedPayload(
+                idempotency_key=new_id(),
+                produced_at=utcnow(),
+                org_id=org_id,
+                kind=OUTPUT_KIND,
+                group=item_id,
+            ),
+        )
+    finished = time.monotonic()
+    await host.finish(theirs_row, 0, "theirs\n")
+    assert (await asyncio.wait_for(theirs_run, 5)).stdout == "theirs\n"
+    assert time.monotonic() - finished < AT_ONCE
+    await asyncio.sleep(AT_ONCE)
+    # Ours was woken by none of them, and each runner read its own item alone.
+    assert ours_reads.of == Counter({ours_id: read})
+    assert set(theirs_reads.of) == {theirs_id}
+    # Its own result still wakes it at once.
+    finished = time.monotonic()
+    await host.finish(ours_row, 0, "ours\n")
+    assert (await asyncio.wait_for(ours_run, 5)).stdout == "ours\n"
+    assert time.monotonic() - finished < AT_ONCE
+    assert set(ours_reads.of) == {ours_id}
 
 
 # Check 5: what crosses the wall is verified by its hash at the exec relay.
