@@ -28,7 +28,9 @@ class PoolVm(Identifiable, Created):
     so a prepare asked again for it keeps the VM, and one asked for
     another replaces it. `started_at` is None until it first runs, and
     stays set
-    once it has: a VM started again keeps its disk. `bound_at` is when
+    once it has: a VM started again keeps its disk. A warm VM runs once
+    its host first asks for a session, its image's hot paths read, and
+    no claim takes it before. `bound_at` is when
     it was last handed a key for its session: its start for the session,
     its claim, or its start again; its host enrolls within the boot bound
     and the wait after it. `sealed_at` says when nothing in it could read

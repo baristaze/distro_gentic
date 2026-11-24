@@ -117,6 +117,7 @@ async def test_a_claim_that_cannot_take_a_warm_vm_takes_an_idle_ones_place_at_th
     async def warm_one(pool: Pool) -> PoolVm:
         await pool.manager.sweep(stage())
         await pool.manager.close()
+        await pool.warm_asks()
         (warm,) = [row for row in await pool.rows() if row.warm]
         assert warm.started_at is not None and len(await pool.rows()) == 3, "at the maximum"
         return warm

@@ -16,8 +16,12 @@ A VM is the size its session's spec asks by name, which the
 deployment's map turns into a machine type; a warm VM is the default
 size. A start is inline for a session's prepare, bounded by the VMs' own
 boot bound, as the VM workspace provider's is; a warm VM starts in the
-background, since nothing waits on it. A cold start's boot, from its
-start to its host's enrollment, is a metric; a warm claim records none.
+background, since nothing waits on it. A warm VM counts as started, so a
+claim takes it, only once its host first asks for a session: its seed
+says it is warm, so its image reads the files a session's first commands
+read before its host asks, and a claim never waits on that read. A
+cold start's boot, from its start to its host's enrollment, is a
+metric; a warm claim records none.
 
 Every path that starts a VM has the one that lets it go: a session's
 run's end, its release after the grace, its purge, its tenant's purge,
@@ -316,6 +320,11 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         if vm is None:
             raise InvalidCredential("unknown or spent VM key")
         if vm.tenant_id is None or vm.pool_id is None or vm.bound_by is None:
+            if vm.warm and vm.started_at is None:
+                # Its host's first ask, once its image read its hot paths:
+                # from now on a claim takes it.
+                await self._storage.mark_started(vm.id, self._clock())
+                log.info("warm VM %s: its host asks for a session", vm.name)
             raise VmUnbound(f"VM {vm.name} serves no session yet; ask again")
         if not await self._storage.spend_key(vm.id, digest):
             raise InvalidCredential("unknown or spent VM key")
@@ -513,16 +522,19 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
 
     async def _launch(self, vm: PoolVm, spec: VmSpec, source: str, key: str) -> None:
         """Starts the VM its row names, handed its key, and marks it
-        started; one that fails goes with its row."""
+        started, unless it is warm: its host's first ask does (`enroll`).
+        One that fails goes with its row."""
+        handed = seed(self._options.api_url, key, warm=vm.warm)
         try:
-            await self._seeds.launch_seeded(vm.name, spec, source, seed(self._options.api_url, key))
+            await self._seeds.launch_seeded(vm.name, spec, source, handed)
         except BaseException:
             try:
                 await self._vms.destroy(vm.name)
             finally:
                 await self._storage.delete_vm(vm.id)
             raise
-        await self._storage.mark_started(vm.id, self._clock())
+        if not vm.warm:
+            await self._storage.mark_started(vm.id, self._clock())
 
     async def _enrolled(self, agent_session_id: UUID, vm: PoolVm) -> PoolVm:
         """The VM once its host has enrolled, waited on a while."""
@@ -586,8 +598,9 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
 
     async def _swept(self, rctx: RequestContext, vm: PoolVm, now: datetime) -> bool:
         """Whether the sweep acted on a VM. It lets go of a start older
-        than the boot bound that never ran, whose disk is its source's, and
-        of a VM whose session, or tenant, is gone. It stops a session's
+        than the boot bound that never ran, whose disk is its source's, a
+        warm one whose host never asked among them, and of a VM whose
+        session, or tenant, is gone. It stops a session's
         VM that runs with no host to work for, and keeps its disk: the
         session's next prepare starts it again under a new key, and the
         session's end lets it go."""

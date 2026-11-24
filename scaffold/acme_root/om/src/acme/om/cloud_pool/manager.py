@@ -130,8 +130,9 @@ class CloudPoolManagerInterface(ABC):
         """System-internal: a VM's host trades its key, once, for a
         credential of its session's pool of one; the host is no person, so
         it calls from the request stage. `VmUnbound` while the VM
-        is warm, and serves no session yet; `InvalidCredential` for a key
-        never handed, or spent."""
+        is warm, and serves no session yet: a warm VM's first such ask
+        marks it started, so a claim takes it from then on.
+        `InvalidCredential` for a key never handed, or spent."""
         ...
 
     @abstractmethod
@@ -143,7 +144,8 @@ class CloudPoolManagerInterface(ABC):
         their record; one active since has its record moved to then. Then
         every VM the pool holds, a page at a time, where this process
         reaches the VMs: lets go of a VM whose first start died
-        with the process that started it, of one that ran and is gone, of
+        with the process that started it, or whose warm host never asked
+        within the boot bound, of one that ran and is gone, of
         one whose session, or tenant, is gone, and of one under the pool's
         names that no row holds; stops a session's VM that runs with no
         host to work for, its host never enrolled, ended, or silent, and

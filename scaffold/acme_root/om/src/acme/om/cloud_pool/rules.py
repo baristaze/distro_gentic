@@ -46,12 +46,16 @@ def new_key() -> str:
     return KEY_PREFIX + secrets.token_urlsafe(32)
 
 
-def seed(api_url: str, key: str) -> bytes:
+def seed(api_url: str, key: str, *, warm: bool = False) -> bytes:
     """What a VM is handed at its start, as a file only its host reads:
-    where the platform answers, and the key its host trades once. Nothing
-    else: no credential of the platform's, no model key, no tenant's
-    record."""
-    return json.dumps({"api_url": api_url, "key": key}, sort_keys=True).encode()
+    where the platform answers, the key its host trades once, and, on a
+    warm VM, that no session waits on it yet, so its image reads its hot
+    paths before its host asks for one. Nothing else: no credential of
+    the platform's, no model key, no tenant's record."""
+    handed: dict[str, object] = {"api_url": api_url, "key": key}
+    if warm:
+        handed["warm"] = True
+    return json.dumps(handed, sort_keys=True).encode()
 
 
 def size_of(spec: IsolationSpec) -> VmSize:

@@ -1,7 +1,10 @@
 """The cloud pool over the VMs' twin: a VM per session, started
 from the pool's image, handed a one-use key its host trades once for a
 credential of the session's pool of one. A warm VM serves no session
-until one claims it, and the pool starts another in its place. Every VM
+until one claims it, and the pool starts another in its place; a claim
+takes it only once its host has asked for a session, which its image
+does once it has read its hot paths, and a VM started for a claim is
+never told to wait on that read. Every VM
 starts from the pool's image, and none's disk is kept: a restore lets go
 of a VM that serves the session for another snapshot, marks the one that
 serves it next, a warm one claimed included, and keeps it while it starts.
@@ -278,6 +281,15 @@ class Pool:
                     return issued.claimant_id
             await asyncio.sleep(0.005)
 
+    async def warm_asks(self) -> None:
+        """Plays each warm VM's host, once its image has read its hot
+        paths: it asks for a session, and is told none waits on it yet."""
+        for row in await self.rows():
+            if row.warm and row.started_at is None and row.key_digest is not None:
+                assert self.seed(row.name)["warm"] is True, "its seed says it is warm"
+                with pytest.raises(VmUnbound):
+                    await self.manager.enroll(stage(), self.seed(row.name)["key"], ENROLLMENT)
+
     async def prepare(
         self,
         ctx: TenantContext,
@@ -349,6 +361,7 @@ async def test_a_new_session_claims_a_started_warm_vm_and_the_pool_starts_anothe
     await pool.image()
     assert await pool.manager.sweep(stage()) == 0
     await pool.manager.close()
+    await pool.warm_asks()
     (warm,) = await pool.rows()
     assert warm.warm and warm.started_at is not None
     key = pool.seed(warm.name)["key"]
@@ -362,11 +375,41 @@ async def test_a_new_session_claims_a_started_warm_vm_and_the_pool_starts_anothe
     (claimed,) = [row for row in rows if row.agent_session_id == agent_session_id]
     assert claimed.id == warm.id, "the session claimed the VM started ahead"
     (replacement,) = [row for row in rows if row.warm]
-    assert replacement.id != warm.id and replacement.started_at is not None
+    assert replacement.id != warm.id
     assert await pool.vms.state(replacement.name) is VmState.RUNNING
     assert await pool.manager.sweep(stage()) == 0
     await pool.manager.close()
     assert len(await pool.rows()) == 2, "the warm count stands; no more start"
+
+
+async def test_a_warm_vm_is_claimed_only_once_its_host_asks_after_its_image_read_its_hot_paths(
+    tmp_path: Path, ctx: TenantContext
+) -> None:
+    pool = Pool(tmp_path, warm=1)
+    await pool.image()
+    await pool.manager.sweep(stage())
+    await pool.manager.close()
+    (warm,) = await pool.rows()
+    assert await pool.vms.state(warm.name) is VmState.RUNNING
+    assert warm.started_at is None, "it runs, and is not counted warm before its host asks"
+    assert pool.seed(warm.name)["warm"] is True, "its seed says no session waits on it"
+
+    # A session meanwhile starts its own VM, whose host never waits on the read.
+    cold = new_id()
+    await pool.prepare(ctx, cold)
+    (mine,) = [row for row in await pool.rows() if row.agent_session_id == cold]
+    assert mine.id != warm.id and mine.host_id is not None, "a VM of its own, its host enrolled"
+    assert "warm" not in pool.seed(mine.name), "its seed says a session waits on it"
+    assert await pool.storage.read_vm(warm.id) == warm, "the warm VM stands, unclaimed"
+
+    await pool.warm_asks()
+    counted = await pool.storage.read_vm(warm.id)
+    assert counted is not None and counted.started_at == pool.now, "counted at its host's ask"
+    claimed = new_id()
+    await pool.prepare(ctx, claimed)
+    await pool.manager.close()
+    (theirs,) = [row for row in await pool.rows() if row.agent_session_id == claimed]
+    assert theirs.id == warm.id, "the next session claims it"
 
 
 # A VM is the size its spec asks, as the deployment maps it.
@@ -442,6 +485,7 @@ async def test_a_cold_start_records_one_boot_from_its_start_to_enrollment_and_a_
 
     await pool.manager.sweep(stage())
     await pool.manager.close()
+    await pool.warm_asks()
     pool.now += timedelta(minutes=5)
     claimed = new_id()
     await pool.prepare(ctx, claimed)
@@ -486,11 +530,13 @@ async def test_a_warm_vm_past_its_age_goes_at_the_sweep_and_another_stands(
     await pool.image()
     await pool.manager.sweep(stage())
     await pool.manager.close()
+    await pool.warm_asks()
     (old,) = await pool.rows()
 
     pool.now += pool.options.max_age + timedelta(minutes=1)
     assert await pool.manager.sweep(stage()) == 1
     await pool.manager.close()
+    await pool.warm_asks()
     (new,) = await pool.rows()
     assert new.warm and new.id != old.id and new.started_at is not None
     assert await pool.vms.state(old.name) is VmState.ABSENT
@@ -533,6 +579,7 @@ async def test_a_restore_claims_a_warm_vm_since_every_vm_starts_from_the_image(
     await pool.image()
     await pool.manager.sweep(stage())
     await pool.manager.close()
+    await pool.warm_asks()
     (warm,) = await pool.rows()
     agent_session_id, snapshot_id = new_id(), new_id()
 
@@ -733,6 +780,7 @@ async def test_a_warm_vm_claimed_after_standing_long_waits_for_its_host_from_the
     await pool.image()
     await pool.manager.sweep(stage())
     await pool.manager.close()
+    await pool.warm_asks()
     (warm,) = await pool.rows()
     pool.now = pool.now + timedelta(minutes=30)  # it stood warm half an hour
     swept: list[int] = []
@@ -878,6 +926,7 @@ async def test_a_claimed_vms_host_is_asked_for_the_workspace_only_once_enrolled_
     await pool.image()
     await pool.manager.sweep(stage())
     await pool.manager.close()
+    await pool.warm_asks()
     (warm,) = await pool.rows()
     holding = Holding(pool)
     pool.placed = holding
@@ -911,11 +960,14 @@ async def test_a_warm_vm_a_session_claims_while_the_sweep_reads_it_is_never_dest
     await pool.storage.create_vm(late)
     seeds = pool.manager._seeds  # pyright: ignore[reportPrivateUsage]
     await seeds.launch_seeded(
-        late.name, VmSpec(image="twin", egress_open=True), IMAGE, seed(pool.options.api_url, key)
+        late.name,
+        VmSpec(image="twin", egress_open=True),
+        IMAGE,
+        seed(pool.options.api_url, key, warm=True),
     )
-    # A warm start past the boot bound, which the sweep reads as dead: it
-    # runs just after the sweep's read, and a session claims it before the
-    # sweep acts.
+    # A warm start past the boot bound, which the sweep reads as dead: its
+    # host asks just after the sweep's read, and a session claims it before
+    # the sweep acts.
     agent_session_id = new_id()
     real = pool.storage.read_vms
     raced: list[UUID] = []
@@ -944,9 +996,11 @@ async def test_a_vm_that_dies_after_its_host_enrolled_is_let_go_at_the_next_swee
     await pool.image()
     await pool.manager.sweep(stage())
     await pool.manager.close()
+    await pool.warm_asks()
     agent_session_id = new_id()
     await pool.prepare(ctx, agent_session_id)
     await pool.manager.close()
+    await pool.warm_asks()
     rows = await pool.rows()
     (bound,) = [row for row in rows if row.agent_session_id == agent_session_id]
     (warm,) = [row for row in rows if row.warm]
@@ -956,6 +1010,7 @@ async def test_a_vm_that_dies_after_its_host_enrolled_is_let_go_at_the_next_swee
     await pool.vms.destroy(warm.name)
     assert await pool.manager.sweep(stage()) == 2
     await pool.manager.close()
+    await pool.warm_asks()
     assert bound.host_id in pool.hosts.retired, "its host's credential ended"
     (replacement,) = await pool.rows()
     assert replacement.id not in (bound.id, warm.id), "neither holds a place any more"
