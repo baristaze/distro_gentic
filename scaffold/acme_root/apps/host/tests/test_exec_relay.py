@@ -297,13 +297,18 @@ async def test_a_relayed_read_from_an_offset_answers_only_what_follows_it(
 
 class Crossed(httpx.AsyncBaseTransport):
     """The stack, noting the operation each `exec` item's detail hands the
-    host, and each result the host pushes. With `earlier`, each detail is
-    as a platform of an earlier release answers it: it keeps no times."""
+    host, as its claim carries it or its own route answers it, each read
+    of that route, and each part and result the host pushes. With
+    `earlier`, each claim and detail are as a platform of an earlier
+    release answers them: a claim carries no detail, and a detail keeps no
+    times and takes nothing inline."""
 
     def __init__(self, inner: httpx.AsyncBaseTransport, *, earlier: bool = False) -> None:
         self._inner = inner
         self._earlier = earlier
         self.asked: list[dict[str, Any]] = []
+        self.read = 0
+        self.pushes = 0
         self.answered: list[dict[str, Any]] = []
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
@@ -311,17 +316,28 @@ class Crossed(httpx.AsyncBaseTransport):
         if request.method == "POST" and path.endswith("/result"):
             pushed = json.loads(await request.aread())["data"]
             self.answered.append(json.loads(base64.b64decode(pushed)))
+        if request.method == "POST" and path.endswith("/parts"):
+            self.pushes += 1
         response = await self._inner.handle_async_request(request)
-        if request.method != "GET" or DETAIL.fullmatch(path) is None:
+        claims = request.method == "POST" and path == "/v1/hosts/me/claims"
+        detail = request.method == "GET" and DETAIL.fullmatch(path) is not None
+        if response.status_code != 200 or not (claims or detail):
             return response
-        body = await response.aread()
-        detail = json.loads(body)
-        self.asked.append(detail["request"])
-        if self._earlier:
-            detail.pop("times", None)
-            body = json.dumps(detail).encode()
+        body = json.loads(await response.aread())
+        if detail:
+            self.read += 1
+            self.asked.append(body["request"])
+            if self._earlier:
+                body.pop("times", None)
+                body.pop("inline", None)
+        item = body.get("item") if claims else None
+        if item is not None and item.get("detail") is not None:
+            if self._earlier:
+                del item["detail"]
+            else:
+                self.asked.append(item["detail"]["request"])
         headers = [(k, v) for k, v in response.headers.raw if k.lower() != b"content-length"]
-        return httpx.Response(response.status_code, headers=headers, content=body)
+        return httpx.Response(response.status_code, headers=headers, content=json.dumps(body).encode())
 
 
 async def test_a_host_echoes_the_offset_it_read_from_and_a_read_from_the_start_carries_none(
@@ -757,8 +773,10 @@ async def test_a_renewal_or_a_result_the_platform_fails_to_take_is_sent_again(
 async def test_a_last_part_the_wire_drops_keeps_the_commands_result(
     api: Stack, tmp_path: Path
 ) -> None:
-    # Nothing is sent while the command runs, so its one part is its last.
-    wire = FailsOnceAt(api.transport, "/parts", None)
+    # Nothing is sent while the command runs, so its one part is its last;
+    # a platform of an earlier release takes no output in the result, so
+    # the part goes.
+    wire = FailsOnceAt(Crossed(api.transport, earlier=True), "/parts", None)
     relayed = await relay_to(api, tmp_path, wire=wire, flush_seconds=60.0)
     spec = command(relayed.epoch, "sh", "-c", "echo done", seconds=5)
     waiting = asyncio.ensure_future(relayed.runner.run(relayed.workspace, spec, seal=NO_SEAL))
@@ -788,8 +806,9 @@ class Pushed(httpx.AsyncBaseTransport):
 async def test_a_window_of_output_is_one_push_that_holds_every_part_in_it(
     api: Stack, tmp_path: Path
 ) -> None:
-    wire = Pushed(api.transport)
-    # The whole command runs within one window.
+    # The whole command runs within one window, and a platform of an
+    # earlier release takes no output in the result, so the window goes.
+    wire = Pushed(Crossed(api.transport, earlier=True))
     relayed = await relay_to(api, tmp_path, wire=wire, flush_seconds=60.0)
     printed: list[tuple[str, str]] = []
 

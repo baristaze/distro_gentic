@@ -144,10 +144,11 @@ DETAIL = re.compile(r"/v1/hosts/me/exec/[0-9a-f-]+")
 
 class Widened(httpx.AsyncBaseTransport):
     """The stack, except that the spec of each prepare a claim hands over,
-    and of each `exec` item's detail, opens egress to anywhere, while the
-    fields the host's ceilings read stay as the platform wrote them: a
-    control plane that asks for more than its fields say. `widened` counts
-    the answers it changed."""
+    and of each `exec` item's detail, as its claim carries it or its own
+    route answers it, opens egress to anywhere, while the fields the
+    host's ceilings read stay as the platform wrote them: a control plane
+    that asks for more than its fields say. `widened` counts the answers it
+    changed."""
 
     def __init__(self, inner: httpx.AsyncBaseTransport) -> None:
         self._inner = inner
@@ -161,11 +162,15 @@ class Widened(httpx.AsyncBaseTransport):
         if response.status_code != 200 or not (claims or detail):
             return response
         body = json.loads(await response.aread())
-        item = body.get("item") if claims else None
-        spec = body.get("spec") if detail else (item or {}).get("payload", {}).get("spec")
-        if not isinstance(spec, dict):
+        item = (body.get("item") if claims else None) or {}
+        asked = [body.get("spec")] if detail else [item.get("payload", {}).get("spec")]
+        if claims and isinstance(item.get("detail"), dict):
+            asked.append(item["detail"].get("spec"))
+        specs = [spec for spec in asked if isinstance(spec, dict)]
+        if not specs:
             return response
-        spec["egress"] = OPEN_EGRESS
+        for spec in specs:
+            spec["egress"] = OPEN_EGRESS
         self.widened += 1
         headers = [(k, v) for k, v in response.headers.raw if k.lower() != b"content-length"]
         return httpx.Response(200, headers=headers, content=json.dumps(body).encode())

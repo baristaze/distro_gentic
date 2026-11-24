@@ -390,11 +390,23 @@
         "type": "object"
       },
       "ClaimedWorkView": {
-        "description": "One item a host was handed, under a lease, as `exec` work of\n`wire_version`. `payload` is the item's, as its kind fixes it.\n`org_id` is the tenant whose work it is, the host's own.",
+        "description": "One item a host was handed, under a lease, as `exec` work of\n`wire_version`. `payload` is the item's, as its kind fixes it.\n`org_id` is the tenant whose work it is, the host's own. `detail` is\nwhat the item's kind hands its host beyond the payload, as its own\nroute answers it (an `exec` item's, `GET /v1/hosts/me/exec/{id}`), so\none call claims and reads it. None for a kind that hands nothing more,\nand for one whose detail could not be read with the claim: the host\nreads it by that route.",
         "properties": {
           "attempts": {
             "title": "Attempts",
             "type": "integer"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
           },
           "id": {
             "format": "uuid",

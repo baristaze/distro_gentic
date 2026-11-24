@@ -78,7 +78,7 @@
         "type": "object"
       },
       "ExecDetailView": {
-        "description": "An item the host holds: the call, the workspace, the operation, and\nthe objects it moves. A write's `file_in` comes by `url`, signed for a\nGET of it alone until `url_expires_at`; an `output` and a read's\n`file_out` go by the parts `POST .../upload` signs. `times` says the\nplatform keeps the times a host sends with the item's result; a host\nsends them only when it does, so a platform of an earlier release,\nwhich keeps none, is never sent a result it refuses.",
+        "description": "An item the host holds: the call, the workspace, the operation, and\nthe objects it moves. A write's `file_in` comes by `url`, signed for a\nGET of it alone until `url_expires_at`, or in the item itself; an\n`output` and a read's `file_out` go by the parts `POST .../upload`\nsigns, or, at most `inline` bytes, in the result itself. `times` says\nthe platform keeps the times a host sends with the item's result; a\nhost sends them only when it does, and sends nothing inline past\n`inline`, so a platform of an earlier release, which keeps no times and\ntakes nothing inline, is never sent a result it refuses.",
         "properties": {
           "agent_session_id": {
             "format": "uuid",
@@ -116,9 +116,13 @@
                 "$ref": "#/components/schemas/IssuedObjectView"
               },
               {
+                "$ref": "#/components/schemas/InlineObjectView"
+              },
+              {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "File In"
           },
           "file_out": {
             "anyOf": [
@@ -129,6 +133,11 @@
                 "type": "null"
               }
             ]
+          },
+          "inline": {
+            "default": 0,
+            "title": "Inline",
+            "type": "integer"
           },
           "item_id": {
             "format": "uuid",
@@ -231,6 +240,30 @@
         ],
         "title": "ExecState",
         "type": "string"
+      },
+      "InlineObjectView": {
+        "description": "A file a write hands its host in the item itself, at most 64 KiB:\nits size, its digest, and its bytes (base64), which the host holds to\nthe two before a byte of it reaches the workspace.",
+        "properties": {
+          "data": {
+            "title": "Data",
+            "type": "string"
+          },
+          "digest": {
+            "title": "Digest",
+            "type": "string"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "size",
+          "digest",
+          "data"
+        ],
+        "title": "InlineObjectView",
+        "type": "object"
       },
       "IssuedObjectPartView": {
         "description": "One part of an object to send, sealed: `size_bytes` bytes of the\nsealed object from `offset`, as the body of a PUT to `url`, straight to\nthe store. The URL is signed for that length.",
@@ -461,7 +494,7 @@
             "$ref": "#/components/schemas/CrossingBody"
           },
           "data": {
-            "maxLength": 62698,
+            "maxLength": 179210,
             "title": "Data",
             "type": "string"
           }

@@ -45,6 +45,18 @@ class ExecState(StrEnum):
     interrupted = 'interrupted'
 
 
+class InlineObjectView(BaseModel):
+    """
+    A file a write hands its host in the item itself, at most 64 KiB:
+    its size, its digest, and its bytes (base64), which the host holds to
+    the two before a byte of it reaches the workspace.
+    """
+
+    data: Annotated[str, Field(title='Data')]
+    digest: Annotated[str, Field(title='Digest')]
+    size: Annotated[int, Field(title='Size')]
+
+
 class IssuedObjectPartView(BaseModel):
     """
     One part of an object to send, sealed: `size_bytes` bytes of the
@@ -215,11 +227,13 @@ class ExecDetailView(BaseModel):
     """
     An item the host holds: the call, the workspace, the operation, and
     the objects it moves. A write's `file_in` comes by `url`, signed for a
-    GET of it alone until `url_expires_at`; an `output` and a read's
-    `file_out` go by the parts `POST .../upload` signs. `times` says the
-    platform keeps the times a host sends with the item's result; a host
-    sends them only when it does, so a platform of an earlier release,
-    which keeps none, is never sent a result it refuses.
+    GET of it alone until `url_expires_at`, or in the item itself; an
+    `output` and a read's `file_out` go by the parts `POST .../upload`
+    signs, or, at most `inline` bytes, in the result itself. `times` says
+    the platform keeps the times a host sends with the item's result; a
+    host sends them only when it does, and sends nothing inline past
+    `inline`, so a platform of an earlier release, which keeps no times and
+    takes nothing inline, is never sent a result it refuses.
     """
 
     agent_session_id: Annotated[UUID, Field(title='Agent Session Id')]
@@ -227,8 +241,11 @@ class ExecDetailView(BaseModel):
     deadline: Annotated[AwareDatetime, Field(title='Deadline')]
     effect: Annotated[str, Field(title='Effect')]
     epoch: Annotated[int | None, Field(title='Epoch')]
-    file_in: IssuedObjectView | None = None
+    file_in: Annotated[
+        IssuedObjectView | InlineObjectView | None, Field(title='File In')
+    ] = None
     file_out: IssuedObjectSlotView | None = None
+    inline: Annotated[int | None, Field(title='Inline')] = 0
     item_id: Annotated[UUID, Field(title='Item Id')]
     location: Annotated[str, Field(title='Location')]
     org_id: Annotated[UUID, Field(title='Org Id')]
@@ -283,4 +300,4 @@ class ResultRequest(BaseModel):
         extra='forbid',
     )
     crossing: CrossingBody
-    data: Annotated[str, Field(max_length=62698, title='Data')]
+    data: Annotated[str, Field(max_length=179210, title='Data')]

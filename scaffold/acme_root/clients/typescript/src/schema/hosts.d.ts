@@ -709,11 +709,20 @@ export interface components {
          * ClaimedWorkView
          * @description One item a host was handed, under a lease, as `exec` work of
          *     `wire_version`. `payload` is the item's, as its kind fixes it.
-         *     `org_id` is the tenant whose work it is, the host's own.
+         *     `org_id` is the tenant whose work it is, the host's own. `detail` is
+         *     what the item's kind hands its host beyond the payload, as its own
+         *     route answers it (an `exec` item's, `GET /v1/hosts/me/exec/{id}`), so
+         *     one call claims and reads it. None for a kind that hands nothing more,
+         *     and for one whose detail could not be read with the claim: the host
+         *     reads it by that route.
          */
         ClaimedWorkView: {
             /** Attempts */
             attempts: number;
+            /** Detail */
+            detail?: {
+                [key: string]: unknown;
+            } | null;
             /**
              * Id
              * Format: uuid

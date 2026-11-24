@@ -240,11 +240,13 @@ export interface components {
          * ExecDetailView
          * @description An item the host holds: the call, the workspace, the operation, and
          *     the objects it moves. A write's `file_in` comes by `url`, signed for a
-         *     GET of it alone until `url_expires_at`; an `output` and a read's
-         *     `file_out` go by the parts `POST .../upload` signs. `times` says the
-         *     platform keeps the times a host sends with the item's result; a host
-         *     sends them only when it does, so a platform of an earlier release,
-         *     which keeps none, is never sent a result it refuses.
+         *     GET of it alone until `url_expires_at`, or in the item itself; an
+         *     `output` and a read's `file_out` go by the parts `POST .../upload`
+         *     signs, or, at most `inline` bytes, in the result itself. `times` says
+         *     the platform keeps the times a host sends with the item's result; a
+         *     host sends them only when it does, and sends nothing inline past
+         *     `inline`, so a platform of an earlier release, which keeps no times and
+         *     takes nothing inline, is never sent a result it refuses.
          */
         ExecDetailView: {
             /**
@@ -266,8 +268,14 @@ export interface components {
             effect: string;
             /** Epoch */
             epoch: number | null;
-            file_in?: components["schemas"]["IssuedObjectView"] | null;
+            /** File In */
+            file_in?: components["schemas"]["IssuedObjectView"] | components["schemas"]["InlineObjectView"] | null;
             file_out?: components["schemas"]["IssuedObjectSlotView"] | null;
+            /**
+             * Inline
+             * @default 0
+             */
+            inline: number;
             /**
              * Item Id
              * Format: uuid
@@ -312,6 +320,20 @@ export interface components {
          * @enum {string}
          */
         ExecState: "queued" | "running" | "done" | "interrupted";
+        /**
+         * InlineObjectView
+         * @description A file a write hands its host in the item itself, at most 64 KiB:
+         *     its size, its digest, and its bytes (base64), which the host holds to
+         *     the two before a byte of it reaches the workspace.
+         */
+        InlineObjectView: {
+            /** Data */
+            data: string;
+            /** Digest */
+            digest: string;
+            /** Size */
+            size: number;
+        };
         /**
          * IssuedObjectPartView
          * @description One part of an object to send, sealed: `size_bytes` bytes of the

@@ -15,6 +15,7 @@ from acme.om.intake import IntakeManagerInterface
 from acme.om.levers import LeversManagerInterface
 from acme.om.matrix.root import MatrixManagers
 from acme.om.park_alerts import ParkAlertsManagerInterface
+from acme.om.placement.kinds import PlacementWorkKind
 from acme.om.platform_root import PlatformManagers
 from acme.om.trust import TrustManagerInterface, TrustOperatorManagerInterface
 from acme.om.watch import WatchManagerInterface
@@ -251,15 +252,21 @@ def build_platform_services(
     """The engine's services, the platform's over its managers and the
     layers built over them, and `products`, a product's services by its
     namespace's name. In-process impls only, as the engine's are."""
+    exec_relay = ExecRelayServiceImpl(managers.exec_relay, infra.get_topics())
     return PlatformServicesImpl(
         engine,
         hosts=HostsServiceImpl(
-            managers.hosts, managers.cloud_pool, infra.get_topics(), kind_streams.reader
+            managers.hosts,
+            managers.cloud_pool,
+            infra.get_topics(),
+            kind_streams.reader,
+            # A host's claim of an `exec` item carries its detail.
+            details={PlacementWorkKind.EXEC: exec_relay.claimed},
         ),
         agent_fleet=AgentFleetServiceImpl(
             managers.placement_operator, trust_operator, levers, managers.cloud_pool_operator
         ),
-        exec_relay=ExecRelayServiceImpl(managers.exec_relay, infra.get_topics()),
+        exec_relay=exec_relay,
         intake=IntakeServiceImpl(intake),
         budgets=BudgetsServiceImpl(managers.spend_budgets, agent_billing),
         agent_billing=AgentBillingServiceImpl(agent_billing),

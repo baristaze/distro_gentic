@@ -15,10 +15,12 @@ is used only once it matches the size and the digest the item declares; a
 read is spooled from the workspace a chunk at a time and hashed, then
 sealed a frame at a time as each part is sent. An upload cut off resumes:
 the platform signs only the parts the store does not hold, and those alone
-are sent again."""
+are sent again. A write's file that rides in its item, within the bound,
+is held to its size and its digest and spooled the same way."""
 
 import asyncio
 import base64
+import binascii
 import hashlib
 import logging
 import tempfile
@@ -34,6 +36,7 @@ import httpx
 from acme.client.client import ApiClient
 from acme.client.transport import WIRE_FAILURES, ApiError
 from acme.client.types.exec_relay import (
+    InlineObjectView,
     IssuedObjectPartView,
     IssuedObjectSlotView,
     IssuedObjectView,
@@ -142,6 +145,21 @@ class HostObjects:
             await asyncio.to_thread(handle.close)
             await asyncio.to_thread(path.unlink, True)
             raise
+        return Spooled(path, named.size, digest)
+
+    async def spooled(self, named: InlineObjectView) -> Spooled:
+        """The file a write hands the host in its item, into a spool once it
+        is the size and the digest the item declares; `ObjectRefused`
+        otherwise, with nothing of it kept. The caller removes the spool."""
+        try:
+            data = base64.b64decode(named.data, validate=True)
+        except binascii.Error:
+            raise ObjectRefused("a file in the item that is not base64") from None
+        digest = DIGEST_SCHEME + hashlib.sha256(data).hexdigest()
+        if len(data) != named.size or digest != named.digest:
+            raise ObjectRefused("a file in the item does not match its size and its digest")
+        path = self._new_spool()
+        await asyncio.to_thread(path.write_bytes, data)
         return Spooled(path, named.size, digest)
 
     async def spool_read(

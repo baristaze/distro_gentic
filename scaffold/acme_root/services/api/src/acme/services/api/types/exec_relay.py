@@ -137,6 +137,16 @@ class IssuedObjectView(View):
     key: str
 
 
+class InlineObjectView(View):
+    """A file a write hands its host in the item itself, at most 64 KiB:
+    its size, its digest, and its bytes (base64), which the host holds to
+    the two before a byte of it reaches the workspace."""
+
+    size: int
+    digest: str
+    data: str
+
+
 class IssuedObjectSlotView(View):
     """An object the host uploads: where it is under the tenant, and the key
     (base64) it seals it under."""
@@ -148,11 +158,13 @@ class IssuedObjectSlotView(View):
 class ExecDetailView(View):
     """An item the host holds: the call, the workspace, the operation, and
     the objects it moves. A write's `file_in` comes by `url`, signed for a
-    GET of it alone until `url_expires_at`; an `output` and a read's
-    `file_out` go by the parts `POST .../upload` signs. `times` says the
-    platform keeps the times a host sends with the item's result; a host
-    sends them only when it does, so a platform of an earlier release,
-    which keeps none, is never sent a result it refuses."""
+    GET of it alone until `url_expires_at`, or in the item itself; an
+    `output` and a read's `file_out` go by the parts `POST .../upload`
+    signs, or, at most `inline` bytes, in the result itself. `times` says
+    the platform keeps the times a host sends with the item's result; a
+    host sends them only when it does, and sends nothing inline past
+    `inline`, so a platform of an earlier release, which keeps no times and
+    takes nothing inline, is never sent a result it refuses."""
 
     item_id: UUID
     call_id: UUID  # the tool request's id: the call's idempotency key
@@ -165,11 +177,12 @@ class ExecDetailView(View):
     location: str
     request: dict[str, Any]
     output: IssuedObjectSlotView | None = None
-    file_in: IssuedObjectView | None = None
+    file_in: IssuedObjectView | InlineObjectView | None = None
     file_out: IssuedObjectSlotView | None = None
     url: str | None = None
     url_expires_at: datetime | None = None
     times: bool = False
+    inline: int = 0
 
 
 class IssuedObjectPartView(View):
