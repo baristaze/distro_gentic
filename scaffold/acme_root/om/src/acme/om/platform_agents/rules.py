@@ -1,5 +1,6 @@
 """Pure rules of the agents a platform ships: the reach of the assistant,
-the ops analyst, and the reviewer, a finding's place in a file, a review's
+the ops analyst, and the reviewer, which kinds may prepare their workspace
+early, a finding's place in a file, a review's
 verdict, an edit of
 one place in a file, the matches a search of the code
 answers, the corpus the knowledge map lists for one audience, a search of
@@ -12,7 +13,7 @@ from pathlib import PurePosixPath
 from typing import NamedTuple
 from uuid import UUID
 
-from acme.infra.agent_workspaces import IsolationMode
+from acme.infra.agent_workspaces import Durability, IsolationMode
 from acme.om.agent_steps.types.header import LoopOutcome, ToolFailure
 from acme.om.agents.types.kind import AgentKind
 from acme.om.agents.types.result import Claim, Verdict
@@ -87,6 +88,24 @@ def reach_refusal(kind: AgentKind, classes: Mapping[str, str]) -> str | None:
             return f"{who}: {tool} is not a tool the catalog holds"
         if found not in reach.classes:
             return f"{who}: {tool} is a {found} tool, and the {kind.name} {reach.what}"
+    return None
+
+
+# A kind that prepares its workspace early.
+
+
+def early_refusal(kind: AgentKind) -> str | None:
+    """Why `kind` may not prepare its workspace early, or None when it may:
+    whoever declares it, a kind kept by snapshots may not. A run that
+    reaches no workspace lets its early prepare go with no snapshot, and
+    the platform lets go only an instance a snapshot holds, so a VM of the
+    cloud pool would stay running for no call."""
+    if kind.prepares_early and kind.isolation.durability is Durability.SNAPSHOT:
+        return (
+            f"{kind.name} v{kind.version} is kept by snapshots, so it never prepares its "
+            "workspace early: a run that reaches none takes no snapshot, and an instance "
+            "no snapshot holds is never let go"
+        )
     return None
 
 

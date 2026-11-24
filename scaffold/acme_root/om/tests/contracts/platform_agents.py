@@ -305,12 +305,17 @@ def sub_agents_over(
     tmp_path: Path, *, storage: StorageInterface | None = None
 ) -> tuple[Platform, ScriptedExecutor, WorkProductMemoryImpl]:
     """The platform with the shipped software engineer on the twin, and analysis with
-    no workspace: a sub-agent belongs to its parent's agent project, whose
-    repository no suite can fetch, and the case's sub-agents read none."""
+    no workspace, so none prepared early: a sub-agent belongs to its parent's
+    agent project, whose repository no suite can fetch, and the case's
+    sub-agents read none."""
     executor = ScriptedExecutor(capabilities=frozenset())
     work = WorkProductMemoryImpl()
     reader = ANALYSIS_KIND.model_copy(
-        update={"version": ANALYSIS_KIND.version + 1, "isolation": NO_AGENT_WORKSPACE}
+        update={
+            "version": ANALYSIS_KIND.version + 1,
+            "isolation": NO_AGENT_WORKSPACE,
+            "prepares_early": False,
+        }
     )
     platform = platform_over(
         tmp_path,

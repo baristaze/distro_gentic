@@ -55,6 +55,14 @@ calls, and holds its workspace warm for a while after a loop.
   provider the platform calls keeps a request's prefix. A product names
   a grace for each of its kinds, never longer; one it names none for
   takes the cache's life.
+- **Prepared early**: nearly every run of the software engineer and of
+  analysis works in its workspace, so each prepares it beside the run's
+  first model call, and the call that first reaches it waits only for
+  what is left of the boot
+  ([ADR 1048](../../../../../docs/adr/1048-a-kind-may-prepare-its-workspace-as-its-run-starts.md)).
+  A run of theirs that reaches none lets it go at its end, and
+  `acme_workspace_prepares_unused_total` counts it by kind, so what
+  such runs cost is a reading.
 - **The software engineer** takes an objective to a validated,
   reviewable change. It works in a container of its own, from which
   nothing leaves: it reads files, searches the code, changes a file one

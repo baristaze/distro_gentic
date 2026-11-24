@@ -12,7 +12,7 @@ each part sealed under the session's key in the bucket; then the VM
 goes, and no disk of it is kept. The next loop's VM boots the pool's
 image, and its new host takes the directory back: the same file, and
 no Docker image, which lived outside it. Each VM is a claim counted once,
-whose wait ends at its first command, and the restore is timed. The
+whose wait ends as its prepare returns, and the restore is timed. The
 host's environment holds nothing of the platform's. Every part of the
 directory crosses the store, as a command's output past what rides in
 its result does, here the local impl's, served on this host's loopback
@@ -248,7 +248,7 @@ async def test_a_session_of_the_cloud_pool_keeps_its_files_sealed_across_loops(
         owner, Start(id=new_id(), kind=KIND.name, title="a VM of its own")
     )
     claims = sampled("acme_cloud_pool_claims_total")
-    waits = sampled("acme_cloud_pool_first_command_seconds_count")
+    waits = sampled("acme_cloud_pool_claim_wait_seconds_count")
     restores = sampled("acme_cloud_pool_restore_seconds_count")
     try:
         # The first loop: a VM from the pool's image, its host, and a
@@ -264,8 +264,8 @@ async def test_a_session_of_the_cloud_pool_keeps_its_files_sealed_across_loops(
         assert digest is not None, state
         assert state.count(digest.group(1)) >= 2, "the file, and the container's copy of it"
         assert sampled("acme_cloud_pool_claims_total") == claims + 1, "one claim, a new VM"
-        assert sampled("acme_cloud_pool_first_command_seconds_count") == waits + 1, (
-            "its wait ends at the first of its commands, through the runner's transport"
+        assert sampled("acme_cloud_pool_claim_wait_seconds_count") == waits + 1, (
+            "its wait, once its prepare handed the session the workspace"
         )
 
         # The loop's end kept the directory in sealed parts, and let the
@@ -303,7 +303,7 @@ async def test_a_session_of_the_cloud_pool_keeps_its_files_sealed_across_loops(
         assert digest.group(1) in found, found
         assert "images-0" in found, "what lived outside the directory is the image's again"
         claimed = sampled("acme_cloud_pool_claims_total") - claims
-        assert sampled("acme_cloud_pool_first_command_seconds_count") - waits == claimed, (
+        assert sampled("acme_cloud_pool_claim_wait_seconds_count") - waits == claimed, (
             "each claim's wait, once"
         )
         assert sampled("acme_cloud_pool_restore_seconds_count") > restores, "the restore, timed"

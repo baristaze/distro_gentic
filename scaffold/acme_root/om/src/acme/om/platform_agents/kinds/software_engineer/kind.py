@@ -150,17 +150,31 @@ SOFTWARE_ENGINEER_V7 = revised(
 """The software engineer before its workspace started from its agent project's
 workspace base: kept while a session may still run it."""
 
-SOFTWARE_ENGINEER_KIND = SOFTWARE_ENGINEER_V7.model_copy(
+SOFTWARE_ENGINEER_V8 = SOFTWARE_ENGINEER_V7.model_copy(
     # Its prompt adds that its workspace has no network, so a missing
     # package is named rather than fetched.
     update={"version": 8, "prompts": (prompt_of(__file__, 8),)}
+)
+"""The software engineer before its runs prepared their workspace beside their
+first model call: kept while a session may still run it."""
+
+SOFTWARE_ENGINEER_KIND = revised(
+    SOFTWARE_ENGINEER_V8,
+    version=9,
+    prompts=(prompt_of(__file__, 9),),
+    # Nearly every run of it works in its workspace: a baseline, the code
+    # it searches and changes, its commits, and their validation. So its
+    # prepare starts beside the run's first model call, and the call that
+    # first reaches the workspace waits only for what is left of it.
+    prepares_early=True,
 )
 """The software engineer. It starts sub-agents and waits on them, and since it
 delivers through its result tool, a product's kind may spawn it too, under
 its share. A result too large for its window, or one compaction elided, it
 reads back with `read_tool_output`, by the handle the notice names. Its
 workspace starts from its agent project's workspace base, when the agent project names
-one, and keeps no egress (`WORKSPACE_BASE_KINDS`)."""
+one, and keeps no egress (`WORKSPACE_BASE_KINDS`). Its runs prepare the
+workspace early, beside their first model call."""
 
 VERSIONS = (
     SOFTWARE_ENGINEER_V1,
@@ -170,6 +184,7 @@ VERSIONS = (
     SOFTWARE_ENGINEER_V5,
     SOFTWARE_ENGINEER_V6,
     SOFTWARE_ENGINEER_V7,
+    SOFTWARE_ENGINEER_V8,
     SOFTWARE_ENGINEER_KIND,
 )
 """Every version of the software engineer the platform still runs."""

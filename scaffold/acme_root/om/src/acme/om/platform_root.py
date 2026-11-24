@@ -115,6 +115,7 @@ from acme.om.placement.kinds import (
     platform_claimant_kinds,
 )
 from acme.om.platform_agents import PlatformAgentsManagerInterface
+from acme.om.platform_agents import rules as platform_agent_rules
 from acme.om.platform_agents.catalog import (
     PlatformAgents,
     refuse_reach,
@@ -560,7 +561,9 @@ class PlatformRootOptions:
     starts from their agent project's workspace base, which the workspaces
     read beside the platform's (`WORKSPACE_BASE_KINDS`); and its resource
     kinds, which the leases manager reads beside `noop`. A name the
-    platform holds is refused at boot. None adds nothing.
+    platform holds is refused at boot, and so is a kind kept by snapshots
+    that prepares its workspace early, whoever declares it
+    (`platform_agents.rules.early_refusal`). None adds nothing.
 
     `platform_agents` ships the platform's agents, with the corpus its
     assistant answers from: their kinds join `agent_kinds` and their tools
@@ -776,6 +779,11 @@ class RootHooksPlatformImpl(RootHooksInterface):
                 else integrations.get_integration,
                 budgets=lambda: self.managers.spend_budgets,
             )
+        for kind in agent_kinds:
+            # Every kind the platform runs, the product's beside its own.
+            refused = platform_agent_rules.early_refusal(kind)
+            if refused is not None:
+                raise ValueError(refused)
         self._agent_kinds = agent_kinds
         self._tool_catalog = tool_catalog
         self._domain_classes = domain_classes

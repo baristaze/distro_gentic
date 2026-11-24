@@ -70,11 +70,12 @@ let go, whether it runs, starts, or stands stopped for its session.
   `acme_cloud_pool_claims_total`, by how it got its VM: `warm`, `new`,
   `held` (its session's own, found running), or `restarted` (that one
   started again). A prepare asked again before its claim's returned is
-  that claim. The first command on the VM, as the runner's transport
-  says it starts, records the claim's wait from the claim in
-  `acme_cloud_pool_first_command_seconds`, under the same source; any
-  later command records none. A restore that ends records its time,
-  from its first part to its unpack's end, in
+  that claim. The prepare that hands the session its workspace records
+  the claim's wait, from the claim, in
+  `acme_cloud_pool_claim_wait_seconds`, under the same source, once a
+  claim: the pool's cost alone, never the model's turns before a call
+  reaches the workspace. No command records it. A restore that ends
+  records its time, from its first part to its unpack's end, in
   `acme_cloud_pool_restore_seconds`, by its archive's size class.
 - **Archive.** At a loop's end, for a session kept by snapshots, what
   the workspace holds is pushed, the pool records the session's
