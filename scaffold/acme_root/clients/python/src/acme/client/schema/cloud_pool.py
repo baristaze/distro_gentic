@@ -13,6 +13,7 @@ class PoolLimitsView(BaseModel):
     while no operator wrote them, and the pool's options hold.
     """
 
+    hibernated: Annotated[int, Field(title='Hibernated')]
     most: Annotated[int, Field(title='Most')]
     tenant_most: Annotated[int, Field(title='Tenant Most')]
     updated_at: Annotated[AwareDatetime, Field(title='Updated At')]
@@ -22,14 +23,17 @@ class PoolLimitsView(BaseModel):
 
 class SetPoolLimitsRequest(BaseModel):
     """
-    The pool's limits, written whole: the VMs kept warm, the most VMs it
-    holds at once, warm ones among them, and the most one tenant holds where
-    no maximum of its own holds. The warm VMs stand below the most.
+    The pool's limits, written whole: the VMs kept warm and running, those
+    kept warm and hibernated where the VMs hibernate, none unless named, the
+    most VMs it holds at once, warm ones among them, and the most one tenant
+    holds where no maximum of its own holds. The warm VMs, running and
+    hibernated, stand below the most.
     """
 
     model_config = ConfigDict(
         extra='forbid',
     )
+    hibernated: Annotated[int | None, Field(ge=0, le=100000, title='Hibernated')] = 0
     most: Annotated[int, Field(ge=0, le=100000, title='Most')]
     tenant_most: Annotated[int, Field(ge=0, le=100000, title='Tenant Most')]
     warm: Annotated[int, Field(ge=0, le=100000, title='Warm')]

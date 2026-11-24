@@ -4,6 +4,10 @@
       "PoolLimitsView": {
         "description": "The pool's limits as the next claim reads them, at their version: 0\nwhile no operator wrote them, and the pool's options hold.",
         "properties": {
+          "hibernated": {
+            "title": "Hibernated",
+            "type": "integer"
+          },
           "most": {
             "title": "Most",
             "type": "integer"
@@ -28,6 +32,7 @@
         },
         "required": [
           "warm",
+          "hibernated",
           "most",
           "tenant_most",
           "version",
@@ -38,8 +43,15 @@
       },
       "SetPoolLimitsRequest": {
         "additionalProperties": false,
-        "description": "The pool's limits, written whole: the VMs kept warm, the most VMs it\nholds at once, warm ones among them, and the most one tenant holds where\nno maximum of its own holds. The warm VMs stand below the most.",
+        "description": "The pool's limits, written whole: the VMs kept warm and running, those\nkept warm and hibernated where the VMs hibernate, none unless named, the\nmost VMs it holds at once, warm ones among them, and the most one tenant\nholds where no maximum of its own holds. The warm VMs, running and\nhibernated, stand below the most.",
         "properties": {
+          "hibernated": {
+            "default": 0,
+            "maximum": 100000.0,
+            "minimum": 0.0,
+            "title": "Hibernated",
+            "type": "integer"
+          },
           "most": {
             "maximum": 100000.0,
             "minimum": 0.0,
@@ -496,7 +508,7 @@
   },
   "tags": [
     {
-      "description": "The cloud pool. On the operator plane, under /v1/admin/*, an operator who\nmay write sets the pool's limits, a new version each time: the VMs kept\nwarm, the most VMs it holds at once, and the most one tenant holds; and a\ntenant's own maximum, or clears it. Each claim reads them as they stand,\nso a write holds with no deploy. A limit is written whole, so the write is\na PUT and a retry lands the same values, with no Idempotency-Key. Each\nwrite leaves an entry that names the operator: the pool's own in the\nplatform's stream, which no tenant reads, and a tenant's own in the\ntenant's.",
+      "description": "The cloud pool. On the operator plane, under /v1/admin/*, an operator who\nmay write sets the pool's limits, a new version each time: the VMs kept\nwarm, running and hibernated, the most VMs it holds at once, and the most one tenant holds; and a\ntenant's own maximum, or clears it. Each claim reads them as they stand,\nso a write holds with no deploy. A limit is written whole, so the write is\na PUT and a retry lands the same values, with no Idempotency-Key. Each\nwrite leaves an entry that names the operator: the pool's own in the\nplatform's stream, which no tenant reads, and a tenant's own in the\ntenant's.",
       "name": "cloud_pool"
     }
   ]

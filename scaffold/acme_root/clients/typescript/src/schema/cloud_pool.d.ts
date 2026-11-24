@@ -70,6 +70,8 @@ export interface components {
          *     while no operator wrote them, and the pool's options hold.
          */
         PoolLimitsView: {
+            /** Hibernated */
+            hibernated: number;
             /** Most */
             most: number;
             /** Tenant Most */
@@ -86,11 +88,18 @@ export interface components {
         };
         /**
          * SetPoolLimitsRequest
-         * @description The pool's limits, written whole: the VMs kept warm, the most VMs it
-         *     holds at once, warm ones among them, and the most one tenant holds where
-         *     no maximum of its own holds. The warm VMs stand below the most.
+         * @description The pool's limits, written whole: the VMs kept warm and running, those
+         *     kept warm and hibernated where the VMs hibernate, none unless named, the
+         *     most VMs it holds at once, warm ones among them, and the most one tenant
+         *     holds where no maximum of its own holds. The warm VMs, running and
+         *     hibernated, stand below the most.
          */
         SetPoolLimitsRequest: {
+            /**
+             * Hibernated
+             * @default 0
+             */
+            hibernated: number;
             /** Most */
             most: number;
             /** Tenant Most */
