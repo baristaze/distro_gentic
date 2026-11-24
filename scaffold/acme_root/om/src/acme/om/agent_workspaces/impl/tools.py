@@ -763,9 +763,9 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface, PinnedWorkspacesInt
         """The archive's parts brought into the VM's directory, then
         unpacked there. The VM's host fetches the parts of an archive the
         pool keeps from the bucket itself, each by a link signed for it
-        alone; for a host that fetches none, each part is opened here and
-        relayed, as each of an archive kept before is, under the session's
-        key."""
+        alone. For a host that fetches none, each part is opened here and
+        relayed, as each part of an archive in the engine's format is,
+        opened under the session's key."""
         snapshots, buckets, transport, record_seal = self._archives()
         if isinstance(archive, pool_archive.PoolManifest):
             packing, count = archive.packing, len(archive.parts)
