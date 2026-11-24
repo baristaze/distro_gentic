@@ -1,6 +1,6 @@
 """The operators' plane of the cloud pool: its limits, which no tenant
 writes. The pool's own are the warm VMs it keeps started ahead of
-demand, the most VMs it holds at once, and the most one tenant holds; a
+demand, running and hibernated, the most VMs it holds at once, and the most one tenant holds; a
 tenant may have a maximum of its own in place of the last. Every claim
 and every refill reads them as they stand, so a write takes effect with
 no deploy. Each write leaves an audit event that names the operator and
@@ -24,15 +24,22 @@ class CloudPoolOperatorManagerInterface(ABC):
 
     @abstractmethod
     async def set_limits(
-        self, admin: OperatorContext, *, warm: int, most: int, tenant_most: int
+        self,
+        admin: OperatorContext,
+        *,
+        warm: int,
+        most: int,
+        tenant_most: int,
+        hibernated: int = 0,
     ) -> PoolLimits:
         """Writes the pool's limits, a new version, and leaves an audit
         event in the platform's stream that names the operator and the
         values. The next claim and the next refill hold to them; a VM
-        already held stays. Requires the write permission. ValidationFailed
-        when a value is out of its bounds, or the warm VMs do not stand
-        below the most; PreconditionFailed when another write landed
-        meanwhile."""
+        already held stays. `hibernated` warm VMs sleep beside the `warm`
+        that run, where the VMs hibernate. Requires the write permission.
+        ValidationFailed when a value is out of its bounds, or the warm
+        VMs, running and hibernated, do not stand below the most;
+        PreconditionFailed when another write landed meanwhile."""
         ...
 
     @abstractmethod

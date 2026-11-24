@@ -30,3 +30,5 @@ class PoolVms(GlobalIdentifiableMixin, CreatedMixin, Base):
     started_at: Mapped[datetime | None]
     bound_at: Mapped[datetime | None]
     sealed_at: Mapped[datetime | None]
+    hibernates: Mapped[bool]
+    hibernated_at: Mapped[datetime | None]

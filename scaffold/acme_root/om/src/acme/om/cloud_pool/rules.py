@@ -1,12 +1,13 @@
 """Pure rules of the cloud pool: how its VMs are named, the key a VM is
 handed, what a session's spec may ask of the pool's VMs and the size it
-gets, how many warm VMs to start, and the size class a restore is timed
-under. Values in, values out; no clock, no
-storage, no settings."""
+gets, how many warm VMs to start, when a hibernated one has slept too long,
+and the size class a restore is timed under. Values in, values out; no
+clock, no storage, no settings."""
 
 import json
 import secrets
 from collections.abc import Collection
+from datetime import timedelta
 
 from acme.infra.agent_workspaces import EgressMode, IsolationMode, IsolationSpec, VmSize
 from acme.infra.agent_workspaces import refusal as infra_refusal
@@ -28,6 +29,10 @@ DEFAULT_SIZE = VmSize.S
 """The size of a VM whose session's spec asks none, and of every warm
 VM: a claim of another size starts a VM of its own."""
 
+SLEEP_MARGIN = timedelta(days=2)
+"""How long before the longest its VMs keep one hibernated the sweep lets a
+hibernated warm VM go: far more than the time between two sweeps, so none
+sleeps past it."""
 
 MIB = 1024 * 1024
 
@@ -108,6 +113,13 @@ def warm_to_start(wanted: int, warm: int, room: int) -> int:
     when `warm` stand or start already, and never past the `room` the
     pool's maximum leaves."""
     return max(0, min(wanted - warm, room))
+
+
+def slept_out(slept: timedelta, most: timedelta) -> bool:
+    """Whether a warm VM hibernated for `slept` nears `most`, the longest
+    its VMs keep one so, and goes: a VM kept past it may be stopped by its
+    cloud, outside the pool's records."""
+    return slept >= most - SLEEP_MARGIN
 
 
 def archive_size(size: int) -> str:

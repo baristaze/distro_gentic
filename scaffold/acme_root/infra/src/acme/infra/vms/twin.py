@@ -32,8 +32,9 @@ class VmsTwinImpl(VmsInterface):
     copy of a stopped VM's folder, held to a digest of what its files
     hold. What a test asks of a backend is set up front: why it runs no
     VM (`hypervisor`), whether it closes egress, the limits it holds,
-    and whether its store is encrypted. `calls` keeps each call that would
-    make, start, stop, or remove a VM, so a test sees none was made."""
+    whether its store is encrypted, and how long it keeps a VM hibernated,
+    if it hibernates one. `calls` keeps each call that would make, start,
+    stop, hibernate, or remove a VM, so a test sees none was made."""
 
     def __init__(
         self,
@@ -43,12 +44,14 @@ class VmsTwinImpl(VmsInterface):
         closes_egress: bool = True,
         limits: frozenset[str] = frozenset({"cpus", "memory_mb"}),
         encrypted: bool = True,
+        hibernation: timedelta | None = None,
     ) -> None:
         self.root = root
         self.hypervisor = hypervisor
         self._closes_egress = closes_egress
         self._limits = limits
         self._encrypted = encrypted
+        self._hibernation = hibernation
         self.vms: dict[str, TwinVm] = {}
         self.calls: list[tuple[str, ...]] = []
 
@@ -64,6 +67,9 @@ class VmsTwinImpl(VmsInterface):
 
     def encrypted_at_rest(self) -> bool:
         return self._encrypted
+
+    def hibernation(self) -> timedelta | None:
+        return self._hibernation
 
     async def state(self, name: str) -> VmState:
         vm = self.vms.get(name)
@@ -130,6 +136,14 @@ class VmsTwinImpl(VmsInterface):
 
     async def stop(self, name: str) -> None:
         self.calls.append(("stop", name))
+        vm = self.vms.get(name)
+        if vm is not None:
+            vm.state = VmState.STOPPED
+
+    async def hibernate(self, name: str) -> None:
+        self.calls.append(("hibernate", name))
+        if self._hibernation is None:
+            raise InfraValidationFailed("the twin hibernates no VM")
         vm = self.vms.get(name)
         if vm is not None:
             vm.state = VmState.STOPPED
@@ -201,6 +215,9 @@ class VmsNullImpl(VmsInterface):
     def encrypted_at_rest(self) -> bool:
         return False
 
+    def hibernation(self) -> timedelta | None:
+        return None
+
     async def state(self, name: str) -> VmState:
         return VmState.ABSENT
 
@@ -222,6 +239,9 @@ class VmsNullImpl(VmsInterface):
 
     async def stop(self, name: str) -> None:
         return None
+
+    async def hibernate(self, name: str) -> None:
+        raise InfraValidationFailed("this process runs no VMs")
 
     async def snapshot(self, name: str, to: str) -> str:
         raise SnapshotNotFound("this process runs no VMs")

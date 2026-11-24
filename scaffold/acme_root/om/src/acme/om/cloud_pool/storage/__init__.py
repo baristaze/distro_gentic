@@ -36,8 +36,11 @@ class CloudPoolStorageInterface(ABC):
         """Global: the VM that serves `vm`'s session, counted and written
         one claim at a time across processes. `Full.TENANT` while its
         tenant holds `tenant_most` VMs; else, with `warm`, a started warm
-        VM of its egress, bound to its session, pool, person, and the
-        snapshot it takes back, from its `bound_at`; else `vm`'s own row, written before its VM starts.
+        VM of its egress that runs, else a hibernated one, which takes
+        `vm`'s key digest, the key it is handed as it wakes; either bound
+        to its session, pool, person, and the snapshot it takes back, from
+        its `bound_at`. A warm VM started to sleep is taken only once it
+        sleeps. Else `vm`'s own row, written before its VM starts.
         While the pool holds `most`, that row takes the place of the
         oldest started warm VM no session claimed, whose row goes and
         which the claim names as displaced, so its VM goes after;
@@ -47,12 +50,16 @@ class CloudPoolStorageInterface(ABC):
 
     @abstractmethod
     @tenantless
-    async def reserve_warm(self, wanted: int, most: int, made: Sequence[PoolVm]) -> int:
+    async def reserve_warm(
+        self, wanted: int, most: int, made: Sequence[PoolVm], *, hibernates: bool = False
+    ) -> int:
         """Global: writes the first of `made`, in order, as many as
-        keep `wanted` warm VMs standing or starting and the pool's VMs
-        no more than `most`, and answers how many it wrote: one process at
-        a time counts and writes, so two sweeps never start one VM twice
-        and no claim passes the maximum beside them."""
+        keep `wanted` warm VMs of its kind standing, starting, or asleep,
+        those started to sleep with `hibernates` and those that run
+        without, and the pool's VMs no more than `most`, and answers how
+        many it wrote: one process at a time counts and writes, so two
+        sweeps never start one VM twice and no claim passes the maximum
+        beside them."""
         ...
 
     @abstractmethod
@@ -62,6 +69,22 @@ class CloudPoolStorageInterface(ABC):
         while no session has claimed it: False once one has, or it is gone.
         Its VM is destroyed only after, so no claim binds a VM being
         destroyed."""
+        ...
+
+    @abstractmethod
+    @tenantless
+    async def take_to_sleep(self, vm_id: UUID, key_digest: str) -> bool:
+        """Global: ends the key of a warm VM started to sleep, while no
+        session claimed it, it sleeps not yet, and its key is still the one
+        whose digest this is: False otherwise. One sweep alone takes it, and
+        it then hibernates holding no key that enrolls."""
+        ...
+
+    @abstractmethod
+    @tenantless
+    async def mark_hibernated(self, vm_id: UUID, at: datetime) -> None:
+        """Global: the warm VM sleeps from `at`, so a claim may take it;
+        none once a session claimed it."""
         ...
 
     @abstractmethod

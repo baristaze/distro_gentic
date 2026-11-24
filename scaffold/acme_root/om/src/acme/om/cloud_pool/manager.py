@@ -50,7 +50,8 @@ class CloudPoolManagerInterface(ABC):
     ) -> AgentWorkspace:
         """The session's workspace on its VM, once the VM's host
         holds it. The VM is the one that serves the session, else a
-        warm one it claims at the default size, else one of the size the
+        warm one it claims at the default size, one that runs before one
+        asleep, which wakes under a fresh key, else one of the size the
         spec asks, started from the pool's image: every VM starts from it.
         With `restore`, the id of the snapshot whose directory the caller
         brings into the workspace, a VM that serves the session for any
@@ -65,8 +66,8 @@ class CloudPoolManagerInterface(ABC):
         not prepared it in time, and the loop waits on the resource; its
         cause names no count and no other tenant's use. One that never
         clears, as `check` refuses it, before any VM starts. Each claim
-        counts once, by how it got its VM: a warm one, a new one, the one
-        the session held, or that one started again. A prepare asked again
+        counts once, by how it got its VM: a warm one, a hibernated one, a
+        new one, the one the session held, or that one started again. A prepare asked again
         before this process's claim returned its workspace is that claim,
         and counts none."""
         ...
@@ -135,7 +136,7 @@ class CloudPoolManagerInterface(ABC):
         credential of its session's pool of one; the host is no person, so
         it calls from the request stage. `VmUnbound` while the VM
         is warm, and serves no session yet; `InvalidCredential` for a key
-        never handed, or spent."""
+        never handed, spent, or ended, as a VM's is before it sleeps."""
         ...
 
     @abstractmethod
@@ -152,8 +153,11 @@ class CloudPoolManagerInterface(ABC):
         names that no row holds; stops a session's VM that runs with no
         host to work for, its host never enrolled, ended, or silent, and
         keeps its disk; lets go of a warm VM past the pool's maximum age,
-        and of no session's; then starts warm VMs until the pool's warm
-        count stands, never past its maximum. A warm VM's row goes before
+        and of no session's; hibernates a warm VM started to sleep once it
+        settled, its key ended first, and lets go of one asleep before the
+        longest its VMs keep one so; then starts warm VMs until the pool's
+        warm counts stand, running and hibernated, never past its
+        maximum. A warm VM's row goes before
         its VM, so a session that claimed it meanwhile keeps it. Answers how
         many sessions' archives it removed and how many VMs it let go or
         stopped."""

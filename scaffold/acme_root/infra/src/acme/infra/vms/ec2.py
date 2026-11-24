@@ -13,7 +13,11 @@ chose. A VM holds no instance role, so its metadata endpoint has no
 credential to hand out; its seed, the first-boot data a start hands it, is
 read by the image at each boot, and the endpoint is closed once its host
 has read it (`seal`). The platform never calls into a VM: what runs
-there, its host pulls, so `run` and `channel` refuse."""
+there, its host pulls, so `run` and `channel` refuse.
+
+Where the module's template sets hibernation at launch, a VM hibernates:
+its memory goes to its encrypted disk, and its next start takes it up
+again. EC2 keeps one hibernated 60 days at most."""
 
 import asyncio
 import random
@@ -50,6 +54,11 @@ NO_IMAGE = "a VM of the cloud keeps no image of its disk: its session's files ar
 AMI_ID = re.compile(r"ami-[0-9a-f]{8,17}")
 """An image named by its id, as the pool's own image is."""
 
+HIBERNATED_MOST = timedelta(days=60)
+"""The longest EC2 keeps an instance hibernated."""
+
+NO_HIBERNATION = "the cloud pool's template sets no hibernation, so no VM of it hibernates"
+
 
 class VmsEc2Impl(VmsInterface, SeedsInterface):
     """Vms through the EC2 API, each call bounded by the client's
@@ -60,7 +69,9 @@ class VmsEc2Impl(VmsInterface, SeedsInterface):
     from its size map. A VM
     starts in one of `subnets`, picked at each start, and in `closed` or
     `open`, the security group of its egress. `encrypted` declares the
-    template's disks encrypted, which the module holds."""
+    template's disks encrypted, which the module holds, and `hibernates`
+    the template's hibernation set at launch, which its `hibernation`
+    does."""
 
     def __init__(
         self,
@@ -74,6 +85,7 @@ class VmsEc2Impl(VmsInterface, SeedsInterface):
         closed: str,
         open_: str,
         encrypted: bool,
+        hibernates: bool = False,
         poll: timedelta = timedelta(seconds=5),
         sleep: Callable[[float], Any] = asyncio.sleep,
     ) -> None:
@@ -87,6 +99,7 @@ class VmsEc2Impl(VmsInterface, SeedsInterface):
         self._closed = closed
         self._open = open_
         self._encrypted = encrypted
+        self._hibernates = hibernates
         self._poll = poll
         self._sleep = sleep
 
@@ -115,6 +128,9 @@ class VmsEc2Impl(VmsInterface, SeedsInterface):
 
     def encrypted_at_rest(self) -> bool:
         return self._encrypted
+
+    def hibernation(self) -> timedelta | None:
+        return HIBERNATED_MOST if self._hibernates else None
 
     async def state(self, name: str) -> VmState:
         instance = await self._instance(name)
@@ -146,6 +162,18 @@ class VmsEc2Impl(VmsInterface, SeedsInterface):
             return
         with translated("ec2", "stop"):
             await self._ec2.client().stop_instances(InstanceIds=[instance["InstanceId"]])
+        await self._until(name, "stopped")
+
+    async def hibernate(self, name: str) -> None:
+        if not self._hibernates:
+            raise InfraValidationFailed(NO_HIBERNATION)
+        instance = await self._instance(name)
+        if instance is None or instance["State"]["Name"] == "stopped":
+            return
+        with translated("ec2", "hibernate"):
+            await self._ec2.client().stop_instances(
+                InstanceIds=[instance["InstanceId"]], Hibernate=True
+            )
         await self._until(name, "stopped")
 
     async def snapshot(self, name: str, to: str) -> str:

@@ -1,6 +1,7 @@
 """A VM of the platform's cloud pool, as the pool records it: one
 VM that runs the host program for one session. A warm VM
-was started ahead of the session that claims it, and names none yet."""
+was started ahead of the session that claims it, and names none yet; a
+hibernated one sleeps until then, holding no key."""
 
 from datetime import datetime
 from enum import StrEnum
@@ -33,7 +34,11 @@ class PoolVm(Identifiable, Created):
     it was last handed a key for its session: its start for the session,
     its claim, or its start again; its host enrolls within the boot bound
     and the wait after it. `sealed_at` says when nothing in it could read
-    its key from outside its disk any more."""
+    its key from outside its disk any more.
+    `hibernates` marks a warm VM started to sleep: once it settled, its key
+    is ended and it hibernates, and `hibernated_at` says since when it
+    sleeps. A claim hands it a fresh key and wakes it. No other VM ever
+    sleeps: one that served a session never does."""
 
     name: str = Field(pattern=VM_NAME)
     egress_open: bool
@@ -47,11 +52,18 @@ class PoolVm(Identifiable, Created):
     started_at: datetime | None = None
     bound_at: datetime | None = None
     sealed_at: datetime | None = None
+    hibernates: bool = False
+    hibernated_at: datetime | None = None
 
     @property
     def warm(self) -> bool:
         """Started ahead, and claimed by no session yet."""
         return self.agent_session_id is None
+
+    @property
+    def asleep(self) -> bool:
+        """Warm, and hibernated: its key ended before it slept."""
+        return self.warm and self.hibernated_at is not None
 
     @property
     def cold(self) -> bool:
@@ -73,11 +85,13 @@ class PoolClaim(OmBase):
 
 
 class ClaimSource(StrEnum):
-    """How a claim got its session's VM: a warm one it took, a new one it
-    started from the pool's image, the one its session held, found
-    running, or that one started again on its own disk."""
+    """How a claim got its session's VM: a warm one it took running, a
+    hibernated one it woke under a fresh key, a new one it started from the
+    pool's image, the one its session held, found running, or that one
+    started again on its own disk."""
 
     WARM = "warm"
+    HIBERNATED = "hibernated"
     NEW = "new"
     HELD = "held"
     RESTARTED = "restarted"

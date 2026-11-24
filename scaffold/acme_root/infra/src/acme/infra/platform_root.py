@@ -51,6 +51,7 @@ def cloud_vms(settings: InfraSettings, aws: aioboto3.Session) -> VmsInterface | 
         closed=settings.vm_closed_group,
         open_=settings.vm_open_group,
         encrypted=settings.vm_store_encrypted,
+        hibernates=settings.vm_hibernation,
     )
 
 

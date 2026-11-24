@@ -34,25 +34,21 @@ class CloudPoolStorageMemoryImpl(CloudPoolStorageInterface):
                 tenant_most
             ):
                 return Full.TENANT
-            if warm:
-                for held in self._oldest_first():
-                    if (
-                        held.warm
-                        and held.started_at is not None
-                        and (held.egress_open == vm.egress_open)
-                    ):
-                        claimed = held.model_copy(
-                            update={
-                                "tenant_id": vm.tenant_id,
-                                "agent_session_id": vm.agent_session_id,
-                                "pool_id": vm.pool_id,
-                                "bound_by": vm.bound_by,
-                                "restored_from": vm.restored_from,
-                                "bound_at": vm.bound_at,
-                            }
-                        )
-                        self._vms[held.id] = claimed
-                        return PoolClaim(vm=claimed)
+            if warm and (held := self._standing(vm.egress_open)) is not None:
+                bound = {
+                    "tenant_id": vm.tenant_id,
+                    "agent_session_id": vm.agent_session_id,
+                    "pool_id": vm.pool_id,
+                    "bound_by": vm.bound_by,
+                    "restored_from": vm.restored_from,
+                    "bound_at": vm.bound_at,
+                }
+                if held.asleep:
+                    # It slept holding no key: it wakes with the claim's.
+                    bound["key_digest"] = vm.key_digest
+                claimed = held.model_copy(update=bound)
+                self._vms[held.id] = claimed
+                return PoolClaim(vm=claimed)
             if len(self._vms) < most:
                 self._add(vm)
                 return PoolClaim(vm=vm)
@@ -72,9 +68,11 @@ class CloudPoolStorageMemoryImpl(CloudPoolStorageInterface):
             del self._vms[displaced.id]
             return PoolClaim(vm=vm, displaced=displaced)
 
-    async def reserve_warm(self, wanted: int, most: int, made: Sequence[PoolVm]) -> int:
+    async def reserve_warm(
+        self, wanted: int, most: int, made: Sequence[PoolVm], *, hibernates: bool = False
+    ) -> int:
         async with self._lock:
-            warm = sum(1 for vm in self._vms.values() if vm.warm)
+            warm = sum(1 for vm in self._vms.values() if vm.warm and vm.hibernates == hibernates)
             written = list(made[: warm_to_start(wanted, warm, most - len(self._vms))])
             for vm in written:
                 self._add(vm)
@@ -87,6 +85,25 @@ class CloudPoolStorageMemoryImpl(CloudPoolStorageInterface):
                 return False
             del self._vms[vm_id]
             return True
+
+    async def take_to_sleep(self, vm_id: UUID, key_digest: str) -> bool:
+        async with self._lock:
+            vm = self._vms.get(vm_id)
+            if (
+                vm is None
+                or not (vm.warm and vm.hibernates)
+                or vm.hibernated_at is not None
+                or vm.key_digest != key_digest
+            ):
+                return False
+            self._vms[vm_id] = vm.model_copy(update={"key_digest": None})
+            return True
+
+    async def mark_hibernated(self, vm_id: UUID, at: datetime) -> None:
+        async with self._lock:
+            vm = self._vms.get(vm_id)
+            if vm is not None and vm.warm:
+                self._vms[vm_id] = vm.model_copy(update={"hibernated_at": at})
 
     async def read_vm(self, vm_id: UUID) -> PoolVm | None:
         return self._vms.get(vm_id)
@@ -217,3 +234,15 @@ class CloudPoolStorageMemoryImpl(CloudPoolStorageInterface):
 
     def _oldest_first(self) -> list[PoolVm]:
         return sorted(self._vms.values(), key=lambda m: (m.created_at, m.id))
+
+    def _standing(self, egress_open: bool) -> PoolVm | None:
+        """The warm VM of this egress a claim takes: the oldest that runs,
+        else the oldest asleep; never one started to sleep that sleeps not
+        yet."""
+        idle = [
+            held
+            for held in self._oldest_first()
+            if held.warm and held.started_at is not None and held.egress_open == egress_open
+        ]
+        running = (held for held in idle if not held.hibernates)
+        return next(running, None) or next((held for held in idle if held.asleep), None)

@@ -5,8 +5,10 @@ a warm VM's row goes first, under the lock its claims take, so no claim
 binds a VM being destroyed.
 
 Every claim and every refill reads the pool's limits, which its operators
-write: the warm VMs, the most VMs the pool holds at once, and the most one
-tenant holds, its own where an operator set one. At the pool's maximum,
+write: the warm VMs, running and hibernated, the most VMs the pool holds at
+once, and the most one tenant holds, its own where an operator set one. A
+claim takes a warm VM that runs, else a hibernated one, else starts a new
+one. At the pool's maximum,
 a claim that can take no warm VM takes the place of an idle one, which
 goes first. Otherwise a claim past either maximum starts no VM: the
 session's loop waits on the resource and asks again, told no count and
@@ -19,8 +21,8 @@ boot bound, as the VM workspace provider's is; a warm VM starts in the
 background, since nothing waits on it. A cold start's boot, from its
 start to its host's enrollment, is a metric; a warm claim records none.
 Each claim counts once, by how it got its VM, at the moment it got it: a
-warm VM taken, a new one started, the session's own found running and
-sealed, or that one started again. A prepare asked again before the
+warm VM taken running, a hibernated one woken, a new one started, the
+session's own found running and sealed, or that one started again. A prepare asked again before the
 claim's prepare returned is the same claim, and counts none. The claim
 waits until the first command on its VM, which this process records as the
 transport says it starts.
@@ -34,6 +36,16 @@ runs with no host to work for, and its session's next prepare starts it
 again under a new key. A VM past its maximum age goes between runs, once
 its run's end kept its work, never under a running loop; a warm one past
 it goes at the sweep.
+
+Where the VMs hibernate, a warm VM may be started to sleep. It boots the
+pool's image under a one-use key, as any warm VM does, and runs until it
+settled. Then one sweep ends its key and hibernates it, so its memory goes
+to its disk holding no key that enrolls and no credential, since a warm
+VM's host holds none. A claim binds it and writes the digest of a fresh
+key, then wakes it with that key in its seed, the way a stopped VM starts
+again; its host reads it and enrolls for that session alone. A VM that
+served a session never sleeps. One asleep goes past the maximum age, or
+before the longest its VMs keep one so.
 
 The pool keeps no disk image of any VM. A session kept by snapshots keeps
 its workspace's files as sealed parts in the snapshots bucket, archived by
@@ -79,11 +91,18 @@ from acme.om.cloud_pool.rules import (
     refusal,
     seed,
     size_of,
+    slept_out,
     vm_name,
 )
 from acme.om.cloud_pool.storage import CloudPoolStorageInterface
 from acme.om.cloud_pool.types.archive import PoolArchive
-from acme.om.cloud_pool.types.limits import MOST_VMS, Full, PoolLimits
+from acme.om.cloud_pool.types.limits import (
+    MOST_VMS,
+    WARM_BELOW_MOST,
+    Full,
+    PoolLimits,
+    warm_below_most,
+)
 from acme.om.cloud_pool.types.sizes import SIZES, PoolSizes
 from acme.om.cloud_pool.types.vm import ClaimSource, PoolVm
 from acme.om.context import Permission, RequestContext, TenantContext
@@ -145,9 +164,10 @@ class CloudPoolOptions(OmBase):
     # the pool starts each VM from `image`, so this is the spec's alone.
     vm_image: str = Field(default="template:_images/ubuntu-lts", min_length=1)
     # The pool's limits where no operator wrote them: the VMs kept started
-    # ahead of demand, the most VMs the pool holds at once, and the most one
-    # tenant holds. Autoscaling is not in it.
+    # ahead of demand, running and hibernated, the most VMs the pool holds at
+    # once, and the most one tenant holds. Autoscaling is not in it.
     warm: int = Field(default=0, ge=0, le=MOST_VMS)
+    hibernated: int = Field(default=0, ge=0, le=MOST_VMS)
     most: int = Field(default=20, ge=0, le=MOST_VMS)
     tenant_most: int = Field(default=5, ge=0, le=MOST_VMS)
     # Each size a session's spec may ask by name, and the machine it starts:
@@ -173,6 +193,11 @@ class CloudPoolOptions(OmBase):
     # How long a VM's host may go without a call before the sweep stops
     # its VM: it exited, or its credential was ended.
     silent: timedelta = Field(default=timedelta(minutes=15), gt=timedelta(0))
+    # How long a warm VM started to sleep runs before it hibernates: its
+    # boot over, its container engine and its host program up, and its
+    # disk's first reads done. EC2 hibernates no instance in its first
+    # minutes.
+    settle: timedelta = Field(default=timedelta(minutes=5), gt=timedelta(0))
     # The rows the sweep, and a tenant's purge, read at a time.
     page: int = Field(default=1000, gt=0)
     first_poll: timedelta = Field(default=timedelta(milliseconds=200), gt=timedelta(0))
@@ -180,8 +205,8 @@ class CloudPoolOptions(OmBase):
 
     @model_validator(mode="after")
     def _warm_below_most(self) -> Self:
-        if self.warm and self.warm >= self.most:
-            raise ValueError("the warm VMs stand below the most the pool holds")
+        if not warm_below_most(self.warm, self.hibernated, self.most):
+            raise ValueError(WARM_BELOW_MOST)
         return self
 
 
@@ -199,6 +224,7 @@ def standing_limits(
         created_by=EMPTY_UUID,
         updated_by=EMPTY_UUID,
         warm=options.warm,
+        hibernated=options.hibernated,
         most=options.most,
         tenant_most=options.tenant_most,
         version=0,
@@ -504,10 +530,12 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         pool: HostPool,
         restore: UUID | None,
     ) -> PoolVm:
-        """The session's VM: a warm one it claims, at the default size, else
-        a new one of its size, from the pool's image, within the pool's
-        limits as they stand now. At the pool's maximum, a new one takes the place of an
-        idle warm VM, which goes first. Its row is written first, so a start
+        """The session's VM: a warm one it claims, at the default size, one
+        that runs before one asleep, else a new one of its size, from the
+        pool's image, within the pool's limits as they stand now. One asleep
+        wakes under `key`, whose digest the claim wrote. At the pool's
+        maximum, a new one takes the place of an idle warm VM, which goes
+        first. Its row is written first, so a start
         that dies leaves a row the sweep finds; one that fails here leaves
         nothing. Past a maximum, the loop waits on the resource."""
         key = new_key()
@@ -543,15 +571,33 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
                 cause=FULL_CAUSES[got],
             )
         if got.vm.id != vm.id:
+            self._spawn(self._refill())
+            if got.vm.hibernated_at is not None:
+                return await self._wake(agent_session_id, got.vm, key, now)
             log.info("session %s claimed warm VM %s", agent_session_id, got.vm.name)
             self._claimed(agent_session_id, ClaimSource.WARM, now)
-            self._spawn(self._refill())
             return got.vm
         if got.displaced is not None:
             await self._displace(vm, got.displaced)
         await self._launch(vm, self._spec(spec), self._options.image, key)
         self._claimed(agent_session_id, ClaimSource.NEW, now)
         log.info("session %s: VM %s started", agent_session_id, vm.name)
+        return vm
+
+    async def _wake(self, agent_session_id: UUID, vm: PoolVm, key: str, at: datetime) -> PoolVm:
+        """A hibernated VM the session claimed, woken. It slept holding no
+        key that enrolls, and its claim wrote the digest of `key`, which its
+        seed now carries as it wakes, as a stopped VM's does when it starts
+        again; its host reads it and enrolls for the session alone. A wake
+        that fails leaves it stopped, the session's, for the next ask."""
+        log.info("session %s claimed hibernated VM %s", agent_session_id, vm.name)
+        await self._seeds.launch_seeded(
+            vm.name,
+            self._sized(DEFAULT_SIZE, egress_open=vm.egress_open),
+            None,
+            seed(self._options.api_url, key),
+        )
+        self._claimed(agent_session_id, ClaimSource.HIBERNATED, at)
         return vm
 
     def _claimed(self, agent_session_id: UUID, source: ClaimSource, at: datetime) -> None:
@@ -662,8 +708,10 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         if vm.tenant_id is None or vm.agent_session_id is None:
             # Warm: no host enrolls until a session claims it, and no loop
             # runs on it, so one past its age goes, and the refill starts
-            # another.
-            return vm.warm and self._aged(vm, now) and await self._drop_warm(vm)
+            # another. One started to sleep sleeps once it settled.
+            if vm.warm and self._aged(vm, now):
+                return await self._drop_warm(vm)
+            return vm.hibernates and await self._sleeper(vm, now)
         if await self._session_gone(vm.tenant_id, vm.agent_session_id):
             await self._let_go(rctx, vm)
             return True
@@ -691,6 +739,43 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         if vm.warm:
             return await self._drop_warm(vm)
         await self._let_go(rctx, vm)
+        return True
+
+    async def _sleeper(self, vm: PoolVm, now: datetime) -> bool:
+        """Whether the sweep acted on a warm VM started to sleep. Once it
+        has run `settle`, its key ends, on the condition that it is still
+        the one read, so one sweep alone takes it; then it hibernates,
+        holding no key that enrolls, and from its mark a claim may take it.
+        One asleep goes before the longest its VMs keep one so, and one
+        whose VMs hibernate none any more goes. One whose key ended and
+        that never slept, its sweep gone or its hibernation failed, goes
+        once that sweep's wait is surely over."""
+        assert vm.started_at is not None  # a start that never ran is let go before
+        most = self._vms.hibernation()
+        if vm.hibernated_at is not None:
+            if most is not None and not slept_out(now - vm.hibernated_at, most):
+                return False
+            log.info("hibernated VM %s goes before its VMs' bound", vm.name)
+            return await self._drop_warm(vm)
+        if vm.key_digest is None:
+            if now - vm.started_at <= self._options.settle + self._options.boot:
+                return False
+            log.warning("warm VM %s ended its key and never slept, and goes", vm.name)
+            return await self._drop_warm(vm)
+        if most is None:
+            return await self._drop_warm(vm)
+        if now - vm.started_at < self._options.settle:
+            return False
+        if not await self._storage.take_to_sleep(vm.id, vm.key_digest):
+            return False
+        try:
+            await self._vms.hibernate(vm.name)
+        except Exception:
+            log.warning("warm VM %s did not hibernate, and goes", vm.name, exc_info=True)
+            await self._drop_warm(vm)
+            return True
+        await self._storage.mark_hibernated(vm.id, self._clock())
+        log.info("warm VM %s hibernated, holding no key", vm.name)
         return True
 
     async def _drop_warm(self, vm: PoolVm) -> bool:
@@ -769,14 +854,22 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
 
     async def _refill(self) -> None:
         """Starts warm VMs, in the background, until the warm count
-        stands, never past the most the pool holds, as its limits stand
-        now."""
+        stands, then those started to sleep until the hibernated count
+        does, where the VMs hibernate, never past the most the pool holds,
+        as its limits stand now."""
         if not self._options.image:
             return
         limits = await self._limits()
-        if not limits.warm:
+        await self._reserve(limits.warm, limits.most, hibernates=False)
+        if self._vms.hibernation() is not None:
+            await self._reserve(limits.hibernated, limits.most, hibernates=True)
+
+    async def _reserve(self, wanted: int, most: int, *, hibernates: bool) -> None:
+        """Starts warm VMs of one kind, those that run or those started to
+        sleep, until `wanted` stand, never past `most`."""
+        if not wanted:
             return
-        keys = [new_key() for _ in range(limits.warm)]
+        keys = [new_key() for _ in range(wanted)]
         egress_open = not self._vms.closes_egress()
         made = [
             PoolVm(
@@ -785,16 +878,17 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
                 name=vm_name(self._options.prefix),
                 egress_open=egress_open,
                 key_digest=hash_token(key),
+                hibernates=hibernates,
             )
             for key in keys
         ]
-        written = await self._storage.reserve_warm(limits.warm, limits.most, made)
+        written = await self._storage.reserve_warm(wanted, most, made, hibernates=hibernates)
         if not written:
             return
         spec = self._sized(DEFAULT_SIZE, egress_open=egress_open)
         for vm, key in zip(made[:written], keys[:written], strict=True):
             self._spawn(self._warm(vm, spec, key))
-        log.info("the cloud pool starts %d warm VMs", written)
+        log.info("the cloud pool starts %d warm VMs%s", written, " to sleep" * hibernates)
 
     async def _warm(self, vm: PoolVm, spec: VmSpec, key: str) -> None:
         try:

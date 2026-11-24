@@ -33,6 +33,10 @@ class PlatformInfraSettings(BaseSettings):
     vm_subnets: str = ""
     vm_closed_group: str = ""
     vm_open_group: str = ""
+    # The launch template sets hibernation at launch (the module's
+    # `hibernation`), so a VM of it may sleep: the cloud pool then keeps
+    # its hibernated warm VMs. Lima hibernates none.
+    vm_hibernation: bool = False
     # The cloud pool: a VM per session of the cloud whose workspace is a
     # VM, each running the host program, which reaches the platform at
     # `cloud_pool_api_url`. Every VM starts from `cloud_pool_image`, a

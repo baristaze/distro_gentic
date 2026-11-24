@@ -7,23 +7,26 @@ from uuid import UUID
 
 from pydantic import Field, model_validator
 
-from acme.om.cloud_pool.types.limits import MOST_VMS
+from acme.om.cloud_pool.types.limits import MOST_VMS, WARM_BELOW_MOST, warm_below_most
 from acme.services.api.types.common import RequestBody, View
 
 
 class SetPoolLimitsRequest(RequestBody):
-    """The pool's limits, written whole: the VMs kept warm, the most VMs it
-    holds at once, warm ones among them, and the most one tenant holds where
-    no maximum of its own holds. The warm VMs stand below the most."""
+    """The pool's limits, written whole: the VMs kept warm and running, those
+    kept warm and hibernated where the VMs hibernate, none unless named, the
+    most VMs it holds at once, warm ones among them, and the most one tenant
+    holds where no maximum of its own holds. The warm VMs, running and
+    hibernated, stand below the most."""
 
     warm: int = Field(ge=0, le=MOST_VMS)
+    hibernated: int = Field(default=0, ge=0, le=MOST_VMS)
     most: int = Field(ge=0, le=MOST_VMS)
     tenant_most: int = Field(ge=0, le=MOST_VMS)
 
     @model_validator(mode="after")
     def _warm_below_most(self) -> Self:
-        if self.warm and self.warm >= self.most:
-            raise ValueError("the warm VMs stand below the most the pool holds")
+        if not warm_below_most(self.warm, self.hibernated, self.most):
+            raise ValueError(WARM_BELOW_MOST)
         return self
 
 
@@ -32,6 +35,7 @@ class PoolLimitsView(View):
     while no operator wrote them, and the pool's options hold."""
 
     warm: int
+    hibernated: int
     most: int
     tenant_most: int
     version: int

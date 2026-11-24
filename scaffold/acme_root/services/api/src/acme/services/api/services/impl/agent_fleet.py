@@ -59,6 +59,7 @@ def shape_view(shape: StepShape) -> StepShapeView:
 def pool_limits_view(limits: PoolLimits) -> PoolLimitsView:
     return PoolLimitsView(
         warm=limits.warm,
+        hibernated=limits.hibernated,
         most=limits.most,
         tenant_most=limits.tenant_most,
         version=limits.version,
@@ -96,7 +97,11 @@ class AgentFleetServiceImpl(AgentFleetServiceInterface):
         self, admin: OperatorContext, body: SetPoolLimitsRequest
     ) -> PoolLimitsView:
         written = await self._cloud_pool.set_limits(
-            admin, warm=body.warm, most=body.most, tenant_most=body.tenant_most
+            admin,
+            warm=body.warm,
+            hibernated=body.hibernated,
+            most=body.most,
+            tenant_most=body.tenant_most,
         )
         return pool_limits_view(written)
 

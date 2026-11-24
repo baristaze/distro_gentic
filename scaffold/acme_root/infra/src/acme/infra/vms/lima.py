@@ -196,6 +196,9 @@ class VmsLimaImpl(VmsInterface):
     def encrypted_at_rest(self) -> bool:
         return self._encrypted
 
+    def hibernation(self) -> timedelta | None:
+        return None  # Lima stops a VM, or keeps it running
+
     async def state(self, name: str) -> VmState:
         instance = (await self._instances()).get(name)
         if instance is None:
@@ -256,6 +259,9 @@ class VmsLimaImpl(VmsInterface):
     async def stop(self, name: str) -> None:
         if await self.state(name) is VmState.RUNNING:
             await self._checked("stop", name)
+
+    async def hibernate(self, name: str) -> None:
+        raise InfraValidationFailed("Lima hibernates no VM")
 
     async def snapshot(self, name: str, to: str) -> str:
         instances = await self._instances()

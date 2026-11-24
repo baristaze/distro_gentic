@@ -7,9 +7,13 @@ takes no warm VM takes an idle one's place; a VM a claim writes reads
 back cold, and one it binds warm or starts again does not; a warm VM's
 row is taken only while no session claimed it; a VM started again keeps
 when it first ran; the warm VMs a sweep writes never pass the count or
-the maximum; a session's archives are one row, moved forward as it keeps
-more and read oldest first until they go; and the pool's limits and a tenant's own maximum are written over the
-version read. Its VMs are the platform's rows, read by their predicate,
+the maximum, each kind counted apart, running and started to sleep; a
+claim takes a warm VM that runs before one asleep, hands the one asleep
+its own key digest, and takes none started to sleep that sleeps not yet;
+a VM started to sleep has its key ended once, while no session claimed
+it; a session's archives are one row, moved forward as it keeps more and
+read oldest first until they go; and the pool's limits and a tenant's own
+maximum are written over the version read. Its VMs are the platform's rows, read by their predicate,
 and another tenant's finds nothing; a tenant's own maximum is that
 tenant's, and its cases present another tenant's."""
 
@@ -236,6 +240,97 @@ class CloudPoolStorageContract:
         assert len(await storage.read_vms(10)) == 3
         assert await storage.reserve_warm(5, 4, [make_vm(started=False) for _ in range(3)]) == 1
         assert await storage.reserve_warm(5, 4, [make_vm(started=False)]) == 0
+        assert len(await storage.read_vms(10)) == 4
+
+    async def test_a_claim_takes_a_warm_vm_that_runs_then_one_asleep_and_none_settling(
+        self, storage: CloudPoolStorageInterface
+    ) -> None:
+        old = utcnow() - timedelta(hours=1)
+        settling = make_vm().model_copy(update={"hibernates": True, "created_at": old})
+        asleep = make_vm().model_copy(
+            update={
+                "hibernates": True,
+                "hibernated_at": old,
+                "key_digest": None,
+                "created_at": old + timedelta(seconds=1),
+            }
+        )
+        running = make_vm()
+        for vm in (settling, asleep, running):
+            await storage.create_vm(vm)
+
+        def asked() -> PoolVm:
+            return make_vm(tenant_id=new_id(), agent_session_id=new_id(), started=False)
+
+        first = await storage.claim(asked(), most=FAR, tenant_most=FAR, warm=True)
+        assert isinstance(first, PoolClaim) and first.vm.id == running.id, "the one that runs first"
+        assert first.vm.key_digest == running.key_digest, "its host holds its key already"
+        fresh = asked()
+        second = await storage.claim(fresh, most=FAR, tenant_most=FAR, warm=True)
+        assert isinstance(second, PoolClaim) and second.vm.id == asleep.id, "then the one asleep"
+        assert second.vm.key_digest == fresh.key_digest, "it wakes with the claim's key"
+        assert second.vm.agent_session_id == fresh.agent_session_id
+        assert await storage.read_by_key(fresh.key_digest or "") == second.vm
+        third = asked()
+        assert await storage.claim(third, most=FAR, tenant_most=FAR, warm=True) == PoolClaim(
+            vm=third
+        ), "one started to sleep that sleeps not yet is never claimed"
+        assert await storage.read_vm(settling.id) == settling
+
+    async def test_a_vm_started_to_sleep_has_its_key_ended_once_while_no_session_claimed_it(
+        self, storage: CloudPoolStorageInterface
+    ) -> None:
+        sleeper = make_vm().model_copy(update={"hibernates": True})
+        claimed = make_vm().model_copy(update={"hibernates": True})
+        running = make_vm()
+        for vm in (sleeper, claimed, running):
+            await storage.create_vm(vm)
+        assert sleeper.key_digest is not None and running.key_digest is not None
+        assert await storage.take_to_sleep(running.id, running.key_digest) is False, (
+            "a warm VM that runs never sleeps"
+        )
+        assert await storage.take_to_sleep(sleeper.id, "another digest") is False
+        assert await storage.take_to_sleep(sleeper.id, sleeper.key_digest) is True
+        assert await storage.take_to_sleep(sleeper.id, sleeper.key_digest) is False, "once"
+        assert await storage.read_by_key(sleeper.key_digest) is None, "its key enrolls no more"
+        at = utcnow()
+        await storage.mark_hibernated(sleeper.id, at)
+        read = await storage.read_vm(sleeper.id)
+        assert read is not None and read.asleep and read.hibernated_at == at
+
+        # A claim binds the other while it settles, as no sweep lets it: its
+        # row then names a session, and nothing takes it to sleep.
+        bound = claimed.model_copy(
+            update={"tenant_id": new_id(), "agent_session_id": new_id(), "pool_id": new_id()}
+        )
+        await storage.delete_vm(claimed.id)
+        await storage.create_vm(bound)
+        assert bound.key_digest is not None
+        assert await storage.take_to_sleep(bound.id, bound.key_digest) is False
+        await storage.mark_hibernated(bound.id, at)
+        assert await storage.read_vm(bound.id) == bound, "a session's VM is never marked asleep"
+
+    async def test_the_warm_vms_of_each_kind_are_counted_apart_and_both_within_the_maximum(
+        self, storage: CloudPoolStorageInterface
+    ) -> None:
+        await storage.create_vm(make_vm())  # one that runs
+
+        def sleepers(count: int) -> list[PoolVm]:
+            return [
+                make_vm(started=False).model_copy(update={"hibernates": True}) for _ in range(count)
+            ]
+
+        assert await storage.reserve_warm(2, FAR, sleepers(3), hibernates=True) == 2, (
+            "the one that runs is not of their kind"
+        )
+        assert await storage.reserve_warm(2, FAR, sleepers(1), hibernates=True) == 0
+        assert await storage.reserve_warm(1, FAR, [make_vm(started=False)]) == 0, (
+            "nor are they of its"
+        )
+        assert await storage.reserve_warm(5, 4, sleepers(3), hibernates=True) == 1, (
+            "a VM asleep or settling holds a place under the maximum"
+        )
+        assert await storage.reserve_warm(2, 4, [make_vm(started=False)]) == 0
         assert len(await storage.read_vms(10)) == 4
 
     async def test_a_warm_vms_row_is_taken_only_while_no_session_claimed_it(

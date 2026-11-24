@@ -13,6 +13,7 @@ class PoolLimits(GlobalIdentifiableMixin, TrackableMixin, Base):
     __tablename__ = "pool_limits"
     __table_args__ = (Index("uq_pool_limits_version", "version", unique=True),)
     warm: Mapped[int]
+    hibernated: Mapped[int]
     most: Mapped[int]
     tenant_most: Mapped[int]
     version: Mapped[int]

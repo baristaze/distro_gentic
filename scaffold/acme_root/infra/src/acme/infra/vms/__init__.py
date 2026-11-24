@@ -11,6 +11,11 @@ guest, the limits it enforces, and whether the store that keeps its
 snapshots is encrypted at rest. A caller refuses what a backend cannot hold
 before a VM starts, and never asks for less in its stead.
 
+A backend may hibernate a VM: its memory is written to its disk and
+nothing runs, and its next start takes its processes up where they
+were. It says how long it keeps one so (`hibernation`), or that it
+keeps none.
+
 A snapshot is a stopped VM's disk, kept in the backend's own store
 under a name, and held to a digest: a disk is gigabytes, so it never passes
 through memory or a bucket whole. A snapshot starts VMs, makes further
@@ -139,6 +144,12 @@ class VmsInterface(ABC):
         ...
 
     @abstractmethod
+    def hibernation(self) -> timedelta | None:
+        """How long this backend keeps a VM hibernated at most; None when
+        it hibernates none."""
+        ...
+
+    @abstractmethod
     async def state(self, name: str) -> VmState: ...
 
     @abstractmethod
@@ -174,6 +185,15 @@ class VmsInterface(ABC):
     async def stop(self, name: str) -> None:
         """The VM under `name` stopped, its disk kept. Stopping one that
         is stopped, or absent, does nothing."""
+        ...
+
+    @abstractmethod
+    async def hibernate(self, name: str) -> None:
+        """The VM under `name` hibernated: its memory written to its disk
+        and nothing running, so it stands stopped, and its next `launch`
+        takes its processes up where they were. Hibernating one that is
+        stopped, or absent, does nothing. A backend that hibernates none
+        refuses."""
         ...
 
     @abstractmethod

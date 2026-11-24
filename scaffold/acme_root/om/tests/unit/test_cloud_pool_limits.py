@@ -185,7 +185,13 @@ async def test_an_operators_write_holds_at_the_next_claim_and_its_event_names_th
         admin.identity_id,
         written.id,
     )
-    assert event.payload == {"warm": 0, "most": 1, "tenant_most": 5, "version": 1}
+    assert event.payload == {
+        "warm": 0,
+        "hibernated": 0,
+        "most": 1,
+        "tenant_most": 5,
+        "version": 1,
+    }
     assert await events.read_after(org.id, 0, 10) == [], "no tenant's stream tells the pool's size"
 
     await plane.set_limits(admin, warm=0, most=10, tenant_most=5)
@@ -209,6 +215,8 @@ async def test_an_operators_write_holds_at_the_next_claim_and_its_event_names_th
         await plane.set_limits(operator(OperatorRole.READ), warm=0, most=1, tenant_most=1)
     with pytest.raises(ValidationFailed):
         await plane.set_limits(admin, warm=2, most=2, tenant_most=1)
+    with pytest.raises(ValidationFailed):
+        await plane.set_limits(admin, warm=1, hibernated=1, most=2, tenant_most=1)
     with pytest.raises(ValidationFailed):
         await plane.set_tenant_limit(admin, org.id, most=-1)
     with pytest.raises(NotFound):

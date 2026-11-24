@@ -57,7 +57,13 @@ class CloudPoolOperatorManagerImpl(CloudPoolOperatorManagerInterface):
         return standing_limits(await self._storage.read_limits(), self._options, self._clock())
 
     async def set_limits(
-        self, admin: OperatorContext, *, warm: int, most: int, tenant_most: int
+        self,
+        admin: OperatorContext,
+        *,
+        warm: int,
+        most: int,
+        tenant_most: int,
+        hibernated: int = 0,
     ) -> PoolLimits:
         admin.require(OperatorPermission.WRITE)
         stored = await self._storage.read_limits()
@@ -72,6 +78,7 @@ class CloudPoolOperatorManagerImpl(CloudPoolOperatorManagerInterface):
                 created_by=admin.identity_id,
                 updated_by=admin.identity_id,
                 warm=warm,
+                hibernated=hibernated,
                 most=most,
                 tenant_most=tenant_most,
                 version=1 if stored is None else stored.version + 1,
@@ -82,9 +89,11 @@ class CloudPoolOperatorManagerImpl(CloudPoolOperatorManagerInterface):
             limits, None if stored is None else stored.version
         )
         log.info(
-            "operator %s set the cloud pool's limits: %d warm, %d at most, %d a tenant",
+            "operator %s set the cloud pool's limits: %d warm, %d hibernated, %d at most, "
+            "%d a tenant",
             admin.identity_id,
             warm,
+            hibernated,
             most,
             tenant_most,
         )
@@ -95,6 +104,7 @@ class CloudPoolOperatorManagerImpl(CloudPoolOperatorManagerInterface):
             written.id,
             {
                 "warm": written.warm,
+                "hibernated": written.hibernated,
                 "most": written.most,
                 "tenant_most": written.tenant_most,
                 "version": written.version,

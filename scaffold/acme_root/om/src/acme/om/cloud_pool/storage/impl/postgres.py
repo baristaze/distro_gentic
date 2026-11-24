@@ -56,13 +56,22 @@ class CloudPoolStoragePostgresImpl(PgStorageBase, CloudPoolStorageInterface):
             .limit(1)
             .with_for_update()
         )
-        standing = idle.where(PoolVms.egress_open == vm.egress_open)
+        egress = idle.where(PoolVms.egress_open == vm.egress_open)
+        # A warm VM that runs, else one asleep; never one started to sleep
+        # that sleeps not yet.
+        running = egress.where(PoolVms.hibernates.is_(False))
+        asleep = egress.where(PoolVms.hibernated_at.is_not(None))
         async with self._session_for(PoolVms, org_id=EMPTY_UUID) as session:
             await session.execute(_LOCKED, {"key": POOL_LOCK})
             if (await session.execute(tenants)).scalar_one() >= tenant_most:
                 await session.rollback()
                 return Full.TENANT
-            row = (await session.execute(standing)).scalar_one_or_none() if warm else None
+            row = (await session.execute(running)).scalar_one_or_none() if warm else None
+            if row is None and warm:
+                row = (await session.execute(asleep)).scalar_one_or_none()
+                if row is not None:
+                    # It slept holding no key: it wakes with the claim's.
+                    row.key_digest = vm.key_digest
             if row is not None:
                 row.tenant_id = vm.tenant_id
                 row.agent_session_id = vm.agent_session_id
@@ -91,9 +100,13 @@ class CloudPoolStoragePostgresImpl(PgStorageBase, CloudPoolStorageInterface):
                 raise _taken(error, vm.id) from error
             return PoolClaim(vm=vm, displaced=displaced)
 
-    async def reserve_warm(self, wanted: int, most: int, made: Sequence[PoolVm]) -> int:
+    async def reserve_warm(
+        self, wanted: int, most: int, made: Sequence[PoolVm], *, hibernates: bool = False
+    ) -> int:
         everyone = select(func.count()).select_from(PoolVms)
-        warm = everyone.where(PoolVms.agent_session_id.is_(None))
+        warm = everyone.where(
+            PoolVms.agent_session_id.is_(None), PoolVms.hibernates.is_(hibernates)
+        )
         async with self._session_for(PoolVms, org_id=EMPTY_UUID) as session:
             await session.execute(_LOCKED, {"key": POOL_LOCK})
             standing = (await session.execute(warm)).scalar_one()
@@ -119,6 +132,34 @@ class CloudPoolStoragePostgresImpl(PgStorageBase, CloudPoolStorageInterface):
             taken = (await session.execute(stmt)).scalar_one_or_none()
             await session.commit()
             return taken is not None
+
+    async def take_to_sleep(self, vm_id: UUID, key_digest: str) -> bool:
+        stmt = (
+            update(PoolVms)
+            .where(
+                PoolVms.id == vm_id,
+                PoolVms.agent_session_id.is_(None),
+                PoolVms.hibernates.is_(True),
+                PoolVms.hibernated_at.is_(None),
+                PoolVms.key_digest == key_digest,
+            )
+            .values(key_digest=None)
+            .returning(PoolVms.id)
+        )
+        async with self._session_for(stmt, org_id=EMPTY_UUID) as session:
+            taken = (await session.execute(stmt)).scalar_one_or_none()
+            await session.commit()
+            return taken is not None
+
+    async def mark_hibernated(self, vm_id: UUID, at: datetime) -> None:
+        stmt = (
+            update(PoolVms)
+            .where(PoolVms.id == vm_id, PoolVms.agent_session_id.is_(None))
+            .values(hibernated_at=at)
+        )
+        async with self._session_for(stmt, org_id=EMPTY_UUID) as session:
+            await session.execute(stmt)
+            await session.commit()
 
     async def read_vm(self, vm_id: UUID) -> PoolVm | None:
         stmt = select(PoolVms).where(PoolVms.id == vm_id)

@@ -4,7 +4,9 @@ no instance role of its own to hand out; its seed is its first-boot data,
 and its metadata endpoint is closed once sealed. No image or snapshot of a
 VM's disk is made: `snapshot` and `read` refuse, and a start names the
 pool's image alone. Nothing calls into a VM: `run` and `channel`
-refuse."""
+refuse. A VM of a template that sets hibernation hibernates, for 60 days
+at most, and its next start writes its new seed while it sleeps; one of
+a template that sets none refuses to."""
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -138,10 +140,8 @@ async def no_wait(_: float) -> None:
     return None
 
 
-@pytest.fixture
-async def cloud() -> AsyncIterator[tuple[VmsEc2Impl, Ec2]]:
-    ec2 = Ec2()
-    vms = VmsEc2Impl(
+def made(ec2: Ec2, *, hibernates: bool = False) -> VmsEc2Impl:
+    return VmsEc2Impl(
         Session(ec2),  # type: ignore[arg-type]
         region="eu-west-1",
         timeout=timedelta(seconds=10),
@@ -151,8 +151,15 @@ async def cloud() -> AsyncIterator[tuple[VmsEc2Impl, Ec2]]:
         closed=CLOSED,
         open_=OPEN,
         encrypted=True,
+        hibernates=hibernates,
         sleep=no_wait,
     )
+
+
+@pytest.fixture
+async def cloud() -> AsyncIterator[tuple[VmsEc2Impl, Ec2]]:
+    ec2 = Ec2()
+    vms = made(ec2)
     await vms.start()
     yield vms, ec2
     await vms.close()
@@ -227,6 +234,44 @@ async def test_a_running_vm_handed_a_new_seed_is_stopped_reseeded_and_started(
     assert instance["State"]["Name"] == "running"
     names = [name for name, _ in ec2.calls]
     assert names.index("stop_instances") < names.index("start_instances")
+
+
+async def test_a_vm_of_a_template_that_hibernates_sleeps_and_wakes_under_a_seed_written_asleep() -> (
+    None
+):
+    ec2 = Ec2()
+    vms = made(ec2, hibernates=True)
+    await vms.start()
+    assert vms.hibernation() == timedelta(days=60), "EC2 keeps one hibernated 60 days at most"
+    await vms.launch_seeded("acme-vm-pa", spec(), None, b"spent")
+    await vms.hibernate("acme-vm-pa")
+    (instance,) = ec2.instances.values()
+    assert instance["State"]["Name"] == "stopped"
+    (asked,) = [request for name, request in ec2.calls if name == "stop_instances"]
+    assert asked["Hibernate"] is True, "its memory goes to its disk, never a stop's reboot"
+    await vms.hibernate("acme-vm-pa")
+    assert [name for name, _ in ec2.calls].count("stop_instances") == 1, "asleep, it stays"
+
+    ec2.calls.clear()
+    await vms.launch_seeded("acme-vm-pa", spec(), None, b"fresh")
+    names = [name for name, _ in ec2.calls]
+    assert "stop_instances" not in names
+    assert names.index("modify_instance_attribute") < names.index("start_instances"), (
+        "the new seed is written while it sleeps, before it wakes"
+    )
+    assert instance["UserData"] == b"fresh" and instance["State"]["Name"] == "running"
+    await vms.close()
+
+
+async def test_a_template_that_sets_no_hibernation_hibernates_no_vm(
+    cloud: tuple[VmsEc2Impl, Ec2],
+) -> None:
+    vms, ec2 = cloud
+    assert vms.hibernation() is None
+    await vms.launch_seeded("acme-vm-pa", spec(), None, b"key")
+    with pytest.raises(InfraValidationFailed):
+        await vms.hibernate("acme-vm-pa")
+    assert "stop_instances" not in [name for name, _ in ec2.calls]
 
 
 async def test_no_image_of_a_vms_disk_is_made_and_a_start_names_the_pools_image_alone(

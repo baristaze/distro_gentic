@@ -197,11 +197,18 @@ class Pool:
         most: int | None = None,
         tenant_most: int | None = None,
         sizes: PoolSizes | None = None,
+        hibernated: int | None = None,
+        hibernation: timedelta | None = None,
     ) -> None:
         # Only the limits a test names, so the options' own stand otherwise.
-        named = {"most": most, "tenant_most": tenant_most, "sizes": sizes}
+        named = {
+            "most": most,
+            "tenant_most": tenant_most,
+            "sizes": sizes,
+            "hibernated": hibernated,
+        }
         limits: dict[str, Any] = {key: value for key, value in named.items() if value is not None}
-        self.vms = VmsTwinImpl(root / "vms", closes_egress=closes_egress)
+        self.vms = VmsTwinImpl(root / "vms", closes_egress=closes_egress, hibernation=hibernation)
         self.storage = CloudPoolStorageMemoryImpl()
         self.now = utcnow()
         self.hosts = Hosts(lambda: self.now)

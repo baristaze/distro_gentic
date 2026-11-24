@@ -153,7 +153,7 @@ async def test_an_operator_who_writes_sets_the_cloud_pools_limits_and_a_tenants_
     limits = "/v1/admin/cloud-pool/limits"
     standing = await client.get(limits, headers=reader)
     assert standing.status_code == 200 and standing.json()["version"] == 0, standing.text
-    values = {"warm": 1, "most": 6, "tenant_most": 2}
+    values = {"warm": 1, "hibernated": 2, "most": 6, "tenant_most": 2}
     refused = await client.put(limits, headers=reader, json=values)
     assert refused.status_code == 403 and refused.json()["error"]["code"] == "not_authorized"
     assert (await client.put(limits, headers=owner, json=values)).status_code == 401
@@ -161,7 +161,7 @@ async def test_an_operator_who_writes_sets_the_cloud_pools_limits_and_a_tenants_
     assert written.status_code == 200, written.text
     assert {k: written.json()[k] for k in (*values, "version")} == {**values, "version": 1}
     assert (await client.get(limits, headers=reader)).json() == written.json()
-    for wrong in ({**values, "warm": 6}, {**values, "most": -1}):
+    for wrong in ({**values, "warm": 6}, {**values, "hibernated": 5}, {**values, "most": -1}):
         assert (await client.put(limits, headers=writer, json=wrong)).status_code == 422
 
     own = f"/v1/admin/orgs/{org_id}/cloud-pool/limit"

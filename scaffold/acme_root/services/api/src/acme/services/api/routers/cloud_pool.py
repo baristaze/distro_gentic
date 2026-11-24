@@ -1,6 +1,6 @@
 """The cloud pool. On the operator plane, under /v1/admin/*, an operator who
 may write sets the pool's limits, a new version each time: the VMs kept
-warm, the most VMs it holds at once, and the most one tenant holds; and a
+warm, running and hibernated, the most VMs it holds at once, and the most one tenant holds; and a
 tenant's own maximum, or clears it. Each claim reads them as they stand,
 so a write holds with no deploy. A limit is written whole, so the write is
 a PUT and a retry lands the same values, with no Idempotency-Key. Each
