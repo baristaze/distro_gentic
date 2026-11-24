@@ -160,6 +160,11 @@ resource "aws_launch_template" "vm" {
   image_id      = var.image_id
   instance_type = var.sizes["s"].type
 
+  # The runner starts a VM by the template's id alone, so EC2 starts it from
+  # the default version: each version an apply writes becomes the default,
+  # and a change here reaches every VM started after it.
+  update_default_version = true
+
   # No iam_instance_profile: a VM holds no credential of the cloud's.
   metadata_options {
     http_endpoint               = "enabled"
