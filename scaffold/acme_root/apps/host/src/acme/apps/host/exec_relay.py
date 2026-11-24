@@ -22,7 +22,8 @@ stopped since starts anew over its files. The output streams back a part
 at a time and the result is pushed once, each with the hash the host
 declares of the bytes it sends. The result carries how long the item's
 parts took here, by the host's own clock: from its claim to its detail's
-read, from there to its operation's start, and the operation, which the
+read, from there to its command's start, a write's download included,
+and the command, which the
 platform measures the relay by, when the item's detail says it keeps
 them. From its claim until its result, its
 detail's read and its prepare included, the host renews its lease, and a
@@ -205,10 +206,15 @@ class Running:
         outlasts one lease is tried again within."""
         return self.held_until
 
+    def begin(self) -> None:
+        """Marks its command's start: a write's once its file is downloaded."""
+        self.started = time.monotonic()
+
     def times(self) -> dict[str, float] | None:
         """How long each part of it took here, in seconds, which its result
         carries: from its claim to its detail read, from that read to its
-        operation's start, and the operation. None when it never started."""
+        command's start, a write's download included, and the command. None
+        when it never started."""
         if self.read is None or self.started is None or self.ended is None:
             return None
         return {
@@ -376,9 +382,9 @@ class ExecutorRelayImpl(ExecutorInterface):
             ended = Ended(_result(refused=(error.code, error.http_status), detail=error.message))
         else:
             if running.stopped is None:
-                running.started = time.monotonic()
+                running.begin()
                 running.operation = asyncio.ensure_future(
-                    _operate(transport, self._objects, workspace, detail, parts.take)
+                    _operate(transport, self._objects, workspace, detail, parts.take, running.begin)
                 )
                 await asyncio.wait({running.operation})
                 running.ended = time.monotonic()
@@ -824,16 +830,27 @@ class ExecutorRelayImpl(ExecutorInterface):
 
     async def _push(self, item_id: UUID, result: dict[str, Any], held_until: float) -> None:
         """Pushes how the item ended, tried again while its lease lasts: its
-        JSON as UTF-8."""
-        data = json.dumps(result, ensure_ascii=False, separators=(",", ":")).encode()
+        JSON as UTF-8. A result whose times are refused as invalid is pushed
+        once more without them: during a roll, the push may reach a replica
+        of an earlier release than the one that answered its detail, which
+        keeps no times, and the outcome still lands."""
         try:
-            await self._outlasting(
-                lambda client: client.push_exec_result(item_id, data), held_until
-            )
+            try:
+                await self._pushed(item_id, result, held_until)
+            except ApiError as error:
+                if error.status != 422 or "times" not in result:
+                    raise
+                log.info("item %s: its times were refused (%s), so it goes without", item_id, error)
+                plain = {key: value for key, value in result.items() if key != "times"}
+                await self._pushed(item_id, plain, held_until)
         except (ApiError, *WIRE_FAILURES) as error:
             # Settled already, by its lease, a stop, or the sweep: the first
             # settlement stands. One the platform never took is the sweep's.
             log.warning("item %s: its result was not taken: %s", item_id, error)
+
+    async def _pushed(self, item_id: UUID, result: dict[str, Any], held_until: float) -> None:
+        data = json.dumps(result, ensure_ascii=False, separators=(",", ":")).encode()
+        await self._outlasting(lambda client: client.push_exec_result(item_id, data), held_until)
 
     async def _outlasting(
         self, call: Callable[[ApiClient], Awaitable[object]], until: float
@@ -865,10 +882,13 @@ async def _operate(
     workspace: AgentWorkspace,
     detail: ExecDetailView,
     on_output: Sink,
+    fetched: Callable[[], None],
 ) -> Ended:
     """The one operation the item names, through the host's transport. A
     read's file is spooled for its upload; a write's is downloaded and
-    checked before a byte of it reaches the workspace."""
+    checked before a byte of it reaches the workspace, and `fetched` marks
+    its command's start there: the download crosses the store, as a read's
+    upload does, and is no part of the command's time."""
     request = detail.request
     match request["operation"]:
         case "run":
@@ -911,6 +931,7 @@ async def _operate(
             if not isinstance(transport, WritesFromFile):
                 raise CapabilityMissing(f"{transport.describe()} writes no file from disk")
             spooled = await objects.fetch(detail.file_in, detail.url)
+            fetched()
             try:
                 await transport.write_file_from(
                     workspace, request["path"], spooled.path, detail.epoch or 0

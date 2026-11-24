@@ -242,9 +242,11 @@ export interface components {
          *     the objects it moves. A write's `file_in` comes by `url`, signed for a
          *     GET of it alone until `url_expires_at`; an `output` and a read's
          *     `file_out` go by the parts `POST .../upload` signs. `times` says the
-         *     platform keeps the times a host sends with the item's result; a host
-         *     sends them only when it does, so a platform of an earlier release,
-         *     which keeps none, is never sent a result it refuses.
+         *     replica that answers keeps the times a host sends with the item's
+         *     result; a host sends them only when it does. During a roll, the push
+         *     may reach a replica of an earlier release, which keeps none and
+         *     refuses them as invalid: the host then pushes the result again
+         *     without them.
          */
         ExecDetailView: {
             /**

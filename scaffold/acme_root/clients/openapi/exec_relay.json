@@ -78,7 +78,7 @@
         "type": "object"
       },
       "ExecDetailView": {
-        "description": "An item the host holds: the call, the workspace, the operation, and\nthe objects it moves. A write's `file_in` comes by `url`, signed for a\nGET of it alone until `url_expires_at`; an `output` and a read's\n`file_out` go by the parts `POST .../upload` signs. `times` says the\nplatform keeps the times a host sends with the item's result; a host\nsends them only when it does, so a platform of an earlier release,\nwhich keeps none, is never sent a result it refuses.",
+        "description": "An item the host holds: the call, the workspace, the operation, and\nthe objects it moves. A write's `file_in` comes by `url`, signed for a\nGET of it alone until `url_expires_at`; an `output` and a read's\n`file_out` go by the parts `POST .../upload` signs. `times` says the\nreplica that answers keeps the times a host sends with the item's\nresult; a host sends them only when it does. During a roll, the push\nmay reach a replica of an earlier release, which keeps none and\nrefuses them as invalid: the host then pushes the result again\nwithout them.",
         "properties": {
           "agent_session_id": {
             "format": "uuid",
