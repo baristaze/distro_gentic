@@ -534,19 +534,17 @@ activity, or removed while it is active.
 
 **Check.** review
 
-## PLC-22 A file or an output crosses sealed: inline within its bound, else as an object
+## PLC-22 A file or an output crosses sealed: inline if small, else an object
 
 **Principle.** A file or an output of an `exec` item of at most 64 KiB
-rides in the item or its result, sealed under the session's key with
-the operation. One past that crosses the store as an object, by URLs
-signed for it alone: a file a write hands its host, a file a read
-uploads, and what a command printed. The item names each object, its
-size, and its digest, and the result names what its host sent the same
-way. An object is sealed under a key of its own, which the item keeps
-under the session's key. Nothing of a file reaches a workspace, or the
-runner, until it matches its digest, and a result whose inline bytes do
-not match theirs is refused. A file leaves the store once its item
-settles; an output goes with the item.
+rides in the item or its result, sealed under the session's key. One
+past that crosses the store as an object, by URLs signed for it alone,
+sealed under a key of its own that the item keeps under the session's
+key. The item names each object, its size, and its digest, and the
+result names what its host sent the same way. Nothing of a file reaches
+a workspace, or the runner, until it matches its digest, and a result
+whose inline bytes miss theirs is refused. A file leaves the store once
+its item settles; an output goes with the item.
 
 **Source.** Placement and Workspace Hosts, The Exec Relay Transport.
 
