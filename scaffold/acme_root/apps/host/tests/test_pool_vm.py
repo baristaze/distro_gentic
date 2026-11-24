@@ -1,13 +1,19 @@
 """The host as a VM of the cloud pool runs it: its settings come from
 the seed the pool handed the VM, and from a file that names nothing
 secret; it trades the seed's key once, asking again while its VM is
-warm, and forgets the key once traded; its workspace is a folder of the
+warm, and forgets the key once traded; its boot routes the VM's lookups
+with a file its resolver can read; its workspace is a folder of the
 VM at the VM's level, which it neither snapshots nor starts from one,
 and its commands run there as its own user."""
 
 import base64
 import json
+import os
 import re
+import shutil
+import stat
+import subprocess
+import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import replace
@@ -116,6 +122,82 @@ def test_the_seed_says_where_to_call_and_its_key_goes_once_traded(tmp_path: Path
     (tmp_path / "bad.json").write_text("{")
     with pytest.raises(BadSetting):
         read_seed(tmp_path / "bad.json")
+
+
+def stub(bin_dir: Path, name: str, body: str) -> None:
+    path = bin_dir / name
+    path.write_text(f"#!/bin/sh\n{body}\n")
+    path.chmod(0o755)
+
+
+def test_a_vms_boot_routes_its_lookups_with_a_file_its_resolver_can_read(tmp_path: Path) -> None:
+    """The boot runs acme-vm-seed, which keeps the seed the host's alone
+    under umask 077, and it runs acme-vm-dns. systemd-resolved reads the
+    drop-in as its own user, neither its owner nor in its group, and
+    ignores one it cannot read: then no public name resolves."""
+    real_install = shutil.which("install")
+    assert real_install, "install, as the image has it"
+    root, bin_dir, calls = tmp_path / "root", tmp_path / "bin", tmp_path / "calls"
+    libexec = root / "usr" / "local" / "libexec"
+    for folder in (bin_dir, libexec, root / "run" / "systemd"):
+        folder.mkdir(parents=True)
+    # The VM's absolute paths, moved under the test's folder in one pass.
+    under = {
+        "/run/": f"{root}/run/",
+        "/usr/local/libexec/": f"{libexec}/",
+        "/opt/acme-host/venv/bin/python": sys.executable,
+    }
+    paths = re.compile("|".join(map(re.escape, under)))
+    for name in ("acme-vm-seed", "acme-vm-dns"):
+        script = libexec / name
+        script.write_text(paths.sub(lambda found: under[found[0]], (VMS / name).read_text()))
+        script.chmod(0o755)
+    handed = json.dumps({"api_url": "http://gateway.test/", "key": "hmk_the-key"})
+    # The metadata endpoint, as the cloud answers a new VM.
+    stub(
+        bin_dir,
+        "curl",
+        'case "$*" in\n'
+        "  */api/token) echo the-token ;;\n"
+        f"  */user-data) echo '{handed}' ;;\n"
+        "esac",
+    )
+    # The test's user stands for the VM's root, so it owns what it installs.
+    stub(
+        bin_dir,
+        "install",
+        "for arg do\n"
+        "  shift\n"
+        '  if [ -n "${skip:-}" ]; then skip=\n'
+        '  elif [ "$arg" = -o ] || [ "$arg" = -g ]; then skip=1\n'
+        '  else set -- "$@" "$arg"\n'
+        "  fi\n"
+        "done\n"
+        f'exec {real_install} "$@"',
+    )
+    stub(bin_dir, "chown", "exit 0")
+    stub(bin_dir, "ip", "echo 'default via 10.0.0.1 dev ens5 proto dhcp src 10.0.0.12 metric 100'")
+    for name in ("systemctl", "resolvectl"):
+        stub(bin_dir, name, f'echo "{name} $*" >> {calls}')
+
+    booted = subprocess.run(
+        ["sh", str(libexec / "acme-vm-seed")],
+        capture_output=True,
+        text=True,
+        env={"PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"},
+    )
+
+    assert booted.returncode == 0, booted.stderr
+    kept = root / "run" / "acme-vm" / "seed.json"
+    assert stat.S_IMODE(kept.stat().st_mode) == 0o600, "the seed is the host's alone"
+    dropin = root / "run" / "systemd" / "resolved.conf.d" / "acme-vm.conf"
+    assert stat.S_IMODE(dropin.stat().st_mode) & 0o004, "any user reads the drop-in"
+    assert stat.S_IMODE(dropin.parent.stat().st_mode) & 0o005 == 0o005, "and lists its folder"
+    assert dropin.read_text() == "[Resolve]\nDNS=1.1.1.1 8.8.8.8\nDomains=~.\n"
+    assert calls.read_text().splitlines() == [
+        "systemctl restart systemd-resolved",
+        "resolvectl domain ens5 ~gateway.test",
+    ]
 
 
 class Ec2Wire:
