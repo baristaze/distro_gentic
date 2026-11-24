@@ -239,7 +239,9 @@ async def parts(
             data = await asyncio.to_thread(
                 open_object, _key(part.key), part.reference, part.size, part.digest, sealed
             )
-        except ObjectRefused as error:
+        except InfraException as error:
+            if error.code != ObjectRefused.code:
+                raise
             raise AgentWorkspaceLost(f"{what} does not open to its size and its digest") from error
         yield data
 
