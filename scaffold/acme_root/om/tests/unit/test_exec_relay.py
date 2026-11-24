@@ -1311,12 +1311,12 @@ async def test_an_objects_url_reads_it_alone_until_it_runs_out_and_only_its_host
         await relay.detail(request(), wall.holder, elsewhere.item_id(their_row))
     assert await exec_objects.handed(relay, wall.buckets, wall.holder, item_id) == data
     detail = await relay.detail(request(), wall.holder, item_id)
-    assert detail.url is not None and detail.file_in is not None
+    assert detail.url is not None and isinstance(detail.file_in, ObjectRef)
     async with exec_objects.store_of(wall.buckets) as store:
         assert (await store.get(detail.url)).status_code == 200
         # Signed for one object, its path pointed at another: refused.
         their_detail = await relay.detail(request(), wall.other, elsewhere.item_id(their_row))
-        assert their_detail.file_in is not None
+        assert isinstance(their_detail.file_in, ObjectRef)
         moved = detail.url.replace(detail.file_in.reference, their_detail.file_in.reference)
         assert (await store.get(moved)).status_code == 403
         # Past its time: refused.
