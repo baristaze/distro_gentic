@@ -39,11 +39,11 @@ from unit.test_cloud_pool import IMAGE, PREFIX, Placed, Pool, stage
 
 from acme.infra.agent_workspaces import (
     AgentWorkspace,
+    AgentWorkspaceLost,
     Durability,
     EgressMode,
     EgressPolicy,
     IsolationMode,
-    AgentWorkspaceLost,
     IsolationSpec,
     SnapshotRefused,
 )
@@ -280,9 +280,7 @@ class Kept:
         """What the snapshot's archive names, opened as a restore opens it."""
         return await opened(self.snapshots, self.owner, agent_session_id, snapshot)
 
-    async def kept_before(
-        self, workspace: AgentWorkspace, epoch: int
-    ) -> AgentWorkspaceSnapshot:
+    async def kept_before(self, workspace: AgentWorkspace, epoch: int) -> AgentWorkspaceSnapshot:
         """The directory kept as a release before the pool kept its own
         archives kept it: one plain tar, its parts sealed under the session's
         key, named by the engine's manifest. Then the release."""
@@ -448,7 +446,7 @@ async def test_a_part_that_opens_to_bytes_other_than_its_digest_loses_the_restor
     before = await kept.stored(agent_session_id)
     timed = restores()
 
-    with pytest.raises(AgentWorkspaceLost, match="part 1 .* does not open to its size and its"):
+    with pytest.raises(AgentWorkspaceLost, match=r"part 1 .* does not open to its size and its"):
         await kept.prepared(agent_session_id, restore=snapshot)
 
     assert timed_since(timed) == {}, "a restore that failed is not timed"

@@ -6,7 +6,9 @@ unsafe item `interrupted` and requeues a repeatable one to its workspace's
 host alone. A stop reaches the host's control stream at once, and nothing a
 stale writer sends acts. A part or a result whose hash does not verify is
 refused at the exec relay. A file is read in one item, whose host uploads
-it as an object of the store that the runner takes once the item is done."""
+it as an object of the store that the runner takes once the item is done.
+A fetch hands its host its own session's kept parts alone, each by a link
+signed for it alone that runs out, and only a host that reads fetches."""
 
 import asyncio
 import base64
@@ -30,7 +32,7 @@ from acme.infra.agent_workspaces import (
 )
 from acme.infra.buckets import Buckets, BucketsInterface
 from acme.infra.buckets.local import LOCAL_STORE_URL, BucketsLocalImpl
-from acme.infra.buckets.sealed import digest_of
+from acme.infra.buckets.sealed import ObjectRefused, digest_of, new_key, open_object, seal_object
 from acme.infra.exceptions import InfraValidationFailed
 from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.streams import StreamBounds
@@ -47,7 +49,7 @@ from acme.om.base import new_id, utcnow
 from acme.om.context import AppContext, AppType, RequestContext, TenantContext
 from acme.om.exceptions import NotFound, ToolFailed, Unavailable, ValidationFailed
 from acme.om.exec_relay import ExecRelayManagerInterface
-from acme.om.exec_relay.exceptions import ItemNotHeld, NoWorkspaceHost, StaleExec
+from acme.om.exec_relay.exceptions import FetchNotRead, ItemNotHeld, NoWorkspaceHost, StaleExec
 from acme.om.exec_relay.impl.manager import ExecRelayOptions
 from acme.om.exec_relay.impl.placement import PlacementRelayedImpl
 from acme.om.exec_relay.impl.transport import HostRefused, TransportPlacedImpl, TransportRelayImpl
@@ -67,7 +69,9 @@ from acme.om.exec_relay.types.exec import (
     ExecProgress,
     ExecResult,
     ExecState,
+    KeptFile,
     ObjectKind,
+    ObjectRef,
     PrepareAnswer,
     ReadRequest,
     RunRequest,
@@ -78,6 +82,7 @@ from acme.om.exec_relay.types.exec import (
 from acme.om.hosts.exceptions import PinnedToHosts
 from acme.om.hosts.impl.manager import HostsOptions, local_pool_id, session_pool_id
 from acme.om.hosts.impl.placement import PlacementHostsImpl
+from acme.om.hosts.rules import FETCH_VERSION
 from acme.om.hosts.types.host import Advertisement, Enrollment, HostIdentity
 from acme.om.hosts.types.host import IsolationMode as Mode
 from acme.om.hosts.types.pool import HostPool
@@ -94,6 +99,7 @@ from acme.om.privacy.impl.records import RecordSealKeysImpl
 from acme.om.retention.crossing import CrossingKind, CrossingRefused, declared
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.impl.memory_base import MemoryStorageBase
+from acme.om.tools.impl.snapshots import part_key
 from acme.om.trust.types.identities import Executor, ExecutorKind
 from acme.om.work.types.work_item import WorkItem, WorkStatus
 
@@ -181,11 +187,17 @@ def managers(
 
 
 async def enrolled(
-    managers: PlatformManagers, owner: TenantContext, pool: HostPool, name: str
+    managers: PlatformManagers,
+    owner: TenantContext,
+    pool: HostPool,
+    name: str,
+    exec_version: int = 2,
 ) -> HostIdentity:
     issued = await managers.hosts.issue_enrollment_token(owner, pool.id)
     credential = await managers.hosts.enroll(
-        request(), issued.token, Enrollment(name=name, advertisement=PROBED, exec_version=2)
+        request(),
+        issued.token,
+        Enrollment(name=name, advertisement=PROBED, exec_version=exec_version),
     )
     return await managers.hosts.authenticate(request(), credential.credential)
 
@@ -256,14 +268,15 @@ class Host:
     pushes how the command ended, each with the hash it declares. It counts
     what it was handed."""
 
-    def __init__(self, wall: Wall, identity: HostIdentity) -> None:
+    def __init__(self, wall: Wall, identity: HostIdentity, exec_version: int = 2) -> None:
         self.managers = wall.managers
         self.buckets = wall.buckets
         self.identity = identity
+        self.exec_version = exec_version
         self.handed: list[WorkItem] = []
 
     async def claim(self) -> WorkItem | None:
-        claimed = await self.managers.hosts.claim(request(), self.identity, 2)
+        claimed = await self.managers.hosts.claim(request(), self.identity, self.exec_version)
         if claimed is None:
             return None
         self.handed.append(claimed[1])
@@ -1185,6 +1198,104 @@ async def test_an_item_that_settles_leaves_no_file_behind_and_its_output_goes_wi
 async def answered(host: Host, data: bytes) -> None:
     row = await host.claim_soon()
     await host.finish(row, data=data)
+
+
+# A fetch hands its host its own session's kept parts alone, each by a link
+# signed for it alone that runs out, and a key that opens it alone; a host
+# that reads no fetch is handed none.
+
+
+async def kept_parts(wall: Wall, agent_session_id: UUID, *parts: bytes) -> list[KeptFile]:
+    """Parts of an archive of the session's, each sealed under a key of its
+    own where the snapshots bucket keeps it, as files a fetch hands."""
+    snapshot_id = new_id()
+    files: list[KeptFile] = []
+    for index, data in enumerate(parts):
+        reference = part_key(agent_session_id, snapshot_id, index)
+        key = new_key()
+        sealed = seal_object(key, reference, data)
+        await wall.buckets.put(wall.owner.org_id, Buckets.SNAPSHOTS, reference, sealed, "x/y")
+        named = ObjectRef(
+            reference=reference,
+            size=len(data),
+            digest=digest_of(data),
+            key=base64.b64encode(key).decode(),
+        )
+        files.append(KeptFile(path=f".acme-kept/part-{index:06d}", object=named))
+    return files
+
+
+async def test_a_fetch_hands_its_host_a_link_to_each_of_its_sessions_own_parts_that_runs_out(
+    wall: Wall, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    relay = wall.managers.exec_relay
+    fetcher = await enrolled(
+        wall.managers, wall.owner, wall.pool, "host-3", exec_version=FETCH_VERSION
+    )
+    session = await wall.managers.agent_sessions.create_agent_session(
+        wall.owner, make_agent_session()
+    )
+    await wall.managers.hosts.place_session(wall.owner, session.id, wall.pool.id)
+    await relay.bind_workspace(wall.owner, session.id, fetcher.host_id, WHERE)
+    epoch = await wall.managers.agent_steps.begin_run(wall.owner, session.id)
+    workspace = AgentWorkspace(id=session.id, org_id=wall.owner.org_id, spec=CONTAINER, location="")
+    files = await kept_parts(wall, session.id, b"the first part\n", b"the second part\n")
+    runner = transport(wall.managers)
+    # Another session's part is no part of this one's archive, nor is an
+    # object of the relay's own: refused before anything is sent.
+    (theirs,) = await kept_parts(wall, wall.workspace.id, b"theirs\n")
+    relays = files[0].object.model_copy(update={"reference": f"exec_relay/{session.id}/x/1/file"})
+    for other in (theirs, KeptFile(path="a", object=relays)):
+        with pytest.raises(ValidationFailed, match="its own session's kept parts alone"):
+            await runner.fetch_files(workspace, [files[1], other], epoch)
+
+    fetching = asyncio.ensure_future(runner.fetch_files(workspace, files, epoch))
+    host = Host(wall, fetcher, FETCH_VERSION)
+    row = await host.claim_soon()
+    item_id = host.item_id(row)
+    # Another host of the tenant reads nothing of it: no key and no link.
+    with pytest.raises(ItemNotHeld):
+        await relay.detail(request(), wall.holder, item_id)
+    detail = await relay.detail(request(), fetcher, item_id)
+    assert len(detail.urls) == len(files) and detail.url_expires_at is not None
+    assert detail.url_expires_at <= utcnow() + ExecRelayOptions().object_ttl
+    sealed = [
+        await wall.buckets.get(wall.owner.org_id, Buckets.SNAPSHOTS, file.object.reference)
+        for file in files
+    ]
+    async with exec_objects.store_of(wall.buckets) as store:
+        assert [(await store.get(url)).content for url in detail.urls] == sealed
+        # Signed for one part, its path pointed at the other: refused.
+        moved = detail.urls[0].replace(files[0].object.reference, files[1].object.reference)
+        assert (await store.get(moved)).status_code == 403
+        # Past its time: refused.
+        later = time.time() + ExecRelayOptions().object_ttl.total_seconds() + 1
+        with monkeypatch.context() as clock:
+            clock.setattr("acme.infra.buckets.local.time.time", lambda: later)
+            expired = await store.get(detail.urls[1])
+    assert (expired.status_code, expired.text) == (403, "the URL has expired")
+    # The key each part is handed opens that part alone.
+    first, second = (file.object for file in files)
+    assert open_object(_key(first.key), first.reference, first.size, first.digest, sealed[0])
+    with pytest.raises(ObjectRefused):
+        open_object(_key(first.key), second.reference, second.size, second.digest, sealed[1])
+    await host.finish(row)
+    await fetching
+    for file in files:
+        assert await wall.buckets.exists(
+            wall.owner.org_id, Buckets.SNAPSHOTS, file.object.reference
+        ), "the item moves and removes no part it names"
+
+
+async def test_a_host_that_reads_no_fetch_is_handed_none(wall: Wall) -> None:
+    files = await kept_parts(wall, wall.workspace.id, b"a part\n")
+    with pytest.raises(FetchNotRead):
+        await transport(wall.managers).fetch_files(wall.workspace, files, wall.epoch)
+    assert await Host(wall, wall.holder).claim() is None, "nothing sent"
+
+
+def _key(text: str) -> bytes:
+    return base64.b64decode(text)
 
 
 # Check 7: a result its host sends again, after a first push that completed
