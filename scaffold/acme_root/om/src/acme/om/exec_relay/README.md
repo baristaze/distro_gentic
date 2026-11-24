@@ -165,8 +165,10 @@ answers trust's executor with the bound host, and
 engine's file operations carry no call key, so each is an item keyed by
 itself. ADR 2004 records the decisions. The bound is `INLINE_BYTES`
 (`types/exec.py`); a write's file rides inline only to a host that reads
-`exec` work at `hosts.rules.INLINE_VERSION`, and an object's upload
-starts at its host's first `issue_upload`. The gateway's claim carries
+`exec` work at `hosts.rules.INLINE_VERSION`, an output or a read's file
+only to a runner that reads it there, as its item records
+(`reads_inline`), and an object's upload starts at its host's first
+`issue_upload`. The gateway's claim carries
 an `exec` item's detail through the hosts service's `details`, keyed by
 work kind. ADRs 2066 and 2076 record the objects and what rides inline.
 -->

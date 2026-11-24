@@ -510,8 +510,10 @@ ends before its first part is sent, sends that output there alone.
 <!-- agents-only
 The bound is the scaffold's `INLINE_BYTES` (`exec_relay/types/exec.py`).
 A write's file rides inline only to a host that reads `exec` work at
-`INLINE_VERSION` or later; the detail's `inline` names what the platform
-takes in a result, and a host sends nothing inline past it. The claim's
+`INLINE_VERSION` or later; the detail's `inline` names what the runner
+that sent the item reads in a result, which the item records as that
+runner sends it (`reads_inline`), and a host sends nothing inline past
+it. The claim's
 `detail` comes from the gateway's hosts service, by work kind
 (`details`).
 -->

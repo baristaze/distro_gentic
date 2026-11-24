@@ -156,7 +156,8 @@ async def test_a_claim_of_an_exec_item_carries_its_detail_and_its_route_still_an
     detail = claimed["detail"]
     assert detail is not None and detail["item_id"] == str(item_id)
     assert detail["request"]["argv"] == ["make", "deploy"]
-    # It says what the platform keeps of a result, as the route does.
+    # It says what the platform keeps of a result, and what the item's
+    # runner reads in it, as the route does.
     assert (detail["times"], detail["inline"]) == (True, 64 * 1024)
     # A host that reads the detail by its route, as before, is answered
     # the same.

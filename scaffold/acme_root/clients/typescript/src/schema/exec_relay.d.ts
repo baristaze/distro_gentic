@@ -244,8 +244,9 @@ export interface components {
          *     `output` and a read's `file_out` go by the parts `POST .../upload`
          *     signs, or, at most `inline` bytes, in the result itself. `times` says
          *     the replica that answers keeps the times a host sends with the item's
-         *     result, and `inline` the bytes it takes in it; a host sends neither
-         *     past what they say. During a roll, the push may reach a replica of an
+         *     result, and `inline` the bytes the runner that sent the item reads in
+         *     it, none for a runner of an earlier release; a host sends neither past
+         *     what they say. During a roll, the push may reach a replica of an
          *     earlier release, which keeps no times and takes nothing inline, and
          *     refuses either as invalid: the host then pushes the result again
          *     without its times, and with what rode inline sent to the store.

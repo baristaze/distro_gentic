@@ -46,7 +46,7 @@ from acme.infra.transports import (
 )
 from acme.om.agent_steps.types.header import ParkReason, ToolFailure
 from acme.om.agents.types.run import RunEnd
-from acme.om.base import new_id, utcnow
+from acme.om.base import OmBase, new_id, utcnow
 from acme.om.context import AppContext, AppType, RequestContext, TenantContext
 from acme.om.exceptions import NotFound, ToolFailed, Unavailable, ValidationFailed
 from acme.om.exec_relay import ExecRelayManagerInterface
@@ -73,6 +73,7 @@ from acme.om.exec_relay.types.exec import (
     ExecProgress,
     ExecResult,
     ExecState,
+    ItemContent,
     ObjectKind,
     ObjectRef,
     PrepareAnswer,
@@ -1598,6 +1599,72 @@ async def test_a_result_whose_inline_bytes_pass_the_bound_or_miss_their_digest_i
         request(), wall.holder, item_id, declared(CrossingKind.RESULT, data), data
     )
     assert (await running).stdout == "ok\n"
+
+
+class EarlierObject(OmBase):
+    """An object a result names, as a runner of the release before reads it:
+    its size and its digest, and nothing else."""
+
+    size: int
+    digest: str
+
+
+class EarlierResult(OmBase):
+    """A result as a runner of the release before reads it."""
+
+    detail: str = ""
+    offset: int = 0
+    output: EarlierObject | None = None
+    file: EarlierObject | None = None
+
+
+@pytest.fixture
+def earlier_runner(monkeypatch: pytest.MonkeyPatch) -> list[bytes]:
+    """Each item sent as a runner of the release before sends it, which
+    says nothing of reading a result inline; and what the platform seals
+    under the session's key, each in the clear."""
+    sealed: list[bytes] = []
+    inner = RecordSealKeysImpl.seal
+
+    async def spy(
+        self: RecordSealKeysImpl, ctx: TenantContext, agent_session_id: UUID, key: UUID, data: bytes
+    ) -> bytes | None:
+        if b'"request"' in data:
+            contents = ItemContent.model_validate_json(data)
+            data = contents.model_copy(update={"reads_inline": False}).model_dump_json().encode()
+            assert b"reads_inline" not in data, "an earlier runner's item keeps its form"
+        sealed.append(data)
+        return await inner(self, ctx, agent_session_id, key, data)
+
+    monkeypatch.setattr(RecordSealKeysImpl, "seal", spy)
+    return sealed
+
+
+async def test_an_item_an_earlier_runner_sent_takes_nothing_inline_and_that_runner_reads_it(
+    wall: Wall, earlier_runner: list[bytes]
+) -> None:
+    relay = wall.managers.exec_relay
+    host = Host(wall, wall.holder)
+    running = asyncio.ensure_future(
+        transport(wall.managers).run(wall.workspace, command(wall.epoch), seal=NO_SEAL)
+    )
+    row = await host.claim_soon()
+    item_id = host.item_id(row)
+    detail = await relay.detail(request(), wall.holder, item_id)
+    assert detail.inline == 0, "its host is told to send nothing inline"
+    # A host that sends its output inline all the same lands nothing.
+    printed = exec_objects.printed("ok\n")
+    output = {"size": len(printed), "digest": digest_of(printed)}
+    data = with_output({**output, "data": base64.b64encode(printed).decode()})
+    with pytest.raises(ValidationFailed, match="reads no output"):
+        await relay.push_result(
+            request(), wall.holder, item_id, declared(CrossingKind.RESULT, data), data
+        )
+    await host.finish(row, 0, "ok\n")
+    assert (await running).stdout == "ok\n", "the runner reads it"
+    # The result as it is kept is one a runner of the release before reads.
+    (kept,) = [data for data in earlier_runner if b'"request"' not in data]
+    assert EarlierResult.model_validate_json(kept).output == EarlierObject(**output)
 
 
 async def test_a_small_write_rides_in_its_item_to_a_host_that_reads_it_there(

@@ -24,7 +24,6 @@ from acme.om.exceptions import OmException, ValidationFailed
 from acme.om.exec_relay import ExecRelayManagerInterface
 from acme.om.exec_relay.rules import CONTROL_KIND
 from acme.om.exec_relay.types.exec import (
-    INLINE_BYTES,
     REQUESTS,
     ObjectRef,
     PrepareAnswer,
@@ -138,9 +137,10 @@ class ExecRelayServiceImpl(ExecRelayServiceInterface):
             url=detail.url,
             url_expires_at=detail.url_expires_at,
             # This platform keeps a host's times (`ExecResult.times`), and
-            # takes an output or a file this long in a result.
+            # the item says how long an output or a file its runner reads in
+            # a result is.
             times=True,
-            inline=INLINE_BYTES,
+            inline=detail.inline,
         )
 
     async def claimed(

@@ -51,14 +51,26 @@ starts its own.
 **Each side says what it reads.** A write's file rides inline only to a
 host that reads `exec` work at version 4 (`INLINE_VERSION`). The wire
 moves to 4 and its floor stays, so a host of an earlier release is
-handed its writes from the store. The detail names the bytes the
-platform takes inline in a result (`inline`), as it says whether the
-platform keeps a host's times, and a host sends nothing inline past it,
-so a platform of an earlier release is sent objects alone. During a
-roll, a push may reach a replica of an earlier release than the one that
-answered the detail. That replica refuses it, and the host pushes it
+handed its writes from the store. An output, or a read's file, is read
+by the runner that sent its item, so that runner decides whether it
+rides inline, not the replica that answers its host: the item records,
+as its runner sends it, that this runner reads a result's bytes inline
+(`reads_inline`). The detail names the bytes its host may send there
+(`inline`), as it says whether the platform keeps a host's times, and
+names none for an item a runner of an earlier release sent. A host
+sends nothing inline past it, not even an empty file, and a result that
+does is refused, so a runner or a platform of an earlier release is
+sent objects alone.
+
+**A roll runs both ways.** The API's replicas and the session runners
+roll apart, so either may be the earlier release. When the runner is,
+its items record no `reads_inline`, their hosts send objects whichever
+replica answers, and it reads each result as it always has. When the
+API is, an earlier replica names no `inline`, and its host sends
+objects; a push may also reach a replica of an earlier release than the
+one that answered the detail, which refuses it, and the host pushes it
 once more as that release takes it: without its times, and with what
-rode inline sent to the store.
+rode inline sent to the store. A rollback runs the same two ways.
 
 **A claim carries its item's detail.** The gateway's claim answers what
 a work kind hands its host beyond the payload, from a hook the hosts
@@ -80,7 +92,9 @@ pushes no part of it: the result carries it whole.
   no part came.
 - Inline bytes sit in the item's row while the item does, sealed, and go
   with it at the session's purge, as an output object does.
-- A replica of an earlier release cannot read an item a replica of this
-  one sent: its contents name an upload not started yet, or a write's
-  file inline. During a roll, such an item fails on that replica and
-  settles by its lease.
+- A replica or a runner of an earlier release cannot read an item a
+  runner of this one sent: its contents name an upload not started yet,
+  or a write's file inline, and its result may carry bytes inline.
+  During a roll, such an item fails on that replica and settles by its
+  lease. After a rollback, a runner of the earlier release that meets
+  one, as a resumed run does, fails that call.

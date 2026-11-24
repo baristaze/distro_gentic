@@ -339,8 +339,9 @@ class ExecRelayManagerInterface(ABC):
     async def detail(self, rctx: RequestContext, host: HostIdentity, item_id: UUID) -> ExecDetail:
         """System-internal: what the host that holds the item runs, opened,
         and for a write its file, or a URL signed for a GET of its object
-        alone, good for the options' `object_ttl`. `ItemNotHeld` for any
-        other host, and once the item is settled."""
+        alone, good for the options' `object_ttl`; and the bytes its host
+        may send in the result, which the runner that sent it reads there.
+        `ItemNotHeld` for any other host, and once the item is settled."""
         ...
 
     @abstractmethod
@@ -392,9 +393,9 @@ class ExecRelayManagerInterface(ABC):
         read's file within `INLINE_BYTES`, or names the object its host
         uploaded, whose upload it completes: an output not whole is not
         kept, and a read whose file is not is kept as refused. Inline bytes
-        past the bound, or off their size or their digest, are
-        `ValidationFailed`, and land nothing. A write's file leaves the
-        store."""
+        past the bound, off their size or their digest, or for an item
+        whose runner reads none, are `ValidationFailed`, and land nothing.
+        A write's file leaves the store."""
         ...
 
     @abstractmethod

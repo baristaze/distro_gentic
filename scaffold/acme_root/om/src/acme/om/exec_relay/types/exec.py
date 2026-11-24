@@ -64,6 +64,18 @@ def _its_own(user: str | None) -> bool:
     return user is None
 
 
+def _in_the_store(data: bytes | None) -> bool:
+    """No bytes inline, which is left out, so an object named in a result
+    is the one a release before it wrote, which its runner still reads."""
+    return data is None
+
+
+def _reads_none(reads_inline: bool) -> bool:
+    """A runner that reads nothing inline, which is left out, so an item a
+    runner of an earlier release sent keeps its form when it is rewritten."""
+    return not reads_inline
+
+
 class ExecState(StrEnum):
     QUEUED = "queued"  # sent, and no host holds it
     RUNNING = "running"  # a host holds it under a lease
@@ -131,7 +143,9 @@ class StoredObject(OmBase):
 
     size: int = Field(ge=0)
     digest: str = Field(pattern=DIGEST)
-    data: bytes | None = Field(default=None, max_length=INLINE_BYTES, repr=False)
+    data: bytes | None = Field(
+        default=None, max_length=INLINE_BYTES, repr=False, exclude_if=_in_the_store
+    )
 
     @model_validator(mode="after")
     def _its_own_bytes(self) -> StoredObject:
@@ -196,12 +210,15 @@ class ItemContent(OmBase):
     a server's tool, and a listing have an `output`; a write hands its host
     a `file_in`, the object that holds it or, within `INLINE_BYTES`, the
     file itself; and a read's host uploads a `file_out`, or sends it in its
-    result."""
+    result. `reads_inline` says the runner that sent it reads an output or
+    a read's file in its result; one of an earlier release reads neither
+    there, so its host is told to send each to the store."""
 
     request: ExecRequest
     output: ObjectSlot | None = None
     file_in: ObjectRef | StoredObject | None = None
     file_out: ObjectSlot | None = None
+    reads_inline: bool = Field(default=False, exclude_if=_reads_none)
 
 
 class ExecCall(OmBase):
@@ -418,6 +435,10 @@ class ExecDetail(OmBase):
     # when that ends.
     url: str | None = None
     url_expires_at: datetime | None = None
+    # The most bytes of an output or a read's file its host sends in the
+    # result: what the runner that sent the item reads there, and none for
+    # one of an earlier release.
+    inline: int = Field(default=0, ge=0, le=INLINE_BYTES)
 
 
 class IssuedObjectPart(OmBase):

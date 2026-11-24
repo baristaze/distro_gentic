@@ -986,6 +986,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             file_out=contents.file_out,
             url=url,
             url_expires_at=expires_at,
+            inline=INLINE_BYTES if contents.reads_inline else 0,
         )
 
     async def issue_upload(
@@ -1649,7 +1650,9 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         write's file rides in it when it is at most `INLINE_BYTES` and its
         host reads one there (`inline`); any other is named as an object,
         put once the item is made. An object its host may upload starts no
-        upload here: one that rides in the result never needs it."""
+        upload here: one that rides in the result never needs it. The runner
+        that sends it reads an output or a read's file in its result, and
+        the item says so, so its host sends one there only to such a runner."""
 
         def slot(kind: ObjectKind) -> ObjectSlot:
             reference = object_reference(agent_session_id, item_id, dispatch, kind)
@@ -1661,17 +1664,17 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             digest = await asyncio.to_thread(digest_of, content)
             if inline and len(content) <= INLINE_BYTES:
                 within = StoredObject(size=len(content), digest=digest, data=content)
-                return ItemContent(request=request, file_in=within)
+                return ItemContent(request=request, file_in=within, reads_inline=True)
             named = ObjectRef(
                 reference=object_reference(agent_session_id, item_id, dispatch, "file"),
                 size=len(content),
                 digest=digest,
                 key=_b64(new_key()),
             )
-            return ItemContent(request=request, file_in=named)
+            return ItemContent(request=request, file_in=named, reads_inline=True)
         if isinstance(request, ReadRequest):
-            return ItemContent(request=request, file_out=slot("file"))
-        return ItemContent(request=request, output=slot("output"))
+            return ItemContent(request=request, file_out=slot("file"), reads_inline=True)
+        return ItemContent(request=request, output=slot("output"), reads_inline=True)
 
     async def _started(
         self,
@@ -1813,7 +1816,13 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         kept, and the result says so; a read whose file is not whole is
         refused. A result that then lands nothing leaves what it completed
         to the item's next claim, whose uploads are its own
-        (`_fresh_uploads`)."""
+        (`_fresh_uploads`). Bytes inline for an item whose runner reads none
+        there are refused: that runner could not read the result."""
+        if not contents.reads_inline and any(
+            stored is not None and stored.data is not None
+            for stored in (result.output, result.file)
+        ):
+            raise ValidationFailed("its runner reads no output and no file in a result")
         output_slot, most = _uploaded(contents, "output")
         if output_slot is None and result.output is not None:
             raise ValidationFailed("an item that prints nothing uploads no output")
