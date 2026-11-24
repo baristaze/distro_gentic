@@ -43,4 +43,6 @@ class ExecItems(IdentifiableMixin, TrackableMixin, Base):
     output: Mapped[bytes | None] = mapped_column(LargeBinary)
     result_sha256: Mapped[str | None]
     settled_at: Mapped[datetime | None]
+    claimed_at: Mapped[datetime | None]
+    host_times: Mapped[dict[str, Any] | None]
     version: Mapped[int]

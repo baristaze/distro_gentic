@@ -1,8 +1,10 @@
 """The runner's transports. The engine sees one transport interface; behind
-it the runner picks, per session, by its placement: the direct transport to
-a cloud workspace, or the exec relay into a customer's wall, where each
-operation of a call travels as keyed `exec` work to the host that holds the
-workspace and the runner waits for its result."""
+it the runner picks, per session: the exec relay to a host, inside a
+customer's wall or on a VM of the cloud pool, where each operation of a
+call travels as keyed `exec` work to the host that holds the workspace and
+the runner waits for its result; or the direct transport to a workspace
+the runner's own machine holds. Each relayed item the runner sent and read
+is measured by its phases."""
 
 import asyncio
 import hashlib
@@ -14,6 +16,7 @@ from uuid import UUID
 
 from acme.infra.agent_workspaces import AgentWorkspace, IsolationMode, IsolationSpec
 from acme.infra.exceptions import InfraException
+from acme.infra.observability import EXEC_RELAY_OVERHEAD_SECONDS, EXEC_RELAY_PHASE_SECONDS
 from acme.infra.transports import (
     CapabilityMissing,
     CommandResult,
@@ -37,7 +40,7 @@ from acme.om.exec_relay.exceptions import (
     UserNotRead,
 )
 from acme.om.exec_relay.manager import ExecRelayManagerInterface
-from acme.om.exec_relay.rules import exec_id
+from acme.om.exec_relay.rules import exec_id, phases
 from acme.om.exec_relay.types.exec import (
     OUTPUT_CHARS,
     REQUESTS,
@@ -317,11 +320,12 @@ class TransportRelayImpl(TransportInterface):
         on_output: OutputSink | None,
         content: bytes | None,
     ) -> tuple[ExecItem, ExecProgress]:
-        """The item sent, and how it settled."""
+        """The item sent, and how it settled, measured once it is read."""
         epoch = call.epoch
         rctx = self._stage()
         org_id = workspace.org_id
         item_id = exec_id(call.key, REQUESTS.dump_json(call.request), occurrence)
+        sent_at = self._clock()
         try:
             item = await self._send(rctx, org_id, call, occurrence, content)
             progress = await self._wait(rctx, org_id, item, on_output, epoch, attach=False)
@@ -332,6 +336,7 @@ class TransportRelayImpl(TransportInterface):
             await asyncio.shield(self._stop(rctx, org_id, item_id, StopKind.CANCEL, epoch))
             raise
         assert progress is not None  # a wait that does not attach never gives up
+        _measured(item, progress, sent_at, self._clock())
         return item, progress
 
     async def _send(
@@ -507,6 +512,24 @@ class TransportPlacedImpl(TransportInterface):
         if await self._placement.inside_wall(workspace.org_id, workspace.id):
             return self._relayed
         return self._direct
+
+
+def _measured(item: ExecItem, progress: ExecProgress, sent_at: datetime, read_at: datetime) -> None:
+    """Observes where a done item's time went, by its phases, and its
+    overhead: the time from its send to its read less its command's own, as
+    its host timed it. Only an item this send made counts, so an item a
+    resumed run met is never counted twice, nor from a send that was not
+    its own."""
+    times = progress.times
+    if times is None or item.created_at < sent_at:
+        return
+    operation = item.operation.value
+    for phase, seconds in phases(times, read_at).items():
+        EXEC_RELAY_PHASE_SECONDS.labels(phase=phase.value, operation=operation).observe(seconds)
+    if times.host is not None:
+        overhead = (read_at - sent_at).total_seconds() - times.host.command
+        if overhead >= 0:
+            EXEC_RELAY_OVERHEAD_SECONDS.labels(operation=operation).observe(overhead)
 
 
 def _final(error: Exception) -> bool:

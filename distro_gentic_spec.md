@@ -168,7 +168,7 @@ flowchart LR
     CP --> Q
     CW --> Q
     SR -->|claims loops| Q
-    SR -->|direct transport| CWS
+    CWS -->|pulls exec work| CP
     WH -->|pulls exec work| CP
     SR --> LLM
     SR --> Rec
@@ -197,14 +197,16 @@ several kinds of work, and each must run where its environment is:
 | Work | Runs on | Claimed from |
 |---|---|---|
 | `loop`: run or resume a session's loop | Any agent session runner | The loop lanes |
-| `exec`: a tool call relayed into a customer's wall, or a person's command in any workspace | The host that holds the workspace | That host's lane |
+| `exec`: a tool call relayed to a host, inside a customer's wall or on a VM of the cloud pool, or a person's command in any workspace | The host that holds the workspace | That host's lane |
 | `workspace`: prepare, release, purge | A host in the session's placement | The placement's lane to prepare; the holding host's to release or purge |
 | Platform work: intake, agent automations | Control workers | Their own lanes |
 
 A lane is the guideline's work-item lane, so every kind is one queue
 with one shape. A runner claims from the queue directly; a host
 outside the cloud claims through the gateway, and the control
-plane claims the row on its behalf. A tool call to a cloud workspace
+plane claims the row on its behalf. A VM of the cloud pool is such a
+host: a tool call to it is `exec` work its host claims. Only a
+workspace on the runner's own machine, such as a container beside it,
 needs no item: the runner reaches it by the direct transport.
 
 A product built on the platform adds kinds of its own, each with its
@@ -253,11 +255,12 @@ later, rarely share a machine.
   ([`agentic_core` Durable by
   Default][e-durable]).
 
-A runner chooses the transport by the session's placement: a **direct
-transport** to a cloud workspace, or an **exec relay transport** to a
-host inside a customer's wall ([The Exec Relay
-Transport](#the-exec-relay-transport)). The engine sees one transport
-interface either way.
+A runner chooses the transport by where the session's workspace is: an
+**exec relay transport** to a host, inside a customer's wall or on a VM
+of the cloud pool ([The Exec Relay
+Transport](#the-exec-relay-transport)), or a **direct transport** to a
+workspace on the runner's own machine, such as a container beside it.
+The engine sees one transport interface either way.
 
 > **Principle:** The brain runs in the platform, and a lost claim stops
 > a runner's writes, whatever its clock says.
@@ -464,7 +467,8 @@ reaches none lets the VM go at its end, as any run's end does.
 
 ### The Exec Relay Transport
 
-A tool call into a customer's wall travels as `exec` work:
+A tool call to a host, inside a customer's wall or on a VM of the cloud
+pool, travels as `exec` work:
 
 1. The engine's tool call becomes an `exec` item whose id derives from
    the tool request's idempotency key ([Identifiers][g-ids]). It carries
@@ -499,6 +503,30 @@ the first execution, or reads its stored result, and never starts a
 second one. An item whose lease expires is requeued only when its effect
 is `read_only` or `idempotent`, and only to the host that holds its
 workspace; an `unsafe` one completes `interrupted`, outcome unknown.
+
+The runner measures each item it sends by its phases, once it reads how
+the item ended. It is **queued** from its send to its claim, the host's
+wake included. **Detail** runs from the claim to the host's read of the
+item, and **start** from that read to the command's start, the
+workspace's prepare and a write's download included. Then comes the
+**command** itself, then
+**store**, from the command's end to its result stored, its uploads
+included. **Read** runs from the result stored to the runner's read of
+it. The item's **overhead** is its time from the send to the read, less
+the command's own: what the relay costs a call. The host times its
+parts by its own clock and sends them in the result it already pushes.
+Those times are a measure alone. The platform keeps them only while they
+fit the time it held the item and end by its deadline. A result whose
+times are missing or do not fit settles as it would without them, and
+records its queue and its read alone.
+
+<!-- agents-only
+The scaffold's runner observes each phase in
+`acme_exec_relay_phase_seconds`, by phase and operation, and the
+overhead in `acme_exec_relay_overhead_seconds`, by operation
+(`infra/observability.py`); the rules are `exec_relay/rules.py`'s
+`host_times` and `phases`.
+-->
 
 > **Principle:** Hosts pull; the platform never calls in. A host
 > advertises only what it probed, claims only what is pinned to it,

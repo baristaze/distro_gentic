@@ -117,6 +117,8 @@ class ExecRelayServiceImpl(ExecRelayServiceInterface):
             else IssuedObjectSlotView(reference=detail.file_out.reference, key=detail.file_out.key),
             url=detail.url,
             url_expires_at=detail.url_expires_at,
+            # This platform keeps a host's times (`ExecResult.times`).
+            times=True,
         )
 
     async def issue_upload(

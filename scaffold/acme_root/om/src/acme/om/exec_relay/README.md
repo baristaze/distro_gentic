@@ -18,6 +18,9 @@ platform's cloud. Each call crosses the wall as `exec`
   session's content, sealed under the session's key.
 - **Its result**: how the command ended, kept under the call's key, and
   what it printed, sealed the same way.
+- **Its times**: when a host's claim last took it, and how long its host
+  took, by its own clock, to read it, to start its command, and to run
+  it, which the runner measures the relay by.
 - **Its live output**: what the command prints while it runs, a push
   for each window its host gathers, sealed the same way. It is a stream
   on the shared cache, capped and expiring, since the result holds it
@@ -101,6 +104,13 @@ platform's cloud. Each call crosses the wall as `exec`
   it runs, runs it through its own transport, streams the output back,
   and pushes the result. It renews the lease from the claim until the
   result is ready, so a long read or prepare never lets it lapse.
+- **Measure.** Once the runner reads how an item it sent ended, it
+  observes where the item's time went: queued, the host's read of it,
+  the start, the command, the store, and the runner's read. It also
+  observes the overhead, the time from the send to the read less the
+  command's own. A host's times count only while they fit the time the
+  platform held the item and end by its deadline. Any other is dropped,
+  and the result stands without it.
 - **Stop.** A stop is written as a control message and reaches the host
   over its control stream at once. An item no host took yet never runs.
 - **Lose the lease.** An unsafe item whose lease runs out ends
@@ -144,7 +154,8 @@ itself. ADR 2004 records the decisions.
 ## How another namespace composes it
 
 The session runner puts the exec relay behind the engine's transport for
-a session inside a wall, and the engine sees one transport either way.
+a session inside a wall or on a VM of the cloud pool, and the engine sees
+one transport either way.
 The gateway serves the host's calls and its control stream. The
 maintenance worker settles items whose lease ran out and purges a
 tenant's rows. The runner's tools find a pinned session's workspace on
