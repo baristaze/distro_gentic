@@ -3,7 +3,7 @@ from collections.abc import Awaitable, Callable
 from datetime import datetime
 from uuid import UUID
 
-from acme.infra.observability import MODEL_SPEND_MICROS, MODEL_TOKENS
+from acme.infra.observability import MODEL_FIRST_TOKEN, MODEL_SPEND_MICROS, MODEL_TOKENS
 from acme.integrations.model_providers.calls import ModelCall
 from acme.integrations.model_providers.types import Usage
 from acme.om.agent_projects.policies import SessionAgentProjectsInterface
@@ -175,10 +175,12 @@ class CallGateSpendBudgetImpl(CallGateInterface):
     `version` reads of its session and the plan tier `tier` reads; None
     counts them under `none`. A billed model call leaves a usage record, in
     every storage mode: priced as its settlement is, or, settled whole, at
-    its hold and marked so (ADR 1014). A spending job is held on the same
-    scopes at its rate until its deadline (`spend_budgets.rules.job_exposure`),
-    and settles at the cost its runner reported, else whole; a job refused
-    before any work began releases its hold."""
+    its hold and marked so (ADR 1014). Its time to the first token, when a
+    part came back, is also observed by provider, for the fleet to read. A
+    spending job is held on the same scopes at its rate until its deadline
+    (`spend_budgets.rules.job_exposure`), and settles at the cost its runner
+    reported, else whole; a job refused before any work began releases its
+    hold."""
 
     def __init__(
         self,
@@ -338,9 +340,9 @@ def _record(
     at: datetime,
 ) -> UsageRecord:
     """A billed call's usage record: ids, its tokens by class, its cost as
-    the ledger settled it, its latency, and labels; no content. A call
-    settled whole is marked, with the tokens its partial reply reported,
-    else none."""
+    the ledger settled it, its latency and its time to the first token, and
+    labels; no content. A call settled whole is marked, with the tokens its
+    partial reply reported, else none."""
     usage = usage or Usage()
     return UsageRecord(
         id=new_id(),
@@ -362,6 +364,7 @@ def _record(
         thinking_tokens=usage.thinking,
         cost_micros=cost_micros,
         latency_ms=site.latency_ms,
+        first_token_ms=site.first_token_ms,
         settled_whole=whole,
     )
 
@@ -383,8 +386,10 @@ async def record_settled(
     root wires: named by the labels `held` read at its hold in this
     process, else by its site's. A call released or never sent writes none,
     nor one closed before by another bill, whose settlement wrote any record
-    that was due. A record that fails to land is logged, and never fails the
-    call the ledger has settled (ADR 1014)."""
+    that was due. A call that names its site also observes its time to the
+    first token by provider, when a part came back. A record that fails to
+    land is logged, and never fails the call the ledger has settled (ADR
+    1014)."""
     if isinstance(bill, NotBilled) or site is None or settlement.bill.kind != bill.kind:
         # Released, never sent, or closed before by another bill, whose
         # settlement wrote any record that was due.
@@ -399,6 +404,8 @@ async def record_settled(
         whole, reported, cost = False, usage, bill.usage.cost_micros
     else:
         whole, reported, cost = True, partial, settlement.spent.cost_micros
+    if site.first_token_ms is not None:
+        MODEL_FIRST_TOKEN.labels(provider=labels.provider).observe(site.first_token_ms / 1000)
     try:
         record = _record(spend_hold_id, labels, reported, cost, whole, site, at)
         await budgets.record_usage(ctx, record)
