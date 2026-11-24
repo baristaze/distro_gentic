@@ -19,12 +19,20 @@ The files here make the image every such VM starts from.
 - **The tools a session's commands reach for**: Docker, `git`, `curl`,
   and `rg` (ripgrep).
 - **Its seed**, on `/run/acme-vm/seed.json`, which the pool hands
-  each VM as it starts: where the platform answers, and a one-use key
-  the host trades for its credential. On Lima the pool writes it through
+  each VM as it starts: where the platform answers, a one-use key
+  the host trades for its credential, and, on a warm VM, that no session
+  waits on it yet. On Lima the pool writes it through
   the hypervisor's channel; in the cloud it is the instance's first-boot
   data, which [`acme-vm-seed`](acme-vm-seed) reads at each boot.
 - **Its home**, on `/run/acme-host`: its credential lives in memory, so
   the VM's disk holds none.
+- **Its read ahead**: a disk made from an image loads each block from
+  the cloud's store the first time it is read, so at each boot
+  [`acme-vm-read`](acme-vm-read) reads the files a session's first
+  commands read, the host program and its runtime, git, ripgrep, and
+  Docker's own, within its bound. On a warm VM the host asks for a
+  session only once that read is done, and the pool counts the VM warm
+  then; on any other, the host enrolls while the read goes on.
 - **Its lookups**, in the cloud: [`acme-vm-dns`](acme-vm-dns) sends the
   platform's name, the host the seed's `api_url` names, to the network's
   resolver, and every other name to a public resolver. The pool's

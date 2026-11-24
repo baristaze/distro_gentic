@@ -447,6 +447,13 @@ that only reads, plans, or answers starts none.
   from its start to its host's enrollment. Every VM boots the pool's
   image, and a warm claim records none, so that time is what the warm
   count is set by.
+- **Read before it is warm.** A disk made from the pool's image loads
+  each block from the cloud's store the first time it is read. So a
+  warm VM reads the files a session's first commands read, the host
+  program, git, and Docker among them, within a bound, before the
+  pool counts it warm, and a claim never waits on those reads. A VM a
+  session waits on reads them in the background, and its host enrolls
+  without waiting for them.
 - **No race between a claim and the sweep.** A VM's host is handed
   its session's work only once it holds the session's workspace. The
   sweep takes a warm VM's record before it destroys the VM, under the

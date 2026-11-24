@@ -91,8 +91,11 @@ sweep lets it go, its disk with it. The pool's own sweep reads every
 VM, a page at a time. It lets go of a first start that died with
 its process, one whose session or tenant is gone, and one under the
 pool's names that no row holds; then it starts warm VMs until the
-pool's warm count (`ACME_CLOUD_POOL_WARM`) stands. A new session claims a
-started warm VM, and the pool starts another in its place.
+pool's warm count (`ACME_CLOUD_POOL_WARM`) stands. A warm VM's seed says
+no session waits on it, so its image reads the files a session's first
+commands read before its host asks for a session, and the pool counts it
+started at that ask. A new session claims a started warm VM, and the
+pool starts another in its place.
 
 **A VM that ran keeps its disk while its session lives.** The disk
 may hold work no snapshot has kept yet, so no timer destroys it. A
