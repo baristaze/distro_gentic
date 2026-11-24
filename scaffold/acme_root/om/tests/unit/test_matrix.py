@@ -5,6 +5,8 @@ publication and switches off a retired model at its next loop, and a tenant
 on its own keys calls on them, alone."""
 
 import itertools
+import json
+import logging
 from collections.abc import AsyncIterator, Awaitable, Callable
 from pathlib import Path
 from uuid import UUID
@@ -14,9 +16,10 @@ from prometheus_client import REGISTRY
 from pydantic import SecretStr
 
 from acme.infra.base import SYSTEM_SCOPE
+from acme.infra.observability import JsonFormatter
 from acme.integrations.model_providers.calls import ModelCall, StreamPart
 from acme.integrations.model_providers.scripted import ModelProviderScriptedImpl, ScriptedFailure
-from acme.integrations.model_providers.types import Effort, ErrorKind, ProviderName
+from acme.integrations.model_providers.types import Effort, ErrorKind, ProviderName, Usage
 from acme.om.agent_billing.rules import LimitKind, notice_of
 from acme.om.agent_billing.types.spend_account import FundingMode, SpendAccountRequest
 from acme.om.agent_billing.types.spend_ledger import EntryKind, FundedHold
@@ -622,6 +625,38 @@ async def test_a_call_counts_under_its_tenants_plan_tier_beside_its_version(
         counted("acme_model_tokens_total", matrix_version="none", plan_tier="none", kind="input")
         == unlabelled
     ), "nothing counted under none"
+
+
+async def test_a_settled_calls_line_carries_its_prompt_tokens_and_no_text_of_it(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The runner writes a line for each settled call whose fields are its
+    prompt's token counts, which the prompt cache's alarm reads, and which
+    holds nothing the call was told or said."""
+    agent_fleet = await agent_fleet_over(tmp_path)
+    await agent_fleet.publish()
+    agent_session_id = await agent_fleet.loop.start()
+    usage = Usage(input=40, cache_read=900, cache_write=60, output=30)
+    agent_fleet.loop.anthropic.add(
+        reply(said("The average is 3.")).model_copy(update={"usage": usage})
+    )
+    with caplog.at_level(logging.INFO, logger="acme.om.windows.impl.gate"):
+        ended = await loop_once(agent_fleet, agent_session_id, "And the average?")
+    assert ended is RunEnd.ENDED
+
+    lines = [
+        JsonFormatter().format(record)
+        for record in caplog.records
+        if record.getMessage() == "model call settled"
+    ]
+    fields = [json.loads(line)["model_call"] for line in lines]
+    assert {"input_tokens": 40, "cache_read_tokens": 900, "cache_write_tokens": 60} in fields
+    assert all(
+        set(field) == {"input_tokens", "cache_read_tokens", "cache_write_tokens"}
+        for field in fields
+    ), "the prompt's counts, and no other field"
+    for line in lines:
+        assert "average" not in line, "no text the call was told or said"
 
 
 async def test_a_retired_model_switches_at_the_next_loop_with_a_switched_step(

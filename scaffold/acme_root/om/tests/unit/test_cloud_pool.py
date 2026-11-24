@@ -8,7 +8,10 @@ serves it next, a warm one claimed included, and keeps it while it starts.
 A spec the VMs cannot hold is refused for good, a size the deployment
 does not allow among them; a VM is the machine type its size maps to,
 and a warm one the default size's. A cold start records its boot once, a
-warm claim none. A VM past its maximum age goes between runs and never
+warm claim none. Each claim counts once, by how it got its VM, a prepare
+asked again before it returned counting none, and records its wait at
+the first command on its VM, never at a later one; a restore is timed by
+its archive's size in a few classes. A VM past its maximum age goes between runs and never
 under a running loop, and a warm one past it goes at the sweep. The sweep reads every
 row, a page at a time: it lets go of a first start that died, one whose
 session is gone, and one no row holds, and stops a VM that runs with
@@ -48,18 +51,21 @@ from acme.infra.agent_workspaces import (
     VmSize,
 )
 from acme.infra.impl.local import InfraLocalImpl
+from acme.infra.transports import CommandResult, CommandSpec, OutputSink, RecordSeal
+from acme.infra.transports.twin import TransportNullImpl
 from acme.infra.vms import SEED_FILE, MachineType, VmSpec, VmState
 from acme.infra.vms.seeded import PLAIN_WRITE, SeedsChannelImpl
 from acme.infra.vms.twin import VmsNullImpl, VmsTwinImpl
 from acme.om.base import new_id, utcnow
 from acme.om.cloud_pool.exceptions import VmUnbound
 from acme.om.cloud_pool.impl.manager import CloudPoolManagerImpl, CloudPoolOptions
-from acme.om.cloud_pool.rules import new_key, seed
+from acme.om.cloud_pool.rules import MIB, archive_size, new_key, seed
 from acme.om.cloud_pool.storage.impl.memory import CloudPoolStorageMemoryImpl
 from acme.om.cloud_pool.types.sizes import PoolSizes
-from acme.om.cloud_pool.types.vm import PoolVm
+from acme.om.cloud_pool.types.vm import ClaimSource, PoolVm
 from acme.om.context import AppContext, AppType, RequestContext, Role, TenantContext
 from acme.om.exceptions import InvalidCredential
+from acme.om.exec_relay.impl.transport import TransportPlacedImpl
 from acme.om.hosts.types.credential import IssuedCredential
 from acme.om.hosts.types.host import Advertisement, Enrollment, HostStatus
 from acme.om.hosts.types.host import IsolationMode as HostMode
@@ -450,6 +456,124 @@ async def test_a_cold_start_records_one_boot_from_its_start_to_enrollment_and_a_
     assert row.host_id is not None and row.bound_at is not None
     assert row.created_at < row.bound_at, "a warm VM, claimed"
     assert boots() == (before[0] + 1, before[1] + 42), "a warm claim records none"
+
+
+# Each claim counts once, by how it got its VM, and waits for its first
+# command.
+
+
+def claims() -> dict[str, float]:
+    """The claims the process counted, by source."""
+    name = "acme_cloud_pool_claims_total"
+    return {
+        source.value: REGISTRY.get_sample_value(name, {"source": source.value}) or 0.0
+        for source in ClaimSource
+    }
+
+
+def counted_since(before: dict[str, float]) -> dict[str, float]:
+    """The claims counted since `before`, by source, where any were."""
+    now = claims()
+    return {source: now[source] - before[source] for source in now if now[source] != before[source]}
+
+
+async def test_a_warm_claim_a_new_vm_a_held_one_and_one_started_again_each_count_once(
+    tmp_path: Path, ctx: TenantContext
+) -> None:
+    pool = Pool(tmp_path, warm=1)
+    await pool.image()
+    await pool.manager.sweep(stage())
+    await pool.manager.close()
+    holding = Holding(pool)
+    pool.placed = holding
+
+    before = claims()
+    warm = new_id()
+    with pytest.raises(IsolationRefused):
+        await pool.prepare(ctx, warm)
+    holding.holds = True
+    await pool.prepare(ctx, warm)
+    await pool.manager.close()
+    assert counted_since(before) == {"warm": 1}, "a claim asked again before it returned is one"
+
+    before = claims()
+    session = new_id()
+    await pool.prepare(ctx, session, MEDIUM)
+    assert counted_since(before) == {"new": 1}, "no warm VM of its size: a new one"
+
+    before = claims()
+    await pool.prepare(ctx, session, MEDIUM)
+    assert counted_since(before) == {"held": 1}, "its next loop finds the one it held"
+
+    before = claims()
+    (row,) = [row for row in await pool.rows() if row.agent_session_id == session]
+    await pool.vms.stop(row.name)
+    await pool.prepare(ctx, session, MEDIUM)
+    (again,) = [row for row in await pool.rows() if row.agent_session_id == session]
+    assert again.id == row.id
+    assert counted_since(before) == {"restarted": 1}, "the one it held, started again"
+
+
+class Ran(TransportNullImpl):
+    """The relay's side of a command: each one run, at once."""
+
+    def __init__(self) -> None:
+        self.commands: list[CommandSpec] = []
+
+    async def run(
+        self,
+        workspace: AgentWorkspace,
+        command: CommandSpec,
+        on_output: OutputSink | None = None,
+        *,
+        seal: RecordSeal,
+    ) -> CommandResult:
+        self.commands.append(command)
+        return CommandResult(key=command.key, exit_code=0)
+
+
+async def _unread(data: bytes) -> bytes | None:
+    return None
+
+
+def waits(source: ClaimSource) -> tuple[float, float]:
+    """The claims' waits for their first command the process recorded
+    under `source`: how many, and their seconds together."""
+    name = "acme_cloud_pool_first_command_seconds"
+    labels = {"source": source.value}
+    count = REGISTRY.get_sample_value(f"{name}_count", labels) or 0.0
+    total = REGISTRY.get_sample_value(f"{name}_sum", labels) or 0.0
+    return count, total
+
+
+async def test_a_claim_records_its_wait_once_at_the_first_command_on_its_vm(
+    pool: Pool, ctx: TenantContext
+) -> None:
+    ran = Ran()
+    # The runner's transport: a session of the pool's commands go to its VM.
+    placed = TransportPlacedImpl(
+        TransportNullImpl(), ran, cast(Any, None), pool.manager.runs, pool.manager.commanded
+    )
+    seal = RecordSeal(seal=_unread, open=_unread)
+    before = waits(ClaimSource.NEW)
+    agent_session_id = new_id()
+    workspace = await pool.prepare(ctx, agent_session_id)
+
+    for seconds in (12, 30):
+        pool.now += timedelta(seconds=seconds)
+        command = CommandSpec(argv=("true",), key=new_id(), epoch=0, deadline=pool.now)
+        await placed.run(workspace, command, seal=seal)
+
+    assert len(ran.commands) == 2
+    assert waits(ClaimSource.NEW) == (before[0] + 1, before[1] + 12), "the first command's wait"
+
+
+def test_an_archive_is_timed_under_one_of_a_few_size_classes() -> None:
+    assert archive_size(0) == "under_10mib"
+    assert archive_size(10 * MIB - 1) == "under_10mib"
+    assert archive_size(10 * MIB) == "under_100mib"
+    assert archive_size(1024 * MIB - 1) == "under_1gib"
+    assert archive_size(1024 * MIB) == archive_size(4 * 1024 * MIB) == "1gib_and_over"
 
 
 # A VM is recycled at its maximum age, between runs.
