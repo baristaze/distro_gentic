@@ -10,8 +10,9 @@ image built and a container run of it. The loop's end keeps the
 workspace's directory: packed in the VM and read out through the relay,
 each part sealed under the session's key in the bucket; then the VM
 goes, and no disk of it is kept. The next loop's VM boots the pool's
-image, and its new host takes the directory back: the same file, and
-no Docker image, which lived outside it. Each VM is a claim counted once,
+image, and its new host takes the directory back, fetching the parts
+from the store itself, none of them relayed: the same file, and no
+Docker image, which lived outside it. Each VM is a claim counted once,
 whose wait ends at its first command, and the restore is timed. The
 host's environment holds nothing of the platform's. What a command printed, and every part,
 crosses the store, here the local impl's, served on this host's
@@ -28,7 +29,7 @@ import os
 import re
 import shutil
 import subprocess
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
@@ -41,6 +42,7 @@ from prometheus_client import REGISTRY
 from runner_support import TOOLS, answers, assistant, runs
 
 from acme.infra.agent_workspaces import (
+    AgentWorkspace,
     Durability,
     EgressMode,
     EgressPolicy,
@@ -61,8 +63,11 @@ from acme.integrations.model_providers.types import ProviderName
 from acme.om.agent_steps.rules import message_step
 from acme.om.agent_steps.types.agent_step import AgentStepType
 from acme.om.agent_steps.types.header import LoopOutcome
+from acme.om.agent_workspaces.impl.pool_directory import KEPT as PARTS
 from acme.om.agents.types.request import Start
 from acme.om.base import new_id, utcnow
+from acme.om.exec_relay.impl.transport import TransportRelayImpl
+from acme.om.exec_relay.types.exec import KeptFile
 from acme.om.platform_root import PlatformPorts, ProductKinds
 from acme.om.tools.impl.snapshots import session_prefix, snapshot_key
 from acme.services.api.app import create_app
@@ -234,8 +239,33 @@ def printed(model: ModelProviderScriptedImpl, call: int) -> str:
     return repr(model.calls[call])
 
 
+def watched(monkeypatch: pytest.MonkeyPatch) -> tuple[list[int], list[str]]:
+    """How many parts each fetch the runner sends hands the VM's host, and
+    each part it relays as a write instead."""
+    fetched: list[int] = []
+    relayed: list[str] = []
+    fetch, write = TransportRelayImpl.fetch_files, TransportRelayImpl.write_file
+
+    async def fetching(
+        self: TransportRelayImpl, workspace: AgentWorkspace, files: Sequence[KeptFile], epoch: int
+    ) -> None:
+        fetched.append(len(files))
+        await fetch(self, workspace, files, epoch)
+
+    async def writing(
+        self: TransportRelayImpl, workspace: AgentWorkspace, path: str, data: bytes, epoch: int
+    ) -> None:
+        if path.startswith(PARTS):
+            relayed.append(path)
+        await write(self, workspace, path, data, epoch)
+
+    monkeypatch.setattr(TransportRelayImpl, "fetch_files", fetching)
+    monkeypatch.setattr(TransportRelayImpl, "write_file", writing)
+    return fetched, relayed
+
+
 async def test_a_session_of_the_cloud_pool_keeps_its_files_sealed_across_loops(
-    api: Stack, runner: RunnerContainer, vms: VmsLimaImpl
+    api: Stack, runner: RunnerContainer, vms: VmsLimaImpl, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     owner = api.owner
     managers = runner.managers
@@ -282,8 +312,10 @@ async def test_a_session_of_the_cloud_pool_keeps_its_files_sealed_across_loops(
         assert not await pool.holds(owner, session.id), "the VM went with the release"
         assert await vms.names(PREFIX + "p") == [], "no VM, and no disk of one, between loops"
 
-        # The next loop: a VM from the pool's image, a new host, the same
-        # file, and no image built outside the directory.
+        # The next loop: a VM from the pool's image, a new host that fetches
+        # the parts itself, the same file, and no image built outside the
+        # directory.
+        fetched, relayed = watched(monkeypatch)
         again = message_step(new_id(), utcnow(), session.id, owner, "Is it there?")
         await managers.agent_sessions.receive(owner, session.id, [again])
         model.add(runs("sh", "-c", FOUND))
@@ -306,6 +338,7 @@ async def test_a_session_of_the_cloud_pool_keeps_its_files_sealed_across_loops(
             "each claim's wait, once"
         )
         assert sampled("acme_cloud_pool_restore_seconds_count") > restores, "the restore, timed"
+        assert fetched and relayed == [], "the VM's host fetched every part, and none was relayed"
 
         # The VM's host holds nothing of the platform's, and its key is
         # spent and gone from the seed.

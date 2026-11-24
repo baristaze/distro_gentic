@@ -30,6 +30,8 @@ fi
 command -v curl >/dev/null 2>&1 || apt-get install -y -q curl
 command -v git >/dev/null 2>&1 || apt-get install -y -q git
 command -v rg >/dev/null 2>&1 || apt-get install -y -q ripgrep
+# A session's files are packed with it, and unpacked with it at a restore.
+command -v zstd >/dev/null 2>&1 || apt-get install -y -q zstd
 
 # The host's own user, in Docker's group: its session's commands run as it,
 # and the VM is the session's wall.

@@ -17,7 +17,8 @@ The files here make the image every such VM starts from.
 - **Its ceilings**, [`ceilings.toml`](ceilings.toml): the VM is its
   session's wall, so the host holds no ceiling of its own beyond it.
 - **The tools a session's commands reach for**: Docker, `git`, `curl`,
-  and `rg` (ripgrep).
+  and `rg` (ripgrep); and `zstd`, which packs the session's files at a
+  run's end and unpacks them at a restore.
 - **Its seed**, on `/run/acme-vm/seed.json`, which the pool hands
   each VM as it starts: where the platform answers, and a one-use key
   the host trades for its credential. On Lima the pool writes it through
