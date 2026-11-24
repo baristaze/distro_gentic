@@ -239,6 +239,79 @@ def test_a_vms_boot_routes_its_lookups_with_a_file_its_resolver_can_read(tmp_pat
     ]
 
 
+def read_ahead(tmp_path: Path) -> tuple[Path, Path, Path, dict[str, str]]:
+    """acme-vm-read as the VM runs it, its absolute paths moved under the
+    test's folder: the host program's files, systemctl and timeout
+    recording their calls, and cat recording what it reads."""
+    root, bin_dir, calls = tmp_path / "root", tmp_path / "bin", tmp_path / "calls"
+    program = root / "opt" / "acme-host"
+    (program / "venv" / "lib").mkdir(parents=True)
+    (program / "venv" / "lib" / "site.py").write_text("x")
+    (program / "python").mkdir()
+    (program / "python" / "libpython.so").write_text("x")
+    bin_dir.mkdir()
+    under = {
+        "/opt/acme-host/venv/bin/python": sys.executable,
+        "/opt/acme-host": str(program),
+        "/usr/lib/git-core": str(root / "usr" / "lib" / "git-core"),
+        "/usr/libexec/docker": str(root / "usr" / "libexec" / "docker"),
+    }
+    paths = re.compile("|".join(map(re.escape, under)))
+    script = root / "acme-vm-read"
+    script.write_text(paths.sub(lambda found: under[found[0]], (VMS / "acme-vm-read").read_text()))
+    for tool in ("git", "rg", "docker"):
+        stub(bin_dir, tool, "exit 0")
+    stub(bin_dir, "systemctl", f'echo "systemctl $*" >> {calls}')
+    stub(bin_dir, "cat", f'for file do echo "$file" >> {calls}.read; done')
+    # timeout records its bound, then runs the read, or answers 124 when
+    # the test says the bound passed.
+    stub(
+        bin_dir,
+        "timeout",
+        f'echo "timeout $1 $2 $3" >> {calls}\n'
+        f"[ -e {tmp_path}/past ] && exit 124\n"
+        'shift 3\nexec "$@"',
+    )
+    env = {"PATH": f"{bin_dir}{os.pathsep}/usr/bin{os.pathsep}/bin"}
+    return script, calls, program, env
+
+
+def test_a_warm_vms_host_waits_for_the_read_and_any_other_starts_at_once(tmp_path: Path) -> None:
+    script, calls, _, env = read_ahead(tmp_path)
+    warm, cold = tmp_path / "warm.json", tmp_path / "cold.json"
+    warm.write_bytes(seed("http://gateway.test/", "hmk_the-key", warm=True))
+    cold.write_bytes(seed("http://gateway.test/", "hmk_the-key"))
+
+    for handed in (cold, tmp_path / "none.json", warm):
+        ran = subprocess.run(
+            ["sh", str(script), "--warm", str(handed)], capture_output=True, text=True, env=env
+        )
+        assert ran.returncode == 0, ran.stderr
+    assert calls.read_text().splitlines() == ["systemctl start acme-vm-read.service"], (
+        "the warm VM's host alone waits for the boot's read, and nothing reads before it"
+    )
+
+
+def test_the_read_reads_the_hot_paths_within_its_bound_and_never_fails(tmp_path: Path) -> None:
+    script, calls, program, env = read_ahead(tmp_path)
+    ran = subprocess.run(["sh", str(script)], capture_output=True, text=True, env=env)
+    assert ran.returncode == 0, ran.stderr
+    assert calls.read_text().splitlines() == ["timeout -k 5 60"], "bounded at 60s"
+    read = set(Path(f"{calls}.read").read_text().splitlines())
+    assert {
+        str(program / "venv" / "lib" / "site.py"),
+        str(program / "python" / "libpython.so"),
+    } <= read
+    assert {str(tmp_path / "bin" / tool) for tool in ("git", "rg", "docker")} <= read, (
+        "the tools, wherever the Linux puts them"
+    )
+    assert "read the image's hot paths in" in ran.stdout
+
+    (tmp_path / "past").touch()
+    stopped = subprocess.run(["sh", str(script)], capture_output=True, text=True, env=env)
+    assert stopped.returncode == 0 and "stopped at its bound, 60s" in stopped.stdout
+
+
 class Ec2Wire:
     """The cloud as a new VM's start reaches it: each call's parameters
     through botocore's own parameter-build handlers and its serializer, as

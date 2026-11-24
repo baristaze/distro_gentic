@@ -63,7 +63,10 @@ let go, whether it runs, starts, or stands stopped for its session.
   the VM is sealed and its host prepares the workspace through the exec
   relay.
 - **Enroll.** The VM's host trades its key once. While the VM
-  is warm it is told to ask again. A cold start records its boot, from
+  is warm it is told to ask again. A warm VM's host first asks once its
+  image has read the files a session's first commands read, and that
+  ask marks the VM started: a claim takes it only from then on, so it
+  never waits on the read. A cold start records its boot, from
   its start to here, as `acme_cloud_pool_boot_seconds`; a warm claim
   records none.
 - **Count a claim.** Each claim counts once in
