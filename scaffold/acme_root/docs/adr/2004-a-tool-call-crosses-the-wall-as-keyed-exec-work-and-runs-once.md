@@ -37,10 +37,12 @@ repeated.
 call, the effect, the isolation, and what it asks of its host's
 ceilings. The command and the path are the session's content, sealed
 under its key in the exec relay's record, and the host reads them
-through the gateway while it holds the item. A file and an output cross
-as objects in the store, each sealed under a key the item keeps sealed
-the same way
-([ADR 2066](2066-every-file-and-output-an-exec-item-moves-crosses-the-store-by-a-url-signed-for-it-alone.md)),
+through the gateway while it holds the item. A file and an output of
+at most 64 KiB ride in the item or its result, sealed the same way
+([ADR 2076](2076-a-small-exec-payload-rides-in-its-item-or-its-result-and-a-claim-carries-its-items-detail.md)),
+and one past that crosses as an object in the store, sealed under a key
+the item keeps sealed the same way
+([ADR 2066](2066-a-file-or-an-output-past-its-bound-crosses-the-store-by-a-url-signed-for-it-alone.md)),
 so revoking the session's key erases them. A session that keeps no
 content at rest has none of its commands relayed.
 

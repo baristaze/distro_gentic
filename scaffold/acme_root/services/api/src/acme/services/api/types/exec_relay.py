@@ -77,9 +77,10 @@ class PartsRequest(RequestBody):
 
 
 class ResultRequest(RequestBody):
-    """How an item ended: the JSON of an exec result, in base64. It names
-    the objects its host uploaded, by their size and their digest, and
-    holds none of their bytes, so it is a few KiB."""
+    """How an item ended: the JSON of an exec result, in base64. It carries
+    its output or a read's file within the bound the item's detail names
+    (`inline`), or names the object its host uploaded, by its size and its
+    digest, so it stays bounded whatever the command printed."""
 
     data: str = Field(max_length=RESULT_CHARS)
     crossing: CrossingBody
@@ -137,6 +138,16 @@ class IssuedObjectView(View):
     key: str
 
 
+class InlineObjectView(View):
+    """A file a write hands its host in the item itself, at most 64 KiB:
+    its size, its digest, and its bytes (base64), which the host holds to
+    the two before a byte of it reaches the workspace."""
+
+    size: int
+    digest: str
+    data: str
+
+
 class IssuedObjectSlotView(View):
     """An object the host uploads: where it is under the tenant, and the key
     (base64) it seals it under."""
@@ -148,13 +159,16 @@ class IssuedObjectSlotView(View):
 class ExecDetailView(View):
     """An item the host holds: the call, the workspace, the operation, and
     the objects it moves. A write's `file_in` comes by `url`, signed for a
-    GET of it alone until `url_expires_at`; an `output` and a read's
-    `file_out` go by the parts `POST .../upload` signs. `times` says the
-    replica that answers keeps the times a host sends with the item's
-    result; a host sends them only when it does. During a roll, the push
-    may reach a replica of an earlier release, which keeps none and
-    refuses them as invalid: the host then pushes the result again
-    without them."""
+    GET of it alone until `url_expires_at`, or in the item itself; an
+    `output` and a read's `file_out` go by the parts `POST .../upload`
+    signs, or, at most `inline` bytes, in the result itself. `times` says
+    the replica that answers keeps the times a host sends with the item's
+    result, and `inline` the bytes the runner that sent the item reads in
+    it, none for a runner of an earlier release; a host sends neither past
+    what they say. During a roll, the push may reach a replica of an
+    earlier release, which keeps no times and takes nothing inline, and
+    refuses either as invalid: the host then pushes the result again
+    without its times, and with what rode inline sent to the store."""
 
     item_id: UUID
     call_id: UUID  # the tool request's id: the call's idempotency key
@@ -167,11 +181,12 @@ class ExecDetailView(View):
     location: str
     request: dict[str, Any]
     output: IssuedObjectSlotView | None = None
-    file_in: IssuedObjectView | None = None
+    file_in: IssuedObjectView | InlineObjectView | None = None
     file_out: IssuedObjectSlotView | None = None
     url: str | None = None
     url_expires_at: datetime | None = None
     times: bool = False
+    inline: int = 0
 
 
 class IssuedObjectPartView(View):

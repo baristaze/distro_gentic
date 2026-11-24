@@ -66,7 +66,7 @@ from acme.om.context import (
 )
 from acme.om.exceptions import ToolFailed
 from acme.om.exec_relay.impl.transport import TransportRelayImpl
-from acme.om.exec_relay.types.exec import ExecState, StopKind
+from acme.om.exec_relay.types.exec import INLINE_BYTES, ExecState, StopKind
 from acme.om.hosts.rules import USER_VERSION
 from acme.om.placement.types.work import ExecPayload
 from acme.om.tenancy.rules import permissions_of
@@ -295,12 +295,23 @@ async def test_a_relayed_read_from_an_offset_answers_only_what_follows_it(
     assert await reading == b"tail"
 
 
+def newer(result: dict[str, Any]) -> bool:
+    """Whether a result carries what a platform of an earlier release
+    refuses: times, or bytes inline."""
+    inline = any("data" in (result.get(name) or {}) for name in ("output", "file"))
+    return "times" in result or inline
+
+
 class Crossed(httpx.AsyncBaseTransport):
     """The stack, noting the operation each `exec` item's detail hands the
-    host, and each result the host pushes. With `earlier`, each detail is
-    as a platform of an earlier release answers it: it keeps no times. With
-    `rolling`, the detail says times are kept, but each result that carries
-    them reaches a replica of an earlier release, which refuses it."""
+    host, as its claim carries it or its own route answers it, each call
+    the host makes, by its method and the end of its path, and each result
+    it pushes. With `earlier`, the platform is of an earlier release: a
+    claim carries no detail, a detail keeps no times and takes nothing
+    inline, and a result that carries times or bytes inline is refused.
+    With `rolling`, the claim and the detail are this release's, but each
+    result that carries times or bytes inline reaches a replica of an
+    earlier release, which refuses it."""
 
     def __init__(
         self, inner: httpx.AsyncBaseTransport, *, earlier: bool = False, rolling: bool = False
@@ -309,30 +320,42 @@ class Crossed(httpx.AsyncBaseTransport):
         self._earlier = earlier
         self._rolling = rolling
         self.asked: list[dict[str, Any]] = []
+        self.calls: list[str] = []
         self.answered: list[dict[str, Any]] = []
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
         path = request.url.path
+        claims = request.method == "POST" and path == "/v1/hosts/me/claims"
+        detail = request.method == "GET" and DETAIL.fullmatch(path) is not None
+        self.calls.append("detail" if detail else f"{request.method} {path.rsplit('/', 1)[-1]}")
         if request.method == "POST" and path.endswith("/result"):
             pushed = json.loads(await request.aread())["data"]
             self.answered.append(json.loads(base64.b64decode(pushed)))
-            if self._rolling and "times" in self.answered[-1]:
+            if (self._earlier or self._rolling) and newer(self.answered[-1]):
                 refused = {
                     "code": "validation_failed",
                     "message": "a result that is no exec result",
                 }
                 return httpx.Response(422, json={"error": refused})
         response = await self._inner.handle_async_request(request)
-        if request.method != "GET" or DETAIL.fullmatch(path) is None:
+        if response.status_code != 200 or not (claims or detail):
             return response
-        body = await response.aread()
-        detail = json.loads(body)
-        self.asked.append(detail["request"])
-        if self._earlier:
-            detail.pop("times", None)
-            body = json.dumps(detail).encode()
+        body = json.loads(await response.aread())
+        if detail:
+            self.asked.append(body["request"])
+            if self._earlier:
+                body.pop("times", None)
+                body.pop("inline", None)
+        item = body.get("item") if claims else None
+        if item is not None and item.get("detail") is not None:
+            if self._earlier:
+                del item["detail"]
+            else:
+                self.asked.append(item["detail"]["request"])
         headers = [(k, v) for k, v in response.headers.raw if k.lower() != b"content-length"]
-        return httpx.Response(response.status_code, headers=headers, content=body)
+        return httpx.Response(
+            response.status_code, headers=headers, content=json.dumps(body).encode()
+        )
 
 
 async def test_a_host_echoes_the_offset_it_read_from_and_a_read_from_the_start_carries_none(
@@ -404,8 +427,10 @@ async def test_a_relayed_command_is_measured_through_every_phase_and_its_overhea
     waiting = asyncio.ensure_future(runner.run(relayed.workspace, spec, seal=NO_SEAL))
     (item_id,) = await claims(relayed.host, waiting)
     assert (await waiting).exit_code == 0
-    # The host timed its parts by its own clock and sent them with its
+    # Its claim carried its detail, so the host read it with no call of its
+    # own; it still timed its parts by its own clock and sent them with its
     # result: the command took what it slept.
+    assert "detail" not in wire.calls and len(wire.asked) == 1
     (answered,) = wire.answered
     times = answered["times"]
     assert sorted(times) == ["command", "detail", "start"]
@@ -438,15 +463,120 @@ async def test_a_host_sends_no_times_to_a_platform_that_keeps_none(
 ) -> None:
     wire = Crossed(api.transport, earlier=True)
     relayed = await relay_to(api, tmp_path, wire=wire)
-    spec = command(relayed.epoch, "true")
+    spec = command(relayed.epoch, "echo", "done")
     waiting = asyncio.ensure_future(relayed.runner.run(relayed.workspace, spec, seal=NO_SEAL))
     await claims(relayed.host, waiting)
-    assert (await waiting).exit_code == 0
+    assert (await waiting).stdout == "done\n"
     (answered,) = wire.answered
     assert "times" not in answered
+    # Its claim carried no detail, so the host read it by its route, and it
+    # sent its output to the store, since that platform takes none inline.
+    assert wire.calls.count("detail") == 1 and "POST upload" in wire.calls
+    assert "data" not in answered["output"]
 
 
-async def test_a_result_whose_times_a_replica_refuses_is_pushed_again_without_them(
+async def test_a_short_commands_output_rides_its_result_after_one_call_to_claim_and_read_it(
+    api: Stack, tmp_path: Path
+) -> None:
+    wire = Crossed(api.transport)
+    relayed = await relay_to(api, tmp_path, wire=wire, flush_seconds=60.0)
+    printed: list[tuple[str, str]] = []
+
+    async def sink(stream: str, text: str) -> None:
+        printed.append((stream, text))
+
+    spec = command(relayed.epoch, "sh", "-c", "echo one; echo two >&2")
+    waiting = asyncio.ensure_future(relayed.runner.run(relayed.workspace, spec, sink, seal=NO_SEAL))
+    await claims(relayed.host, waiting)
+    ran = await waiting
+    assert (ran.exit_code, ran.stdout, ran.stderr) == (0, "one\n", "two\n")
+    # Its claim carried its detail, and it ended within its first window: no
+    # part went apart from its result, which carried its output whole, and
+    # nothing crossed the store.
+    moved = ("detail", "POST parts", "POST upload", "POST result")
+    assert [call for call in wire.calls if call in moved] == ["POST result"], wire.calls
+    (answered,) = wire.answered
+    assert sorted(answered["output"]) == ["data", "digest", "size"]
+    assert printed == []
+
+
+async def test_a_read_within_the_bound_rides_its_result_and_one_past_it_crosses_the_store(
+    api: Stack, tmp_path: Path
+) -> None:
+    wire = Crossed(api.transport)
+    relayed = await relay_to(api, tmp_path, wire=wire)
+    within = bytes(range(256)) * 256
+    (tmp_path / "workspace" / "data.bin").write_bytes(within + b"!")
+    for asked, crosses in ((len(within), False), (len(within) + 1, True)):
+        wire.calls.clear()
+        reading = asyncio.ensure_future(
+            relayed.runner.read_file(relayed.workspace, "data.bin", asked)
+        )
+        pace = Pace()
+        while not reading.done():
+            await pace.after(await relayed.host.tick() is not None)
+        assert await reading == (within + b"!")[:asked]
+        assert ("POST upload" in wire.calls) is crosses, wire.calls
+
+
+async def test_an_empty_read_to_a_platform_that_takes_nothing_inline_lands_from_the_store(
+    api: Stack, tmp_path: Path
+) -> None:
+    wire = Crossed(api.transport, earlier=True)
+    relayed = await relay_to(api, tmp_path, wire=wire)
+    (tmp_path / "workspace" / "empty.log").write_bytes(b"")
+    reading = asyncio.ensure_future(relayed.runner.read_file(relayed.workspace, "empty.log", 64))
+    # The read lands with its file: one refused would leave it to its lease.
+    async with asyncio.timeout(20):
+        pace = Pace()
+        while not reading.done():
+            await pace.after(await relayed.host.tick() is not None)
+        assert await reading == b""
+    # Its one result named the file it sent to the store, with no bytes
+    # inline, not even an empty file's.
+    (answered,) = wire.answered
+    assert "data" not in answered["file"] and answered["file"]["size"] == 0
+    assert "POST upload" in wire.calls
+
+
+class Handed(Crossed):
+    """The stack, as `Crossed` notes it, keeping each write's file as the
+    claim's detail hands it."""
+
+    def __init__(self, inner: httpx.AsyncBaseTransport) -> None:
+        super().__init__(inner)
+        self.files: list[dict[str, Any]] = []
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        response = await super().handle_async_request(request)
+        if request.url.path == "/v1/hosts/me/claims" and response.status_code == 200:
+            item = json.loads(await response.aread())["item"] or {}
+            detail = item.get("detail") or {}
+            if detail.get("file_in") is not None:
+                self.files.append(detail["file_in"])
+        return response
+
+
+async def test_a_small_write_rides_in_its_claim_and_reaches_the_workspace_checked(
+    api: Stack, tmp_path: Path
+) -> None:
+    wire = Handed(api.transport)
+    relayed = await relay_to(api, tmp_path, wire=wire)
+    data = "naïve notes\n".encode() * 100
+    writing = asyncio.ensure_future(
+        relayed.runner.write_file(relayed.workspace, "notes.md", data, relayed.epoch)
+    )
+    pace = Pace()
+    while not writing.done():
+        await pace.after(await relayed.host.tick() is not None)
+    await writing
+    assert (tmp_path / "workspace" / "notes.md").read_bytes() == data
+    # The file came in the claim, by its size, its digest, and its bytes.
+    (handed,) = wire.files
+    assert sorted(handed) == ["data", "digest", "size"] and handed["size"] == len(data)
+
+
+async def test_a_result_a_replica_refuses_is_pushed_again_as_an_earlier_release_takes_it(
     api: Stack, tmp_path: Path
 ) -> None:
     wire = Crossed(api.transport, rolling=True)
@@ -459,8 +589,13 @@ async def test_a_result_whose_times_a_replica_refuses_is_pushed_again_without_th
         await claims(relayed.host, waiting)
         assert (await waiting).exit_code == 1
     refused, taken = wire.answered
-    assert "times" in refused
-    assert taken == {key: value for key, value in refused.items() if key != "times"}
+    assert "times" in refused and "data" in refused["output"]
+    # Again without its times, and what rode inline went to the store, by
+    # the same size and digest.
+    assert "times" not in taken and "data" not in taken["output"]
+    assert taken["output"] == {k: v for k, v in refused["output"].items() if k != "data"}
+    rest = {key: value for key, value in refused.items() if key not in ("times", "output")}
+    assert {key: value for key, value in taken.items() if key != "output"} == rest
 
 
 class Slowed(httpx.AsyncBaseTransport):
@@ -492,12 +627,14 @@ async def test_a_relayed_writes_download_is_in_its_overhead_and_not_in_its_comma
         clock=clock,
     )
     before = observed("write_file")
+    # Past what rides in the item, so it crosses the store.
+    written = b"w" * (INLINE_BYTES + 1)
     waiting = asyncio.ensure_future(
-        runner.write_file(relayed.workspace, "in.txt", b"written", relayed.epoch)
+        runner.write_file(relayed.workspace, "in.txt", written, relayed.epoch)
     )
     await claims(relayed.host, waiting)
     await waiting
-    assert (tmp_path / "workspace" / "in.txt").read_bytes() == b"written"
+    assert (tmp_path / "workspace" / "in.txt").read_bytes() == written
     # The download lands in the start, before the command, by the host's
     # own clock.
     (answered,) = wire.answered
@@ -836,8 +973,10 @@ async def test_a_renewal_or_a_result_the_platform_fails_to_take_is_sent_again(
 async def test_a_last_part_the_wire_drops_keeps_the_commands_result(
     api: Stack, tmp_path: Path
 ) -> None:
-    # Nothing is sent while the command runs, so its one part is its last.
-    wire = FailsOnceAt(api.transport, "/parts", None)
+    # Nothing is sent while the command runs, so its one part is its last;
+    # a platform of an earlier release takes no output in the result, so
+    # the part goes.
+    wire = FailsOnceAt(Crossed(api.transport, earlier=True), "/parts", None)
     relayed = await relay_to(api, tmp_path, wire=wire, flush_seconds=60.0)
     spec = command(relayed.epoch, "sh", "-c", "echo done", seconds=5)
     waiting = asyncio.ensure_future(relayed.runner.run(relayed.workspace, spec, seal=NO_SEAL))
@@ -867,8 +1006,9 @@ class Pushed(httpx.AsyncBaseTransport):
 async def test_a_window_of_output_is_one_push_that_holds_every_part_in_it(
     api: Stack, tmp_path: Path
 ) -> None:
-    wire = Pushed(api.transport)
-    # The whole command runs within one window.
+    # The whole command runs within one window, and a platform of an
+    # earlier release takes no output in the result, so the window goes.
+    wire = Pushed(Crossed(api.transport, earlier=True))
     relayed = await relay_to(api, tmp_path, wire=wire, flush_seconds=60.0)
     printed: list[tuple[str, str]] = []
 

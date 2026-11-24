@@ -3,9 +3,11 @@ work. The runner's exec relay transport sends each operation of a call and waits
 for it; the host that holds the session's workspace claims it under a
 lease, reads it, streams its output, and pushes how it ended, which is
 stored under the call's key; a host's control stream stops it at once. A
-file an item moves crosses as an object in the store, sealed under a key of
-its own, by URLs signed for that object alone; it leaves the store once
-its item settles and what it held was taken."""
+file or an output an item moves rides in the item or its result within
+`INLINE_BYTES`, sealed under the session's key; one past that crosses as
+an object in the store, sealed under a key of its own, by URLs signed for
+that object alone, and leaves the store once its item settles and what it
+held was taken."""
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
@@ -248,11 +250,12 @@ class ExecRelayManagerInterface(ABC):
     @abstractmethod
     @transition
     async def take(self, rctx: RequestContext, org_id: UUID, item_id: UUID) -> bytes:
-        """System-internal: the file a done read's host uploaded, read from
-        the store, opened, and checked against the size and the digest the
-        host declared, then removed from the store. `ObjectRefused` for an
-        object that does not open to them; `NotFound` once it was taken, or
-        when the session's content is gone."""
+        """System-internal: the file a done read's host sent: from its
+        result, where it matched its size and its digest as it landed, or
+        read from the store, opened, and checked against the size and the
+        digest the host declared, then removed from the store.
+        `ObjectRefused` for an object that does not open to them; `NotFound`
+        once it was taken, or when the session's content is gone."""
         ...
 
     @abstractmethod
@@ -335,9 +338,10 @@ class ExecRelayManagerInterface(ABC):
     @transition
     async def detail(self, rctx: RequestContext, host: HostIdentity, item_id: UUID) -> ExecDetail:
         """System-internal: what the host that holds the item runs, opened,
-        and for a write a URL signed for a GET of its object alone, good for
-        the options' `object_ttl`. `ItemNotHeld` for any other host, and once
-        the item is settled."""
+        and for a write its file, or a URL signed for a GET of its object
+        alone, good for the options' `object_ttl`; and the bytes its host
+        may send in the result, which the runner that sent it reads there.
+        `ItemNotHeld` for any other host, and once the item is settled."""
         ...
 
     @abstractmethod
@@ -349,7 +353,8 @@ class ExecRelayManagerInterface(ABC):
         object of `kind` sealing `size` bytes that the store does not hold
         yet, each by a URL signed for its number and its length, good for
         the options' `object_ttl`; asked again, only those still missing, so
-        an upload cut off resumes. An item's `output` is what it printed or
+        an upload cut off resumes. The upload starts at the first ask, and
+        is kept with the item. An item's `output` is what it printed or
         listed, and a read's `file` the file it read. `ValidationFailed` for
         an item that uploads no such object, or a size past its bound (a
         read's, what it asked); `ItemNotHeld` as `detail` says."""
@@ -384,9 +389,12 @@ class ExecRelayManagerInterface(ABC):
         result for an item its lease, a stop, or the sweep settled already,
         or one another claim holds now, is `ItemNotHeld`, and lands nothing.
         A renewal of the same claim that lands meanwhile settles nothing,
-        so the result still lands. The result names the objects its host
-        uploaded, whose uploads it completes: an output not whole in the
-        store is not kept, and a read whose file is not is kept as refused.
+        so the result still lands. The result carries its output or a
+        read's file within `INLINE_BYTES`, or names the object its host
+        uploaded, whose upload it completes: an output not whole is not
+        kept, and a read whose file is not is kept as refused. Inline bytes
+        past the bound, off their size or their digest, or for an item
+        whose runner reads none, are `ValidationFailed`, and land nothing.
         A write's file leaves the store."""
         ...
 
@@ -394,7 +402,8 @@ class ExecRelayManagerInterface(ABC):
     @transition
     async def extend(self, rctx: RequestContext, host: HostIdentity, item_id: UUID) -> datetime:
         """System-internal: renews the host's lease on the item and answers
-        when it ends now. `ItemNotHeld`, or `LeaseLost` when the queue row
+        when it ends now. An upload of the same claim that lands meanwhile
+        costs it nothing. `ItemNotHeld`, or `LeaseLost` when the queue row
         is no longer the host's."""
         ...
 

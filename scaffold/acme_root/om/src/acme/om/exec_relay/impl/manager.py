@@ -69,6 +69,7 @@ from acme.om.exec_relay.rules import (
 )
 from acme.om.exec_relay.storage import ExecRelayStorageInterface
 from acme.om.exec_relay.types.exec import (
+    INLINE_BYTES,
     PARTS,
     REQUESTS,
     AgentWorkspaceBinding,
@@ -103,8 +104,8 @@ from acme.om.exec_relay.types.exec import (
 )
 from acme.om.hosts import HostsManagerInterface
 from acme.om.hosts.impl.manager import session_pool_id
-from acme.om.hosts.rules import USER_VERSION
-from acme.om.hosts.types.host import HostIdentity
+from acme.om.hosts.rules import INLINE_VERSION, USER_VERSION
+from acme.om.hosts.types.host import Host, HostIdentity
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import OutboxRow, outbox_row, versioned_row
 from acme.om.placement.kinds import HOST, PlacementWorkKind
@@ -654,21 +655,33 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
                 f"session {call.agent_session_id} is pinned to its tenant's hosts, and no host "
                 "holds its workspace yet; its calls never run on the platform's VMs"
             )
-        if not await self._holds(
+        live = await self._live_host(
             ctx, binding.instance_of or call.agent_session_id, binding.host_id
-        ):
+        )
+        if live is None:
             # A revoked host never claims again: a command queued on its lane
             # would wait for good. The run prepares again on the pool.
             raise NoWorkspaceHost(
                 f"the host that held session {call.agent_session_id}'s workspace is no longer a live "
                 "host of its pool; its workspace is made again before its calls run"
             )
-        if isinstance(call.request, RunRequest) and call.request.user is not None:
-            await self._reads_user(
-                ctx, binding.instance_of or call.agent_session_id, binding.host_id
+        if (
+            isinstance(call.request, RunRequest)
+            and call.request.user is not None
+            and live.exec_version < USER_VERSION
+        ):
+            # It would run as its workspace's own user there.
+            raise UserNotRead(
+                f"host {binding.host_id} reads exec work from before a command named its user, "
+                "so a command that names one never runs there"
             )
         contents = await self._contents(
-            ctx, call.agent_session_id, item_id, 1, call.request, content
+            call.agent_session_id,
+            item_id,
+            1,
+            call.request,
+            content,
+            inline=live.exec_version >= INLINE_VERSION,
         )
         sealed = await self._seal.seal(
             ctx, call.agent_session_id, call.key, contents.model_dump_json().encode()
@@ -704,11 +717,11 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             if met is None:
                 raise NotFound(f"exec item {item_id} not found")
             return await self._attach(ctx, met, call, content)
-        if content is not None:
+        if content is not None and isinstance(contents.file_in, ObjectRef):
             # Put once the item is made and before it is queued, so no host
             # is handed a write whose object is not there.
             try:
-                await self._put(ctx, contents, content)
+                await self._put(ctx, contents.file_in, content)
             except Exception:
                 outcome = ExecOutcome(refused="object_not_kept", refused_status=503)
                 await self._settle(ctx, item, outcome)
@@ -730,6 +743,8 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         ):
             raise NotFound(f"exec item {item_id} holds no file to take")
         slot, stored = contents.file_out, result.file
+        if stored.data is not None:
+            return stored.data  # it rode in the result, and matched its digest there
         try:
             sealed = await self._buckets.get(org_id, BUCKET, slot.reference, deadline=ctx.deadline)
         except InfraException as error:
@@ -910,12 +925,12 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             await self._work.fail_for_good(ctx, row, "a command of a run that lost its session")
             OUTCOMES.labels(subsystem="exec_relay", outcome="stale").inc()
             return False
-        request, last, fresh = item.request, None, None
+        request, last = item.request, None
         if row.attempts > 1:
             # An earlier claim may have sent parts of this one's uploads: a
             # host uploads only what its own claim sealed, so each starts
             # anew, and what the earlier one sent goes.
-            request, last, fresh = await self._fresh_uploads(ctx, item)
+            request, last = await self._fresh_uploads(ctx, item)
         now = self._clock()
         started = _copy(
             item,
@@ -928,8 +943,6 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         )
         if await self._storage.write_item(ctx.org_id, started, item.version) is None:
             # A stop or the sweep moved it meanwhile; the next claim decides.
-            if fresh is not None:
-                await self._abort_uploads(ctx.org_id, fresh)
             await self._work.release(ctx, row)
             return False
         if last is not None:
@@ -951,7 +964,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         item = await self._held(host, item_id)
         contents = await self._contents_of(ctx, item)
         url = expires_at = None
-        if contents.file_in is not None:
+        if isinstance(contents.file_in, ObjectRef):
             ttl = self._options.object_ttl
             expires_at = self._clock() + ttl
             url = await self._signer(host).presign_get(
@@ -973,6 +986,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             file_out=contents.file_out,
             url=url,
             url_expires_at=expires_at,
+            inline=INLINE_BYTES if contents.reads_inline else 0,
         )
 
     async def issue_upload(
@@ -986,9 +1000,10 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             raise ValidationFailed(f"exec item {item_id} uploads no {kind}")
         if not 0 <= size <= most:
             raise ValidationFailed(f"the {kind} of exec item {item_id} is 0 to {most} bytes")
+        upload_id = slot.upload_id or await self._started(ctx, host, item, contents, kind)
         plan = sealed_parts(size)
         held = await self._buckets.list_parts(
-            host.org_id, BUCKET, slot.reference, slot.upload_id, len(plan), deadline=ctx.deadline
+            host.org_id, BUCKET, slot.reference, upload_id, len(plan), deadline=ctx.deadline
         )
         have = {part.number: part.size_bytes for part in held}
         missing = [part for part in plan if have.get(part.number) != part.size_bytes]
@@ -1003,7 +1018,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
                     host.org_id,
                     BUCKET,
                     slot.reference,
-                    slot.upload_id,
+                    upload_id,
                     part.number,
                     part.size_bytes,
                     ttl,
@@ -1094,16 +1109,8 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
                 break
             # A renewal of this same claim, still landing as the host ends
             # the item, moves its version and settles nothing: the result
-            # lands on the version it left. Any other write settled the item
-            # or handed it to another claim, and the result lands nothing.
-            moved = await self._storage.read_item(host.org_id, item_id)
-            if (
-                moved is None
-                or not held_by(moved, worker_of(host))
-                or claimed_row(moved).claim_token != token
-            ):
-                raise ItemNotHeld(f"exec item {item_id} was settled before its result arrived")
-            item = moved
+            # lands on the version it left.
+            item = await self._still_held(host, item_id, token)
         # Stored: the runner that waits on it reads it now, while the rest
         # of the landing goes on.
         await self._wake(host.org_id, item.id)
@@ -1125,15 +1132,20 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
     async def extend(self, rctx: RequestContext, host: HostIdentity, item_id: UUID) -> datetime:
         ctx = await self._service(rctx, host.org_id)
         item = await self._held(host, item_id)
+        token = claimed_row(item).claim_token
         renewed = await self._work.extend_lease(ctx, claimed_row(item), self._options.lease)
-        held = _copy(
-            item,
-            self._clock(),
-            claim=renewed.model_dump(mode="json"),
-            lease_expires_at=renewed.lease_expires_at,
-        )
-        if await self._storage.write_item(host.org_id, held, item.version) is None:
-            raise ItemNotHeld(f"exec item {item_id} was settled while its lease was renewed")
+        while True:
+            held = _copy(
+                item,
+                self._clock(),
+                claim=renewed.model_dump(mode="json"),
+                lease_expires_at=renewed.lease_expires_at,
+            )
+            if await self._storage.write_item(host.org_id, held, item.version) is not None:
+                break
+            # An upload this same claim started moves its version and settles
+            # nothing: the renewal lands on the version it left.
+            item = await self._still_held(host, item_id, token)
         assert renewed.lease_expires_at is not None  # a renewal sets it
         return renewed.lease_expires_at
 
@@ -1381,27 +1393,21 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         """Whether the host is a live host of the session's pool: one that was
         neither revoked nor moved holds what it prepared, for the session or
         for an instance made for it."""
+        return await self._live_host(ctx, agent_session_id, host_id) is not None
+
+    async def _live_host(
+        self, ctx: TenantContext, agent_session_id: UUID, host_id: UUID
+    ) -> Host | None:
+        """The host while it is a live host of the session's pool, with the
+        version of `exec` work it reads; None once it was revoked or
+        moved."""
         placed = await self._hosts.work_placement(ctx, agent_session_id)
         if placed.pool is None:
-            return False
+            return None
         status = await self._hosts.get_host(ctx, placed.pool.id, host_id)
-        return status is not None and status.host.revoked_at is None
-
-    async def _reads_user(self, ctx: TenantContext, agent_session_id: UUID, host_id: UUID) -> None:
-        """Refuses a command that names a user for a host whose `exec` work
-        is from before a command named one: it would run as the workspace's
-        own user there."""
-        placed = await self._hosts.work_placement(ctx, agent_session_id)
-        status = (
-            None
-            if placed.pool is None
-            else await self._hosts.get_host(ctx, placed.pool.id, host_id)
-        )
-        if status is None or status.host.exec_version < USER_VERSION:
-            raise UserNotRead(
-                f"host {host_id} reads exec work from before a command named its user, so "
-                "a command that names one never runs there"
-            )
+        if status is None or status.host.revoked_at is not None:
+            return None
+        return status.host
 
     async def _attach(
         self, ctx: TenantContext, item: ExecItem, call: ExecCall, content: bytes | None
@@ -1420,8 +1426,21 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
                 last: ItemContent | None = await self._contents_of(ctx, item)
             except NotFound:
                 last = None
+            binding = await self._storage.read_binding(ctx.org_id, item.agent_session_id)
+            owner = (
+                item.agent_session_id
+                if binding is None
+                else binding.instance_of or item.agent_session_id
+            )
+            # Only a write asks what its host reads: it may hand its file inline.
+            live = None if content is None else await self._live_host(ctx, owner, item.host_id)
             contents = await self._contents(
-                ctx, item.agent_session_id, item.id, dispatch, call.request, content
+                item.agent_session_id,
+                item.id,
+                dispatch,
+                call.request,
+                content,
+                inline=live is not None and live.exec_version >= INLINE_VERSION,
             )
             sealed = await self._seal.seal(
                 ctx, item.agent_session_id, item.key, contents.model_dump_json().encode()
@@ -1457,14 +1476,8 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             await self._delete_under(
                 ctx.org_id, dispatch_objects(item.agent_session_id, item.id, item.dispatch)
             )
-            if content is not None:
-                await self._put(ctx, contents, content)
-            binding = await self._storage.read_binding(ctx.org_id, item.agent_session_id)
-            owner = (
-                item.agent_session_id
-                if binding is None
-                else binding.instance_of or item.agent_session_id
-            )
+            if content is not None and isinstance(contents.file_in, ObjectRef):
+                await self._put(ctx, contents.file_in, content)
             await self._enqueue(ctx, written, call.by_person, owner)
             return written
         newer = call.epoch is not None and (item.epoch is None or item.epoch < call.epoch)
@@ -1607,48 +1620,112 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             raise ItemNotHeld(f"exec item {item_id} is not held by this host")
         return item
 
+    async def _still_held(self, host: HostIdentity, item_id: UUID, token: UUID | None) -> ExecItem:
+        """The item as a write of this host left it, while the claim under
+        `token` still holds it. Any other write settled the item or handed it
+        to another claim, and what this one writes lands nothing."""
+        moved = await self._storage.read_item(host.org_id, item_id)
+        if (
+            moved is None
+            or not held_by(moved, worker_of(host))
+            or claimed_row(moved).claim_token != token
+        ):
+            raise ItemNotHeld(f"exec item {item_id} was settled or claimed again meanwhile")
+        return moved
+
     # The objects an item moves.
 
     async def _contents(
         self,
-        ctx: TenantContext,
         agent_session_id: UUID,
         item_id: UUID,
         dispatch: int,
         request: ExecRequest,
         content: bytes | None,
+        *,
+        inline: bool,
     ) -> ItemContent:
         """What an item seals on its `dispatch`th time on the queue: its
         operation, and each object it moves under a key of its own. A
-        write's names its file, put once the item is made; an object its
-        host uploads has its upload started here."""
+        write's file rides in it when it is at most `INLINE_BYTES` and its
+        host reads one there (`inline`); any other is named as an object,
+        put once the item is made. An object its host may upload starts no
+        upload here: one that rides in the result never needs it. The runner
+        that sends it reads an output or a read's file in its result, and
+        the item says so, so its host sends one there only to such a runner."""
 
-        async def slot(kind: ObjectKind) -> ObjectSlot:
+        def slot(kind: ObjectKind) -> ObjectSlot:
             reference = object_reference(agent_session_id, item_id, dispatch, kind)
-            upload_id = await self._buckets.start_upload(
-                ctx.org_id, BUCKET, reference, OCTETS, deadline=ctx.deadline
-            )
-            return ObjectSlot(reference=reference, key=_b64(new_key()), upload_id=upload_id)
+            return ObjectSlot(reference=reference, key=_b64(new_key()))
 
         if isinstance(request, WriteRequest):
             if content is None:
                 raise ValidationFailed("a write carries its content")
+            digest = await asyncio.to_thread(digest_of, content)
+            if inline and len(content) <= INLINE_BYTES:
+                within = StoredObject(size=len(content), digest=digest, data=content)
+                return ItemContent(request=request, file_in=within, reads_inline=True)
             named = ObjectRef(
                 reference=object_reference(agent_session_id, item_id, dispatch, "file"),
                 size=len(content),
-                digest=await asyncio.to_thread(digest_of, content),
+                digest=digest,
                 key=_b64(new_key()),
             )
-            return ItemContent(request=request, file_in=named)
+            return ItemContent(request=request, file_in=named, reads_inline=True)
         if isinstance(request, ReadRequest):
-            return ItemContent(request=request, file_out=await slot("file"))
-        return ItemContent(request=request, output=await slot("output"))
+            return ItemContent(request=request, file_out=slot("file"), reads_inline=True)
+        return ItemContent(request=request, output=slot("output"), reads_inline=True)
 
-    async def _put(self, ctx: TenantContext, contents: ItemContent, content: bytes) -> None:
+    async def _started(
+        self,
+        ctx: TenantContext,
+        host: HostIdentity,
+        item: ExecItem,
+        contents: ItemContent,
+        kind: ObjectKind,
+    ) -> str:
+        """The upload of the item's object of `kind`, started as its host
+        first asks to send one, and kept in the item's sealed contents, so
+        each ask after it signs parts of the same upload. A renewal of the
+        same claim that lands first moves the item, and the upload is kept on
+        the version it left; one another ask kept first stands."""
+        token = claimed_row(item).claim_token
+        while True:
+            slot, _ = _uploaded(contents, kind)
+            assert slot is not None  # the caller holds the item to one
+            if slot.upload_id is not None:
+                return slot.upload_id
+            upload_id = await self._buckets.start_upload(
+                ctx.org_id, BUCKET, slot.reference, OCTETS, deadline=ctx.deadline
+            )
+            started = slot.model_copy(update={"upload_id": upload_id})
+            fresh = contents.model_copy(
+                update={"output": started} if kind == "output" else {"file_out": started}
+            )
+            sealed = await self._seal.seal(
+                ctx, item.agent_session_id, item.key, fresh.model_dump_json().encode()
+            )
+            kept = (
+                None
+                if sealed is None
+                else await self._storage.write_item(
+                    ctx.org_id, _copy(item, self._clock(), request=sealed), item.version
+                )
+            )
+            if kept is not None:
+                return upload_id
+            await self._abort_uploads(ctx.org_id, fresh)
+            if sealed is None:
+                raise ContentNotKept(
+                    f"session {item.agent_session_id} keeps no content at rest now, so exec "
+                    f"item {item.id} keeps no {kind}"
+                )
+            item = await self._still_held(host, item.id, token)
+            contents = await self._contents_of(ctx, item)
+
+    async def _put(self, ctx: TenantContext, named: ObjectRef, content: bytes) -> None:
         """A write's file, sealed under its object's key: the platform's own
         write, a `put`."""
-        named = contents.file_in
-        assert named is not None  # a write's contents name its file
         sealed = await asyncio.to_thread(seal_object, _key(named.key), named.reference, content)
         await self._buckets.put(
             ctx.org_id, BUCKET, named.reference, sealed, OCTETS, deadline=ctx.deadline
@@ -1669,12 +1746,12 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         return None if opened is None else ResultContent.model_validate_json(opened)
 
     async def _output_of(self, ctx: TenantContext, item: ExecItem) -> ExecOutput:
-        """A done item's output as the runner reads it: its output object
-        read from the store and opened, once it matches what its host
-        declared, with the rest of its result. Empty once its key is gone.
-        An item that prints into an object, ran, and has none whole to read
-        is not `kept`: its result kept none, or the store holds none that
-        opens to what its host declared."""
+        """A done item's output as the runner reads it: its output, from the
+        result or read from the store and opened, once it matches what its
+        host declared, with the rest of its result. Empty once its key is
+        gone. An item that prints, ran, and has no output whole to read is
+        not `kept`: its result kept none, or the store holds none that opens
+        to what its host declared."""
         result = await self._result_of(ctx, item)
         if result is None:
             return ExecOutput()
@@ -1711,8 +1788,11 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
     async def _printed(
         self, ctx: TenantContext, slot: ObjectSlot, stored: StoredObject
     ) -> Printed | None:
-        """What the output object holds, opened; None once the store holds
+        """What the output holds: the bytes that rode in the result, or its
+        object, read from the store and opened; None once the store holds
         none."""
+        if stored.data is not None:
+            return Printed.model_validate_json(stored.data)
         try:
             sealed = await self._buckets.get(
                 ctx.org_id, BUCKET, slot.reference, deadline=ctx.deadline
@@ -1729,13 +1809,20 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
     async def _landed(
         self, ctx: TenantContext, contents: ItemContent, result: ExecResult
     ) -> ExecResult:
-        """The result once each object it names is whole in the store: its
-        upload completed to the plan of the size its host declared, within
-        its bound, before the result lands, so whoever reads the item done
-        finds its objects. An output that is not whole is not kept, and the
-        result says so; a read whose file is not whole is refused. A result
-        that then lands nothing leaves what it completed to the item's next
-        claim, whose uploads are its own (`_fresh_uploads`)."""
+        """The result once each object it names is whole: within its bound,
+        and in the result itself or its upload completed to the plan of the
+        size its host declared, before the result lands, so whoever reads the
+        item done finds its objects. An output that is not whole is not
+        kept, and the result says so; a read whose file is not whole is
+        refused. A result that then lands nothing leaves what it completed
+        to the item's next claim, whose uploads are its own
+        (`_fresh_uploads`). Bytes inline for an item whose runner reads none
+        there are refused: that runner could not read the result."""
+        if not contents.reads_inline and any(
+            stored is not None and stored.data is not None
+            for stored in (result.output, result.file)
+        ):
+            raise ValidationFailed("its runner reads no output and no file in a result")
         output_slot, most = _uploaded(contents, "output")
         if output_slot is None and result.output is not None:
             raise ValidationFailed("an item that prints nothing uploads no output")
@@ -1760,13 +1847,19 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
     async def _completed(
         self, ctx: TenantContext, slot: ObjectSlot, stored: StoredObject, most: int
     ) -> bool:
-        """Whether the object its host declared is whole in the store now:
-        within its bound, and its upload completed to the plan of its size.
-        A result sent again finds the upload its first push completed gone,
+        """Whether the object its host declared is whole now: within its
+        bound, and in the result itself, whose bytes held to their digest as
+        it was read, or its upload completed to the plan of its size. A
+        result sent again finds the upload its first push completed gone,
         and the object at its reference, which stands for it: the store
         answers no object's size, so its reader holds it to the size and
-        the digest its host declared, as it holds every object."""
+        the digest its host declared, as it holds every object. An upload
+        its host never started is not whole."""
         if stored.size > most:
+            return False
+        if stored.data is not None:
+            return True
+        if slot.upload_id is None:
             return False
         try:
             await self._buckets.complete_upload(
@@ -1789,50 +1882,46 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         return True
 
     async def _kept_objects(self, org_id: UUID, contents: ItemContent, result: ExecResult) -> None:
-        """Once a result lands: each upload it names nothing of let go, and
-        a write's file removed, since it settled."""
+        """Once a result lands: each upload it names nothing of, or whose
+        bytes rode in it, let go, and a write's object removed, since it
+        settled."""
         for slot, stored in ((contents.output, result.output), (contents.file_out, result.file)):
-            if slot is not None and stored is None:
+            if slot is not None and (stored is None or stored.data is not None):
                 await self._let_go(org_id, slot)
-        if contents.file_in is not None:
+        if isinstance(contents.file_in, ObjectRef):
             await self._delete(org_id, contents.file_in.reference)
 
     async def _fresh_uploads(
         self, ctx: TenantContext, item: ExecItem
-    ) -> tuple[bytes, ItemContent | None, ItemContent | None]:
-        """The item's sealed contents with a new upload of each object its
-        host uploads, the contents it had, and the new ones; as it stands
-        when it uploads nothing, or its key went."""
+    ) -> tuple[bytes, ItemContent | None]:
+        """The item's sealed contents with no upload an earlier claim
+        started, so its host starts its own as it asks, and the contents it
+        had, whose uploads go once the claim lands; as it stands when no
+        upload was started, or its key went."""
         try:
             last = await self._contents_of(ctx, item)
         except NotFound:
-            return item.request, None, None
-        if last.output is None and last.file_out is None:
-            return item.request, None, None
-
-        async def again(slot: ObjectSlot | None) -> ObjectSlot | None:
-            if slot is None:
-                return None
-            upload_id = await self._buckets.start_upload(
-                ctx.org_id, BUCKET, slot.reference, OCTETS, deadline=ctx.deadline
-            )
-            return slot.model_copy(update={"upload_id": upload_id})
-
+            return item.request, None
+        slots = {"output": last.output, "file_out": last.file_out}
+        if all(slot is None or slot.upload_id is None for slot in slots.values()):
+            return item.request, None
         fresh = last.model_copy(
-            update={"output": await again(last.output), "file_out": await again(last.file_out)}
+            update={
+                name: None if slot is None else slot.model_copy(update={"upload_id": None})
+                for name, slot in slots.items()
+            }
         )
         sealed = await self._seal.seal(
             ctx, item.agent_session_id, item.key, fresh.model_dump_json().encode()
         )
         if sealed is None:
-            await self._abort_uploads(ctx.org_id, fresh)
-            return item.request, None, None
-        return sealed, last, fresh
+            return item.request, None
+        return sealed, last
 
     async def _abort_uploads(self, org_id: UUID, contents: ItemContent) -> None:
         """The uploads `contents` names, aborted, with no object removed."""
         for slot in (contents.output, contents.file_out):
-            if slot is None:
+            if slot is None or slot.upload_id is None:
                 continue
             try:
                 await self._buckets.abort_upload(org_id, BUCKET, slot.reference, slot.upload_id)
@@ -1857,10 +1946,15 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         for slot in (contents.output, contents.file_out):
             if slot is not None:
                 await self._let_go(org_id, slot)
-        if contents.file_in is not None:
+        if isinstance(contents.file_in, ObjectRef):
             await self._delete(org_id, contents.file_in.reference)
 
     async def _let_go(self, org_id: UUID, slot: ObjectSlot) -> None:
+        """An object's upload aborted and the object removed; nothing for
+        one its host never started, whose output or file rode inline or
+        never came."""
+        if slot.upload_id is None:
+            return
         try:
             await self._buckets.abort_upload(org_id, BUCKET, slot.reference, slot.upload_id)
         except InfraException as error:

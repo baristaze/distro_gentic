@@ -130,7 +130,7 @@ reason = "a host runs the items it holds through the engine's container transpor
 [[tool.distro-check.exception]]
 rule = "PLC-10"
 path = "apps/host/src/acme/apps/host/objects.py"
-adr = "docs/adr/2066-every-file-and-output-an-exec-item-moves-crosses-the-store-by-a-url-signed-for-it-alone.md"
+adr = "docs/adr/2066-a-file-or-an-output-past-its-bound-crosses-the-store-by-a-url-signed-for-it-alone.md"
 reason = "a host seals and opens an item's objects with the platform's sealed format and its own transport on its own disk, and reaches the platform through the client alone"
 
 [[tool.distro-check.exception]]

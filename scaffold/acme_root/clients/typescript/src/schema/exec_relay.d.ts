@@ -240,13 +240,16 @@ export interface components {
          * ExecDetailView
          * @description An item the host holds: the call, the workspace, the operation, and
          *     the objects it moves. A write's `file_in` comes by `url`, signed for a
-         *     GET of it alone until `url_expires_at`; an `output` and a read's
-         *     `file_out` go by the parts `POST .../upload` signs. `times` says the
-         *     replica that answers keeps the times a host sends with the item's
-         *     result; a host sends them only when it does. During a roll, the push
-         *     may reach a replica of an earlier release, which keeps none and
-         *     refuses them as invalid: the host then pushes the result again
-         *     without them.
+         *     GET of it alone until `url_expires_at`, or in the item itself; an
+         *     `output` and a read's `file_out` go by the parts `POST .../upload`
+         *     signs, or, at most `inline` bytes, in the result itself. `times` says
+         *     the replica that answers keeps the times a host sends with the item's
+         *     result, and `inline` the bytes the runner that sent the item reads in
+         *     it, none for a runner of an earlier release; a host sends neither past
+         *     what they say. During a roll, the push may reach a replica of an
+         *     earlier release, which keeps no times and takes nothing inline, and
+         *     refuses either as invalid: the host then pushes the result again
+         *     without its times, and with what rode inline sent to the store.
          */
         ExecDetailView: {
             /**
@@ -268,8 +271,14 @@ export interface components {
             effect: string;
             /** Epoch */
             epoch: number | null;
-            file_in?: components["schemas"]["IssuedObjectView"] | null;
+            /** File In */
+            file_in?: components["schemas"]["IssuedObjectView"] | components["schemas"]["InlineObjectView"] | null;
             file_out?: components["schemas"]["IssuedObjectSlotView"] | null;
+            /**
+             * Inline
+             * @default 0
+             */
+            inline: number;
             /**
              * Item Id
              * Format: uuid
@@ -314,6 +323,20 @@ export interface components {
          * @enum {string}
          */
         ExecState: "queued" | "running" | "done" | "interrupted";
+        /**
+         * InlineObjectView
+         * @description A file a write hands its host in the item itself, at most 64 KiB:
+         *     its size, its digest, and its bytes (base64), which the host holds to
+         *     the two before a byte of it reaches the workspace.
+         */
+        InlineObjectView: {
+            /** Data */
+            data: string;
+            /** Digest */
+            digest: string;
+            /** Size */
+            size: number;
+        };
         /**
          * IssuedObjectPartView
          * @description One part of an object to send, sealed: `size_bytes` bytes of the
@@ -440,9 +463,10 @@ export interface components {
         };
         /**
          * ResultRequest
-         * @description How an item ended: the JSON of an exec result, in base64. It names
-         *     the objects its host uploaded, by their size and their digest, and
-         *     holds none of their bytes, so it is a few KiB.
+         * @description How an item ended: the JSON of an exec result, in base64. It carries
+         *     its output or a read's file within the bound the item's detail names
+         *     (`inline`), or names the object its host uploaded, by its size and its
+         *     digest, so it stays bounded whatever the command printed.
          */
         ResultRequest: {
             crossing: components["schemas"]["CrossingBody"];

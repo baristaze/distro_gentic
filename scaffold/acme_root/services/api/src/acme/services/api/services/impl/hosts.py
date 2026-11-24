@@ -2,6 +2,7 @@ import asyncio
 import random
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
 from datetime import datetime, timedelta
+from typing import Any
 from uuid import UUID
 
 from acme.infra.topics import (
@@ -164,9 +165,17 @@ def _heard(
     ]
 
 
+ClaimDetail = Callable[[RequestContext, HostIdentity, WorkItem], Awaitable[dict[str, Any] | None]]
+"""What a claim of one kind hands its host beyond the payload, as that kind's
+own route answers it; None when it cannot be read now."""
+
+
 class HostsServiceImpl(HostsServiceInterface):
     """A claimant's control stream rides `topics`, and `reader` names the
     claimant kind that reads a stream kind (`KindStreamsInterface.reader`).
+    `details` names, by work kind, what a host's claim of that kind carries
+    beyond the payload (`ClaimedWorkView.detail`); a kind it does not name
+    carries none.
     `poll` is the longest the stream goes without reading the claimant's
     holding again, and it pings when it heard nothing for as long. `settle`
     is how long after a wake it reads again, so the claim the wake prompts
@@ -181,6 +190,7 @@ class HostsServiceImpl(HostsServiceInterface):
         topics: TopicsInterface,
         reader: Callable[[str], str | None] = lambda kind: None,
         *,
+        details: Mapping[str, ClaimDetail] | None = None,
         poll: timedelta = timedelta(seconds=5),
         settle: timedelta = timedelta(milliseconds=500),
         spacing: timedelta = timedelta(seconds=1),
@@ -192,6 +202,7 @@ class HostsServiceImpl(HostsServiceInterface):
         self._cloud_pool = cloud_pool
         self._topics = topics
         self._reader = reader
+        self._details = dict(details or {})
         self._poll = poll
         self._settle = settle
         self._spacing = spacing
@@ -312,6 +323,7 @@ class HostsServiceImpl(HostsServiceInterface):
         if claimed is None:
             return ClaimView(item=None)
         ctx, item = claimed
+        detail = self._details.get(item.kind)
         return ClaimView(
             item=ClaimedWorkView(
                 id=item.id,
@@ -322,6 +334,7 @@ class HostsServiceImpl(HostsServiceInterface):
                 lease_expires_at=item.lease_expires_at,
                 attempts=item.attempts,
                 wire_version=WIRE_VERSION[WireType.EXEC],
+                detail=None if detail is None else await detail(rctx, host, item),
             )
         )
 

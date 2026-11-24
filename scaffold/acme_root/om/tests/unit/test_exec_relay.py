@@ -46,7 +46,7 @@ from acme.infra.transports import (
 )
 from acme.om.agent_steps.types.header import ParkReason, ToolFailure
 from acme.om.agents.types.run import RunEnd
-from acme.om.base import new_id, utcnow
+from acme.om.base import OmBase, new_id, utcnow
 from acme.om.context import AppContext, AppType, RequestContext, TenantContext
 from acme.om.exceptions import NotFound, ToolFailed, Unavailable, ValidationFailed
 from acme.om.exec_relay import ExecRelayManagerInterface
@@ -63,6 +63,7 @@ from acme.om.exec_relay.rules import (
     key_time,
 )
 from acme.om.exec_relay.types.exec import (
+    INLINE_BYTES,
     REQUESTS,
     ExecCall,
     ExecItem,
@@ -72,7 +73,9 @@ from acme.om.exec_relay.types.exec import (
     ExecProgress,
     ExecResult,
     ExecState,
+    ItemContent,
     ObjectKind,
+    ObjectRef,
     PrepareAnswer,
     ReadRequest,
     RunRequest,
@@ -83,7 +86,8 @@ from acme.om.exec_relay.types.exec import (
 from acme.om.hosts.exceptions import PinnedToHosts
 from acme.om.hosts.impl.manager import HostsOptions, local_pool_id, session_pool_id
 from acme.om.hosts.impl.placement import PlacementHostsImpl
-from acme.om.hosts.types.host import Advertisement, Enrollment, HostIdentity
+from acme.om.hosts.rules import INLINE_VERSION
+from acme.om.hosts.types.host import Advertisement, Enrollment, HostIdentity, HostReport
 from acme.om.hosts.types.host import IsolationMode as Mode
 from acme.om.hosts.types.pool import HostPool
 from acme.om.placement.kinds import PlacementWorkKind
@@ -261,14 +265,21 @@ class Host:
     pushes how the command ended, each with the hash it declares. It counts
     what it was handed."""
 
-    def __init__(self, wall: Wall, identity: HostIdentity) -> None:
+    def __init__(self, wall: Wall, identity: HostIdentity, version: int = 2) -> None:
         self.managers = wall.managers
         self.buckets = wall.buckets
         self.identity = identity
+        self.version = version
         self.handed: list[WorkItem] = []
 
+    async def reads(self) -> None:
+        """States the version of `exec` work it reads, as a heartbeat does,
+        before anything is sent to it."""
+        report = HostReport(advertisement=PROBED, exec_version=self.version)
+        await self.managers.hosts.heartbeat(request(), self.identity, report)
+
     async def claim(self) -> WorkItem | None:
-        claimed = await self.managers.hosts.claim(request(), self.identity, 2)
+        claimed = await self.managers.hosts.claim(request(), self.identity, self.version)
         if claimed is None:
             return None
         self.handed.append(claimed[1])
@@ -303,6 +314,7 @@ class Host:
         offset: int = 0,
         outcome: ExecOutcome | None = None,
         times: Any = None,
+        inline: bool = False,
     ) -> None:
         await exec_objects.finish(
             self.managers.exec_relay,
@@ -314,6 +326,7 @@ class Host:
             file=data,
             offset=offset,
             times=times,
+            inline=inline,
         )
 
 
@@ -1299,12 +1312,12 @@ async def test_an_objects_url_reads_it_alone_until_it_runs_out_and_only_its_host
         await relay.detail(request(), wall.holder, elsewhere.item_id(their_row))
     assert await exec_objects.handed(relay, wall.buckets, wall.holder, item_id) == data
     detail = await relay.detail(request(), wall.holder, item_id)
-    assert detail.url is not None and detail.file_in is not None
+    assert detail.url is not None and isinstance(detail.file_in, ObjectRef)
     async with exec_objects.store_of(wall.buckets) as store:
         assert (await store.get(detail.url)).status_code == 200
         # Signed for one object, its path pointed at another: refused.
         their_detail = await relay.detail(request(), wall.other, elsewhere.item_id(their_row))
-        assert their_detail.file_in is not None
+        assert isinstance(their_detail.file_in, ObjectRef)
         moved = detail.url.replace(detail.file_in.reference, their_detail.file_in.reference)
         assert (await store.get(moved)).status_code == 403
         # Past its time: refused.
@@ -1445,6 +1458,279 @@ async def test_an_item_that_settles_leaves_no_file_behind_and_its_output_goes_wi
 async def answered(host: Host, data: bytes) -> None:
     row = await host.claim_soon()
     await host.finish(row, data=data)
+
+
+# A file or an output within `INLINE_BYTES` rides in its item or its result,
+# sealed under the session's key with the rest of it, and the store sees no
+# call for it; one past that crosses the store as an object, as before.
+
+STORE_CALLS = (
+    "put",
+    "get",
+    "exists",
+    "list",
+    "delete",
+    "presign_get",
+    "start_upload",
+    "presign_part",
+    "list_parts",
+    "complete_upload",
+    "abort_upload",
+)
+
+
+@pytest.fixture
+def store_calls(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Each call the relay or a host makes to the store, by its name."""
+    calls: list[str] = []
+    for name in STORE_CALLS:
+        method = getattr(BucketsLocalImpl, name)
+
+        def noted(*args: Any, _name: str = name, _method: Any = method, **kwargs: Any) -> Any:
+            calls.append(_name)
+            return _method(*args, **kwargs)
+
+        monkeypatch.setattr(BucketsLocalImpl, name, noted)
+    return calls
+
+
+def printed_within(bound: int) -> str:
+    """A command's stdout whose output, as a host sends it, is `bound`
+    bytes."""
+    empty = len(exec_objects.printed(""))
+    return "x" * (bound - empty)
+
+
+async def test_a_commands_output_within_the_bound_rides_its_result_and_the_store_sees_no_call(
+    wall: Wall, store_calls: list[str]
+) -> None:
+    host = Host(wall, wall.holder)
+    stdout = printed_within(INLINE_BYTES)
+    running = asyncio.ensure_future(
+        transport(wall.managers).run(wall.workspace, command(wall.epoch), seal=NO_SEAL)
+    )
+    row = await host.claim_soon()
+    await host.finish(row, 0, stdout, inline=True)
+    ran = await running
+    assert (ran.exit_code, ran.stdout) == (0, stdout), "the runner reads it whole"
+    assert store_calls == [], "nothing of it crossed the store"
+    assert await under(wall) == []
+
+
+async def test_an_output_and_a_read_file_past_the_bound_still_cross_the_store_as_objects(
+    wall: Wall, store_calls: list[str]
+) -> None:
+    host = Host(wall, wall.holder)
+    runner = transport(wall.managers)
+    stdout = printed_within(INLINE_BYTES + 1)
+    running = asyncio.ensure_future(runner.run(wall.workspace, command(wall.epoch), seal=NO_SEAL))
+    row = await host.claim_soon()
+    await host.finish(row, 0, stdout, inline=True)
+    assert (await running).stdout == stdout
+    assert {"start_upload", "complete_upload", "get"} <= set(store_calls)
+    (output,) = await under(wall)
+    assert output.endswith("/output"), "it is the item's record, an object of the store"
+    # A read's file: one at the bound rides in the result, and one past it
+    # crosses the store, whole.
+    for size, crosses in ((INLINE_BYTES, False), (INLINE_BYTES + 1, True)):
+        store_calls.clear()
+        data = bytes(range(256)) * (size // 256) + b"r" * (size % 256)
+        reading = asyncio.ensure_future(runner.read_file(wall.workspace, "out.bin", size))
+        row = await host.claim_soon()
+        await host.finish(row, data=data, inline=True)
+        assert await reading == data
+        assert ("start_upload" in store_calls) is crosses, store_calls
+
+
+async def test_an_inline_output_opens_to_nothing_once_its_key_is_revoked(wall: Wall) -> None:
+    relay = wall.managers.exec_relay
+    host = Host(wall, wall.holder)
+    running = asyncio.ensure_future(
+        transport(wall.managers).run(wall.workspace, command(wall.epoch), seal=NO_SEAL)
+    )
+    row = await host.claim_soon()
+    await host.finish(row, 0, "the deploy key is in vault\n", inline=True)
+    assert (await running).stdout == "the deploy key is in vault\n"
+    item = await wall.storage.get_exec_relay_storage().read_item(
+        wall.owner.org_id, host.item_id(row)
+    )
+    assert item is not None and item.output is not None
+    assert b"deploy key" not in item.output, "the row holds it sealed"
+    await wall.managers.privacy.revoke_key(wall.owner, wall.workspace.id)
+    progress = await relay.watch(request(), wall.owner.org_id, host.item_id(row), -1)
+    assert progress.output == ExecOutput(), "what it printed goes with its key"
+
+
+def with_output(output: dict[str, Any]) -> bytes:
+    """A result whose output is `output`, as a host would send it."""
+    return json.dumps({"outcome": {"exit_code": 0}, "output": output}).encode()
+
+
+async def test_a_result_whose_inline_bytes_pass_the_bound_or_miss_their_digest_is_refused(
+    wall: Wall,
+) -> None:
+    relay = wall.managers.exec_relay
+    host = Host(wall, wall.holder)
+    running = asyncio.ensure_future(
+        transport(wall.managers).run(wall.workspace, command(wall.epoch), seal=NO_SEAL)
+    )
+    row = await host.claim_soon()
+    item_id = host.item_id(row)
+    held = exec_objects.printed("ok\n")
+    past = exec_objects.printed(printed_within(INLINE_BYTES + 1))
+
+    def inline(data: bytes, **declared_as: Any) -> dict[str, Any]:
+        named = {"size": len(data), "digest": digest_of(data), **declared_as}
+        return {**named, "data": base64.b64encode(data).decode()}
+
+    for output in (
+        inline(past),
+        inline(held, digest=digest_of(b"another output")),
+        inline(held, size=len(held) + 1),
+    ):
+        data = with_output(output)
+        crossing = declared(CrossingKind.RESULT, data)
+        with pytest.raises(ValidationFailed, match="no exec result"):
+            await relay.push_result(request(), wall.holder, item_id, crossing, data)
+    progress = await relay.watch(request(), wall.owner.org_id, item_id, -1)
+    assert (progress.state, progress.outcome, progress.output) == (ExecState.RUNNING, None, None)
+    data = with_output(inline(held))
+    await relay.push_result(
+        request(), wall.holder, item_id, declared(CrossingKind.RESULT, data), data
+    )
+    assert (await running).stdout == "ok\n"
+
+
+class EarlierObject(OmBase):
+    """An object a result names, as a runner of the release before reads it:
+    its size and its digest, and nothing else."""
+
+    size: int
+    digest: str
+
+
+class EarlierResult(OmBase):
+    """A result as a runner of the release before reads it."""
+
+    detail: str = ""
+    offset: int = 0
+    output: EarlierObject | None = None
+    file: EarlierObject | None = None
+
+
+@pytest.fixture
+def earlier_runner(monkeypatch: pytest.MonkeyPatch) -> list[bytes]:
+    """Each item sent as a runner of the release before sends it, which
+    says nothing of reading a result inline; and what the platform seals
+    under the session's key, each in the clear."""
+    sealed: list[bytes] = []
+    inner = RecordSealKeysImpl.seal
+
+    async def spy(
+        self: RecordSealKeysImpl, ctx: TenantContext, agent_session_id: UUID, key: UUID, data: bytes
+    ) -> bytes | None:
+        if b'"request"' in data:
+            contents = ItemContent.model_validate_json(data)
+            data = contents.model_copy(update={"reads_inline": False}).model_dump_json().encode()
+            assert b"reads_inline" not in data, "an earlier runner's item keeps its form"
+        sealed.append(data)
+        return await inner(self, ctx, agent_session_id, key, data)
+
+    monkeypatch.setattr(RecordSealKeysImpl, "seal", spy)
+    return sealed
+
+
+async def test_an_item_an_earlier_runner_sent_takes_nothing_inline_and_that_runner_reads_it(
+    wall: Wall, earlier_runner: list[bytes]
+) -> None:
+    relay = wall.managers.exec_relay
+    host = Host(wall, wall.holder)
+    running = asyncio.ensure_future(
+        transport(wall.managers).run(wall.workspace, command(wall.epoch), seal=NO_SEAL)
+    )
+    row = await host.claim_soon()
+    item_id = host.item_id(row)
+    detail = await relay.detail(request(), wall.holder, item_id)
+    assert detail.inline == 0, "its host is told to send nothing inline"
+    # A host that sends its output inline all the same lands nothing.
+    printed = exec_objects.printed("ok\n")
+    output = {"size": len(printed), "digest": digest_of(printed)}
+    data = with_output({**output, "data": base64.b64encode(printed).decode()})
+    with pytest.raises(ValidationFailed, match="reads no output"):
+        await relay.push_result(
+            request(), wall.holder, item_id, declared(CrossingKind.RESULT, data), data
+        )
+    await host.finish(row, 0, "ok\n")
+    assert (await running).stdout == "ok\n", "the runner reads it"
+    # The result as it is kept is one a runner of the release before reads.
+    (kept,) = [data for data in earlier_runner if b'"request"' not in data]
+    assert EarlierResult.model_validate_json(kept).output == EarlierObject(**output)
+
+
+async def test_a_small_write_rides_in_its_item_to_a_host_that_reads_it_there(
+    wall: Wall, store_calls: list[str]
+) -> None:
+    relay = wall.managers.exec_relay
+    runner = transport(wall.managers)
+    host = Host(wall, wall.holder, INLINE_VERSION)
+    await host.reads()
+    small, large = b"notes\n" * 100, b"n" * (INLINE_BYTES + 1)
+    for data, crosses in ((small, False), (large, True)):
+        store_calls.clear()
+        writing = asyncio.ensure_future(
+            runner.write_file(wall.workspace, "notes.md", data, wall.epoch)
+        )
+        row = await host.claim_soon()
+        detail = await relay.detail(request(), wall.holder, host.item_id(row))
+        assert (detail.url is not None) is crosses
+        assert (
+            await exec_objects.handed(relay, wall.buckets, wall.holder, host.item_id(row)) == data
+        )
+        await host.finish(row)
+        await writing
+        assert ("put" in store_calls) is crosses, store_calls
+    assert await under(wall) == []
+    # A host that reads exec work from before a write's file rode in its
+    # item is handed one from the store, however small.
+    host.version = INLINE_VERSION - 1
+    await host.reads()
+    writing = asyncio.ensure_future(runner.write_file(wall.workspace, "a.md", b"a\n", wall.epoch))
+    row = await host.claim_soon()
+    detail = await relay.detail(request(), wall.holder, host.item_id(row))
+    assert detail.url is not None and isinstance(detail.file_in, ObjectRef)
+    assert await exec_objects.handed(relay, wall.buckets, wall.holder, host.item_id(row)) == b"a\n"
+    await host.finish(row)
+    await writing
+
+
+async def test_an_upload_its_host_starts_never_costs_the_renewal_that_lands_beside_it(
+    wall: Wall, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    relay = wall.managers.exec_relay
+    host = Host(wall, wall.holder)
+    running = asyncio.ensure_future(
+        transport(wall.managers).run(wall.workspace, command(wall.epoch), seal=NO_SEAL)
+    )
+    row = await host.claim_soon()
+    item_id = host.item_id(row)
+    data = exec_objects.printed(printed_within(INLINE_BYTES + 1))
+    work = cast(Any, relay)._work  # pyright: ignore[reportPrivateUsage]
+    extend_lease = work.extend_lease
+    issued: list[int] = []
+
+    async def asked_meanwhile(*args: Any, **kwargs: Any) -> Any:
+        # The host asks to send its output while the renewal is in flight.
+        upload = await relay.issue_upload(request(), wall.holder, item_id, "output", len(data))
+        issued.append(upload.remaining)
+        return await extend_lease(*args, **kwargs)
+
+    monkeypatch.setattr(work, "extend_lease", asked_meanwhile)
+    await relay.extend(request(), wall.holder, item_id)
+    monkeypatch.undo()
+    assert issued == [1]
+    # The upload it started is the one each later ask signs parts of.
+    await host.finish(row, 0, printed_within(INLINE_BYTES + 1))
+    assert (await running).exit_code == 0
 
 
 # Check 7: a result its host sends again, after a first push that completed

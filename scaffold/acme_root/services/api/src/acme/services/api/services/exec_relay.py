@@ -3,10 +3,12 @@ holds, and its control stream, in views."""
 
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
+from typing import Any
 from uuid import UUID
 
 from acme.om.context import RequestContext
 from acme.om.hosts.types.host import HostIdentity
+from acme.om.work.types.work_item import WorkItem
 from acme.services.api.types.exec_relay import (
     ControlView,
     ExecDetailView,
@@ -27,6 +29,15 @@ class ExecRelayServiceInterface(ABC):
     async def detail(
         self, rctx: RequestContext, host: HostIdentity, item_id: UUID
     ) -> ExecDetailView: ...
+
+    @abstractmethod
+    async def claimed(
+        self, rctx: RequestContext, host: HostIdentity, row: WorkItem
+    ) -> dict[str, Any] | None:
+        """The detail of the `exec` row a claim just handed `host`, as
+        `detail` answers it, for the claim to carry; None when it cannot be
+        read now."""
+        ...
 
     @abstractmethod
     async def push_parts(

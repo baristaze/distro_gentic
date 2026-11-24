@@ -78,7 +78,7 @@
         "type": "object"
       },
       "ExecDetailView": {
-        "description": "An item the host holds: the call, the workspace, the operation, and\nthe objects it moves. A write's `file_in` comes by `url`, signed for a\nGET of it alone until `url_expires_at`; an `output` and a read's\n`file_out` go by the parts `POST .../upload` signs. `times` says the\nreplica that answers keeps the times a host sends with the item's\nresult; a host sends them only when it does. During a roll, the push\nmay reach a replica of an earlier release, which keeps none and\nrefuses them as invalid: the host then pushes the result again\nwithout them.",
+        "description": "An item the host holds: the call, the workspace, the operation, and\nthe objects it moves. A write's `file_in` comes by `url`, signed for a\nGET of it alone until `url_expires_at`, or in the item itself; an\n`output` and a read's `file_out` go by the parts `POST .../upload`\nsigns, or, at most `inline` bytes, in the result itself. `times` says\nthe replica that answers keeps the times a host sends with the item's\nresult, and `inline` the bytes the runner that sent the item reads in\nit, none for a runner of an earlier release; a host sends neither past\nwhat they say. During a roll, the push may reach a replica of an\nearlier release, which keeps no times and takes nothing inline, and\nrefuses either as invalid: the host then pushes the result again\nwithout its times, and with what rode inline sent to the store.",
         "properties": {
           "agent_session_id": {
             "format": "uuid",
@@ -116,9 +116,13 @@
                 "$ref": "#/components/schemas/IssuedObjectView"
               },
               {
+                "$ref": "#/components/schemas/InlineObjectView"
+              },
+              {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "File In"
           },
           "file_out": {
             "anyOf": [
@@ -129,6 +133,11 @@
                 "type": "null"
               }
             ]
+          },
+          "inline": {
+            "default": 0,
+            "title": "Inline",
+            "type": "integer"
           },
           "item_id": {
             "format": "uuid",
@@ -231,6 +240,30 @@
         ],
         "title": "ExecState",
         "type": "string"
+      },
+      "InlineObjectView": {
+        "description": "A file a write hands its host in the item itself, at most 64 KiB:\nits size, its digest, and its bytes (base64), which the host holds to\nthe two before a byte of it reaches the workspace.",
+        "properties": {
+          "data": {
+            "title": "Data",
+            "type": "string"
+          },
+          "digest": {
+            "title": "Digest",
+            "type": "string"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "size",
+          "digest",
+          "data"
+        ],
+        "title": "InlineObjectView",
+        "type": "object"
       },
       "IssuedObjectPartView": {
         "description": "One part of an object to send, sealed: `size_bytes` bytes of the\nsealed object from `offset`, as the body of a PUT to `url`, straight to\nthe store. The URL is signed for that length.",
@@ -455,13 +488,13 @@
       },
       "ResultRequest": {
         "additionalProperties": false,
-        "description": "How an item ended: the JSON of an exec result, in base64. It names\nthe objects its host uploaded, by their size and their digest, and\nholds none of their bytes, so it is a few KiB.",
+        "description": "How an item ended: the JSON of an exec result, in base64. It carries\nits output or a read's file within the bound the item's detail names\n(`inline`), or names the object its host uploaded, by its size and its\ndigest, so it stays bounded whatever the command printed.",
         "properties": {
           "crossing": {
             "$ref": "#/components/schemas/CrossingBody"
           },
           "data": {
-            "maxLength": 62698,
+            "maxLength": 179210,
             "title": "Data",
             "type": "string"
           }

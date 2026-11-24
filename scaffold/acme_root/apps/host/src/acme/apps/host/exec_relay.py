@@ -30,13 +30,20 @@ detail's read and its prepare included, the host renews its lease, and a
 stop from the control stream ends the command at once: the transport ends
 its whole process tree.
 
-No file and no output crosses in an item or its result. A write's file is
-downloaded from the store, checked against its size and its digest, and
-only then written into the workspace; a read's file and what an item
-printed or listed are uploaded to the store as objects (`objects.py`), and
-the result names them by their size and their digest, so it is a few KiB,
-sent as UTF-8 JSON. The lease is renewed until the result is pushed, the
-transfers included.
+The claim of an item carries its detail, so one call claims it and reads
+it; a claim that carries none, as from a platform of an earlier release,
+is followed by a read of the detail by its own route.
+
+A file or an output within the bound the detail names (`inline`) crosses
+in the item or its result; one past it, or any to a platform that names
+none, crosses the store as an object (`objects.py`). A write's file,
+either way, is checked against its size and its digest, and only then
+written into the workspace. A read's file and what an item printed or
+listed go in the result, or are uploaded, and the result names them by
+their size and their digest, sent as UTF-8 JSON. A command that ends
+within its first window sends no part of its output apart from the
+result that carries it whole. The lease is renewed until the result is
+pushed, the transfers included.
 
 The host holds no key of the platform's: an item's detail hands it the
 key of each object it moves, which opens that object alone. Its
@@ -44,6 +51,8 @@ transport's record keeps how a command ended without its output, and the
 platform keeps the output sealed."""
 
 import asyncio
+import base64
+import hashlib
 import json
 import logging
 import random
@@ -64,7 +73,7 @@ from acme.apps.host.objects import HostObjects, PartRefused, Spooled, removed
 from acme.apps.host.snapshots import HostSnapshots, SnapshotHeldSecret, SnapshotLost
 from acme.client.client import ApiClient
 from acme.client.transport import WIRE_FAILURES, ApiError
-from acme.client.types.exec_relay import ExecDetailView, OutputStream
+from acme.client.types.exec_relay import ExecDetailView, InlineObjectView, OutputStream
 from acme.client.types.hosts import ClaimedWorkView
 from acme.client.types.hosts import IsolationMode as HostIsolation
 from acme.infra.agent_workspaces import (
@@ -77,6 +86,7 @@ from acme.infra.agent_workspaces import (
     IsolationRefused,
     IsolationSpec,
 )
+from acme.infra.buckets.sealed import DIGEST_SCHEME
 from acme.infra.exceptions import InfraException
 from acme.infra.transports import (
     CapabilityMissing,
@@ -294,7 +304,7 @@ class ExecutorRelayImpl(ExecutorInterface):
         running = Running(held_until=time.monotonic() + self._lease_seconds)
         self._running[item_id] = running
         try:
-            await self._run(item_id, running, ask)
+            await self._run(item_id, running, ask, item.detail)
         except ApiError as error:
             # The platform settled it meanwhile, or took the lease back: the
             # first settlement stands, and the host claims on.
@@ -328,18 +338,20 @@ class ExecutorRelayImpl(ExecutorInterface):
             running.operation.cancel()
         return True
 
-    async def _run(self, item_id: UUID, running: Running, ask: Ask) -> None:
+    async def _run(
+        self, item_id: UUID, running: Running, ask: Ask, handed: dict[str, Any] | None
+    ) -> None:
         """Renews the item's lease from its claim until its result is pushed:
         the read of its detail may outlast a lease, as its prepare may, and
         so may the transfer of an object it moves."""
         renewal = asyncio.ensure_future(self._renew(item_id, running))
         ended = Ended(_result())
         try:
-            detail, ended = await self._outcome(item_id, running, ask)
+            detail, ended, parts = await self._outcome(item_id, running, ask, handed)
             if running.stopped == "revoke":
                 log.info("item %s: its lease was revoked, so nothing is pushed", item_id)
                 return
-            result = await self._kept(item_id, detail, ended, running)
+            result = await self._kept(item_id, detail, ended, running, parts)
             if running.stopped == "revoke":
                 log.info("item %s: its lease was revoked, so nothing is pushed", item_id)
                 return
@@ -348,32 +360,37 @@ class ExecutorRelayImpl(ExecutorInterface):
             times = running.times()
             if times is not None and detail is not None and detail.times:
                 result["times"] = times
-            await self._push(item_id, result, running.held_until)
+
+            async def earlier() -> dict[str, Any]:
+                # What rode inline goes to the store, as an earlier release takes it.
+                return await self._kept(item_id, detail, ended, running, None, within=0)
+
+            await self._push(item_id, result, running.held_until, earlier)
         finally:
             renewal.cancel()
             if ended.file is not None:
                 await removed(ended.file.path)
 
     async def _outcome(
-        self, item_id: UUID, running: Running, ask: Ask
-    ) -> tuple[ExecDetailView | None, Ended]:
+        self, item_id: UUID, running: Running, ask: Ask, handed: dict[str, Any] | None
+    ) -> tuple[ExecDetailView | None, Ended, _Parts | None]:
         """How the item ended here, or why this host refused it, with the
-        detail it was read by."""
-        async with self._client() as client:
-            detail = await client.exec_detail(item_id)
+        detail it was read by, the one its claim `handed` when it carries
+        one, and the parts of its output not yet sent."""
+        detail = await self._detail(item_id, handed)
         running.read = time.monotonic()
         spec = IsolationSpec.model_validate(detail.spec)
         reads = (detail.location,) if spec.mode is IsolationMode.HOST else ()
         differs = unlike(ask, spec, reads)
         if differs is not None:
             why = "this host refused it: " + differs
-            return detail, Ended(_result(refused=("refused_by_host", 403), detail=why))
+            return detail, Ended(_result(refused=("refused_by_host", 403), detail=why)), None
         if detail.request.get("operation") == MCP_CALL:
-            return detail, await self._call_server(running, detail)
+            return detail, await self._call_server(running, detail), None
         transport = self._transports.get(spec.mode)
         if transport is None:
             why = f"this host runs no {spec.mode.value} workspace"
-            return detail, Ended(_result(refused=("capability_missing", 501), detail=why))
+            return detail, Ended(_result(refused=("capability_missing", 501), detail=why)), None
         parts = _Parts(self._client, item_id, running, self._flush_seconds, self._window_chars)
         ended: Ended | None = None
         try:
@@ -389,7 +406,6 @@ class ExecutorRelayImpl(ExecutorInterface):
                 await asyncio.wait({running.operation})
                 running.ended = time.monotonic()
                 ended = _ended(running.operation)
-        await parts.flush()
         if ended is None:
             ended = Ended(
                 _result(
@@ -398,21 +414,44 @@ class ExecutorRelayImpl(ExecutorInterface):
                     stderr="".join(running.printed["stderr"]),
                 )
             )
-        return detail, ended
+        return detail, ended, parts
+
+    async def _detail(self, item_id: UUID, handed: dict[str, Any] | None) -> ExecDetailView:
+        """The item's detail as its claim handed it, or, from a claim that
+        carries none, as its own route answers it."""
+        if handed is not None:
+            try:
+                return ExecDetailView.model_validate(handed)
+            except ValidationError as error:
+                log.warning("item %s: its claim's detail is unread: %s", item_id, error)
+        async with self._client() as client:
+            return await client.exec_detail(item_id)
 
     async def _kept(
-        self, item_id: UUID, detail: ExecDetailView | None, ended: Ended, running: Running
+        self,
+        item_id: UUID,
+        detail: ExecDetailView | None,
+        ended: Ended,
+        running: Running,
+        parts: _Parts | None,
+        *,
+        within: int | None = None,
     ) -> dict[str, Any]:
-        """The result to push once the objects it names are in the store:
-        what the item printed or listed, as its output, and a read's file,
-        each uploaded and named by its size and its digest. An output that
-        is not kept is said in the result; a read whose file is not sent is
-        refused."""
+        """The result to push once what it names is sent: what the item
+        printed or listed, as its output, and a read's file, each in the
+        result itself within the bound its detail names, or `within`, or
+        uploaded, and named by its size and its digest. The parts of its
+        output not yet sent go first, unless none went and its output rides
+        in the result: the command ended within its first window. An output
+        that is not kept is said in the result; a read whose file is not
+        sent is refused."""
         result = ended.result
         small = _small(result)
         if detail is None:
             return small
+        within = (detail.inline or 0) if within is None else within
         output = result["output"]
+        printed: bytes | None = None
         if detail.output is not None and result["outcome"]["refused"] is None:
             printed = json.dumps(
                 {
@@ -423,16 +462,28 @@ class ExecutorRelayImpl(ExecutorInterface):
                 ensure_ascii=False,
                 separators=(",", ":"),
             ).encode()
-            try:
-                size, digest = await self._objects.send(
-                    item_id, "output", detail.output, printed, running.lease_end
-                )
-            except NOT_SENT as error:
-                log.warning("item %s: its output was not kept: %s", item_id, error)
-                small["detail"] = _cut(small["detail"] or f"its output was not kept: {error}")
+        if parts is not None:
+            if printed is not None and _rides(len(printed), within) and not parts.pushed:
+                parts.drop()
             else:
-                small["output"] = {"size": size, "digest": digest}
+                await parts.flush()
+        if detail.output is not None and printed is not None:
+            if _rides(len(printed), within):
+                small["output"] = _inline(printed)
+            else:
+                try:
+                    size, digest = await self._objects.send(
+                        item_id, "output", detail.output, printed, running.lease_end
+                    )
+                except NOT_SENT as error:
+                    log.warning("item %s: its output was not kept: %s", item_id, error)
+                    small["detail"] = _cut(small["detail"] or f"its output was not kept: {error}")
+                else:
+                    small["output"] = {"size": size, "digest": digest}
         if detail.file_out is not None and ended.file is not None:
+            if _rides(ended.file.size, within):
+                small["file"] = _inline(await asyncio.to_thread(ended.file.path.read_bytes))
+                return small
             try:
                 size, digest = await self._objects.send(
                     item_id, "file", detail.file_out, ended.file, running.lease_end
@@ -828,20 +879,29 @@ class ExecutorRelayImpl(ExecutorInterface):
                 return
             running.held_until = time.monotonic() + self._lease_seconds
 
-    async def _push(self, item_id: UUID, result: dict[str, Any], held_until: float) -> None:
+    async def _push(
+        self,
+        item_id: UUID,
+        result: dict[str, Any],
+        held_until: float,
+        earlier: Callable[[], Awaitable[dict[str, Any]]] | None = None,
+    ) -> None:
         """Pushes how the item ended, tried again while its lease lasts: its
-        JSON as UTF-8. A result whose times are refused as invalid is pushed
-        once more without them: during a roll, the push may reach a replica
-        of an earlier release than the one that answered its detail, which
-        keeps no times, and the outcome still lands."""
+        JSON as UTF-8. A result refused as invalid that carries times, or
+        bytes inline, is pushed once more as an earlier release takes it:
+        without its times, and with what rode inline sent to the store
+        (`earlier`). During a roll, the push may reach a replica of an
+        earlier release than the one that answered its detail, which keeps
+        no times and takes nothing inline, and the outcome still lands."""
         try:
             try:
                 await self._pushed(item_id, result, held_until)
             except ApiError as error:
-                if error.status != 422 or "times" not in result:
+                if error.status != 422 or not ("times" in result or _inlined(result)):
                     raise
-                log.info("item %s: its times were refused (%s), so it goes without", item_id, error)
-                plain = {key: value for key, value in result.items() if key != "times"}
+                log.info("item %s: its result was refused (%s); it goes as before", item_id, error)
+                plain = await earlier() if earlier is not None and _inlined(result) else result
+                plain = {key: value for key, value in plain.items() if key != "times"}
                 await self._pushed(item_id, plain, held_until)
         except (ApiError, *WIRE_FAILURES) as error:
             # Settled already, by its lease, a stop, or the sweep: the first
@@ -885,10 +945,11 @@ async def _operate(
     fetched: Callable[[], None],
 ) -> Ended:
     """The one operation the item names, through the host's transport. A
-    read's file is spooled for its upload; a write's is downloaded and
-    checked before a byte of it reaches the workspace, and `fetched` marks
-    its command's start there: the download crosses the store, as a read's
-    upload does, and is no part of the command's time."""
+    read's file is spooled for its upload; a write's is downloaded, or
+    taken from its item, and checked before a byte of it reaches the
+    workspace, and `fetched` marks its command's start there: the download
+    crosses the store, as a read's upload does, and is no part of the
+    command's time."""
     request = detail.request
     match request["operation"]:
         case "run":
@@ -926,11 +987,16 @@ async def _operate(
             )
             return Ended(_result(offset=offset), file=spooled)
         case "write_file":
-            if detail.file_in is None or detail.url is None:
-                raise CapabilityMissing("the write names no object to download its file from")
             if not isinstance(transport, WritesFromFile):
                 raise CapabilityMissing(f"{transport.describe()} writes no file from disk")
-            spooled = await objects.fetch(detail.file_in, detail.url)
+            if isinstance(detail.file_in, InlineObjectView):
+                spooled = await objects.spooled(detail.file_in)
+            elif detail.file_in is not None and detail.url is not None:
+                spooled = await objects.fetch(detail.file_in, detail.url)
+            else:
+                raise CapabilityMissing(
+                    "the write names no file, and no object to download it from"
+                )
             fetched()
             try:
                 await transport.write_file_from(
@@ -985,6 +1051,15 @@ class _Parts:
         self._size = 0
         self._last = time.monotonic()
         self._lock = asyncio.Lock()
+
+    @property
+    def pushed(self) -> bool:
+        """Whether a window of the output went before its end."""
+        return self._seq > 0
+
+    def drop(self) -> None:
+        """What is gathered and not sent, let go: the result carries it."""
+        self._pending, self._size = [], 0
 
     async def take(self, stream: str, text: str) -> None:
         self._running.printed[stream].append(text)
@@ -1085,6 +1160,25 @@ def _result(
             "detail": detail,
         },
     }
+
+
+def _rides(size: int, within: int) -> bool:
+    """Whether `size` bytes ride in the result: within the bound the detail
+    names, `within`. Nothing rides there, not even an empty file, when it
+    names none, as a platform or a runner of an earlier release does."""
+    return 0 < within and size <= within
+
+
+def _inlined(result: dict[str, Any]) -> bool:
+    """Whether a result carries an output or a file inline."""
+    return any("data" in (result.get(name) or {}) for name in ("output", "file"))
+
+
+def _inline(data: bytes) -> dict[str, Any]:
+    """An output or a file that rides in the result: its size, its digest,
+    and its bytes in base64."""
+    digest = DIGEST_SCHEME + hashlib.sha256(data).hexdigest()
+    return {"size": len(data), "digest": digest, "data": base64.b64encode(data).decode()}
 
 
 def _small(result: dict[str, Any]) -> dict[str, Any]:

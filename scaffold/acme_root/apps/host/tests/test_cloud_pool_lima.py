@@ -13,9 +13,10 @@ goes, and no disk of it is kept. The next loop's VM boots the pool's
 image, and its new host takes the directory back: the same file, and
 no Docker image, which lived outside it. Each VM is a claim counted once,
 whose wait ends as its prepare returns, and the restore is timed. The
-host's environment holds nothing of the platform's. What a command printed, and every part,
-crosses the store, here the local impl's, served on this host's
-loopback beside the API, which the guest reaches the same way.
+host's environment holds nothing of the platform's. Every part of the
+directory crosses the store, as a command's output past what rides in
+its result does, here the local impl's, served on this host's loopback
+beside the API, which the guest reaches the same way.
 
 Needs a migrated database (`make migrate`), Lima and a hypervisor, and the
 pool's image, which it builds when it is missing

@@ -5,8 +5,12 @@ import logging
 import random
 from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import datetime, timedelta
+from typing import Any
 from uuid import UUID
 
+from pydantic import ValidationError
+
+from acme.infra.exceptions import InfraException
 from acme.infra.topics import (
     EntityChangedPayload,
     TopicPayload,
@@ -16,13 +20,21 @@ from acme.infra.topics import (
 )
 from acme.om.base import utcnow
 from acme.om.context import RequestContext
-from acme.om.exceptions import ValidationFailed
+from acme.om.exceptions import OmException, ValidationFailed
 from acme.om.exec_relay import ExecRelayManagerInterface
 from acme.om.exec_relay.rules import CONTROL_KIND
-from acme.om.exec_relay.types.exec import REQUESTS, PrepareAnswer, SentPart, SnapshotAnswer
+from acme.om.exec_relay.types.exec import (
+    REQUESTS,
+    ObjectRef,
+    PrepareAnswer,
+    SentPart,
+    SnapshotAnswer,
+)
 from acme.om.hosts.types.host import HostIdentity
 from acme.om.placement.rules import host_lane, pool_lane
+from acme.om.placement.types.work import ExecPayload
 from acme.om.retention.crossing import Crossing
+from acme.om.work.types.work_item import WorkItem
 from acme.services.api.services.exec_relay import ExecRelayServiceInterface
 from acme.services.api.types.exec_relay import (
     ControlKind,
@@ -30,6 +42,7 @@ from acme.services.api.types.exec_relay import (
     CrossingBody,
     ExecDetailView,
     ExecLeaseView,
+    InlineObjectView,
     IssuedObjectPartView,
     IssuedObjectSlotView,
     IssuedObjectUploadView,
@@ -111,15 +124,38 @@ class ExecRelayServiceImpl(ExecRelayServiceInterface):
             else IssuedObjectSlotView(reference=detail.output.reference, key=detail.output.key),
             file_in=None
             if detail.file_in is None
-            else IssuedObjectView.model_validate(detail.file_in.model_dump()),
+            else IssuedObjectView.model_validate(detail.file_in.model_dump())
+            if isinstance(detail.file_in, ObjectRef)
+            else InlineObjectView(
+                size=detail.file_in.size,
+                digest=detail.file_in.digest,
+                data=base64.b64encode(detail.file_in.data or b"").decode(),
+            ),
             file_out=None
             if detail.file_out is None
             else IssuedObjectSlotView(reference=detail.file_out.reference, key=detail.file_out.key),
             url=detail.url,
             url_expires_at=detail.url_expires_at,
-            # This platform keeps a host's times (`ExecResult.times`).
+            # This platform keeps a host's times (`ExecResult.times`), and
+            # the item says how long an output or a file its runner reads in
+            # a result is.
             times=True,
+            inline=detail.inline,
         )
+
+    async def claimed(
+        self, rctx: RequestContext, host: HostIdentity, row: WorkItem
+    ) -> dict[str, Any] | None:
+        """The detail of the `exec` item a claim just handed `host`, as its
+        own route answers it, for the claim to carry. None when it cannot be
+        read now: the claim stands, and the host reads it by that route."""
+        try:
+            item_id = ExecPayload.model_validate(row.payload).item_id
+            detail = await self.detail(rctx, host, item_id)
+        except (OmException, InfraException, ValidationError) as error:
+            log.warning("exec row %s: its detail was not read with its claim: %s", row.id, error)
+            return None
+        return detail.model_dump(mode="json")
 
     async def issue_upload(
         self, rctx: RequestContext, host: HostIdentity, item_id: UUID, body: UploadRequest

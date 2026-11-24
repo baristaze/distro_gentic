@@ -1,4 +1,4 @@
-# ADR 2066: Every file and output an exec item moves crosses the store by a URL signed for it alone
+# ADR 2066: A file or an output past its bound crosses the store by a URL signed for it alone
 
 **Status**: accepted (2026-10-23)
 
@@ -19,15 +19,18 @@ whatever its size, and every upload is multipart
 
 ## Decision
 
-**A file or an output is an object, never a field.** An item names an
-object in the store's `tool-outputs` bucket, under its tenant, at
-`exec_relay/<session>/<item>/<dispatch>/<kind>`, for each thing it moves:
-the file a write hands its host, the file a read's host uploads, and
-what a command, a call of a server's tool, or a listing printed, its
-`output`. The item carries each object's reference, and of a file it
-hands, its size and its digest. A result names each object its host
-uploaded by its size and its digest. Nothing else of the bytes is in an
-item, a result, or any request to the API.
+**A file or an output past 64 KiB is an object, never a field.** One
+within it rides in the item or its result
+([ADR 2076](2076-a-small-exec-payload-rides-in-its-item-or-its-result-and-a-claim-carries-its-items-detail.md)).
+For one past it, an item names an object in the store's `tool-outputs`
+bucket, under its tenant, at
+`exec_relay/<session>/<item>/<dispatch>/<kind>`, for each thing it may
+move: the file a write hands its host, the file a read's host uploads,
+and what a command, a call of a server's tool, or a listing printed,
+its `output`. The item carries each object's reference, and of a file
+it hands, its size and its digest. A result names each object its host
+uploaded by its size and its digest. Nothing else of an object's bytes
+is in an item, a result, or any request to the API.
 
 **Each object is sealed under a key of its own.** It is a run of 1 MiB
 frames, each AES-256-GCM with a nonce of its own, bound to the object's
@@ -47,8 +50,9 @@ of an item, which only the host that holds it reads, hands it:
 - for an object it uploads, its reference and its key. It asks
   `POST /v1/hosts/me/exec/{id}/upload` with the size it seals, and is
   answered the parts the store does not hold, each by a URL signed for
-  its number and its length, good for 15 minutes. Asked again, it is
-  answered only the parts still missing, so an upload cut off resumes.
+  its number and its length, good for 15 minutes. The first ask starts
+  the store's upload. Asked again, it is answered only the parts still
+  missing, so an upload cut off resumes.
 
 The key opens that object and no other, and each URL reads or writes it
 alone: the store refuses a URL whose path was changed, and one past its
@@ -68,18 +72,21 @@ the lease, as it was last renewed, lasts. A part the store keeps
 refusing ends the item with a result its host pushes, never with the
 lease running out.
 
-**A result is a few KiB.** It holds the outcome, why its host refused
-the item (1,000 characters at most), the offset a read echoes, and each
-object's size and digest; `RESULT_CHARS` is derived from them. A relayed
-command keeps at most 1,000,000 characters of each stream, the engine's
-default, and the host sends its result as UTF-8 JSON. The route that
-takes the result and the one that signs an upload's parts are holder's
-calls, and neither carries bytes.
+**A result is bounded.** It holds the outcome, why its host refused
+the item (1,000 characters at most), the offset a read echoes, each
+object's size and digest, and what rides inline (ADR 2076);
+`RESULT_CHARS` is derived from them. A relayed command keeps at most
+1,000,000 characters of each stream, the engine's default, and the host
+sends its result as UTF-8 JSON. The route that takes the result and the
+one that signs an upload's parts are holder's calls, and neither carries
+an object's bytes.
 
 **The platform reads only what matches.** A result completes the upload
 of each object it names before it lands, so whoever reads the item done
-finds its objects whole. A result its host sends again, after a first
-push that completed an upload and then failed, finds that upload gone
+finds its objects whole. A result that names an object whose upload
+its host never started names none whole. A result its host sends again,
+after a first push that completed an upload and then failed, finds that
+upload gone
 and the object at its reference, which stands for it. An output that is
 not whole is not kept, and the result says so; a read whose file is not
 is refused. The runner reads an output, or takes a read's file, from the
@@ -94,10 +101,11 @@ the store once its item settles. A read's file leaves once the runner
 takes it, or once its item settles without one. An upload a result names
 nothing of is aborted. An item's output is its record, so it stays while
 the item's output stays, until the session's purge, which removes every
-object its items moved. A claim after the first starts each upload over,
-so a host sends only what its own claim sealed; an item sent again moves
-objects of its new dispatch, and the last one's go. A version the bucket
-keeps of a removed object is sealed under a key that goes with its item.
+object its items moved. A claim after the first lets go of each upload
+the last one started, so a host sends only what its own claim sealed; an
+item sent again moves objects of its new dispatch, and the last one's
+go. A version the bucket keeps of a removed object is sealed under a key
+that goes with its item.
 
 **The exec wire moves to version 2.** A host of an earlier release reads
 a file and an output inside the item, so the floor rises with it: such a
@@ -111,13 +119,13 @@ second path.
 
 ## Consequences
 
-- One path carries every size. A relayed read reads what its caller
-  asks, so a bundle within the repository's 512 MiB bound crosses, and a
-  host's memory holds a few frames of a file of any size.
-- An item that moves bytes costs the store a few calls: an upload
-  started as it is sent, its parts signed, its completion, a read, and a
-  removal. A command's output goes this way however small it is, as ADR
-  0107 has no shortcut for a small file.
+- One path carries every size past 64 KiB. A relayed read reads what its
+  caller asks, so a bundle within the repository's 512 MiB bound
+  crosses, and a host's memory holds a few frames of a file of any size.
+- An item whose bytes cross as an object costs the store a few calls:
+  an upload started as its host first asks, its parts signed, its
+  completion, a read, and a removal. One within 64 KiB costs it none
+  (ADR 2076).
 - The runner still holds a write's file and a read's file whole, since
   the engine's transport hands and takes bytes.
 - The engine's transport types gain `WritesFromFile`, a protocol the

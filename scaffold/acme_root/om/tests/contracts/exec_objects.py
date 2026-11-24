@@ -1,7 +1,8 @@
 """A host's side of the objects an `exec` item moves, in a test: what it
 printed and the file it read, sealed and sent straight to the local store
-by the parts the relay signs, and the file a write hands it, read back by
-the URL its detail carries. Each goes as a host sends it, never through a
+by the parts the relay signs, or, `inline`, within the bound in its result;
+and the file a write hands it, read back by the URL its detail carries, or
+from the detail itself. Each goes as a host sends it, never through a
 service."""
 
 import base64
@@ -20,9 +21,11 @@ from acme.om.base import new_id
 from acme.om.context import AppContext, AppType, RequestContext
 from acme.om.exec_relay import ExecRelayManagerInterface
 from acme.om.exec_relay.types.exec import (
+    INLINE_BYTES,
     ExecOutcome,
     ExecResult,
     ObjectKind,
+    ObjectRef,
     ObjectSlot,
     Printed,
     StoredObject,
@@ -104,15 +107,24 @@ async def finish(
     file: bytes | None = None,
     offset: int = 0,
     times: Any = None,
+    inline: bool = False,
 ) -> None:
     """How the item ended, pushed as a host pushes it: its output uploaded
-    first when it has one, and a read's file. `times` goes in the result's
-    JSON as it is, as a host's times do, whatever it holds."""
+    first when it has one, and a read's file; with `inline`, each within
+    `INLINE_BYTES` rides in the result instead, as a host of a platform that
+    takes it sends it. `times` goes in the result's JSON as it is, as a
+    host's times do, whatever it holds."""
     detail = await relay.detail(_request(), host, item_id)
+
+    async def sent(kind: ObjectKind, data: bytes) -> StoredObject:
+        if inline and len(data) <= INLINE_BYTES:
+            return StoredObject(size=len(data), digest=digest_of(data), data=data)
+        return await uploaded(relay, buckets, host, item_id, kind, data)
+
     output = None
     if detail.output is not None:
-        output = await uploaded(relay, buckets, host, item_id, "output", printed(stdout, stderr))
-    read = None if file is None else await uploaded(relay, buckets, host, item_id, "file", file)
+        output = await sent("output", printed(stdout, stderr))
+    read = None if file is None else await sent("file", file)
     result = ExecResult(
         outcome=outcome or ExecOutcome(exit_code=0), output=output, file=read, offset=offset
     )
@@ -125,11 +137,15 @@ async def finish(
 async def handed(
     relay: ExecRelayManagerInterface, buckets: BucketsInterface, host: HostIdentity, item_id: UUID
 ) -> bytes:
-    """The file a write hands its host, read by the URL its detail carries
-    and opened with the key it hands."""
+    """The file a write hands its host: in its detail, or read by the URL
+    its detail carries and opened with the key it hands."""
     detail = await relay.detail(_request(), host, item_id)
     named = detail.file_in
-    assert named is not None and detail.url is not None, f"exec item {item_id} writes no file"
+    if isinstance(named, StoredObject) and named.data is not None:
+        return named.data
+    assert isinstance(named, ObjectRef) and detail.url is not None, (
+        f"exec item {item_id} writes no file"
+    )
     async with store_of(buckets) as store:
         answer = await store.get(detail.url)
     assert answer.status_code == 200, answer.text
