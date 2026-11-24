@@ -53,6 +53,7 @@ from acme.om.exec_relay.rules import (
     dispatch_objects,
     exec_id,
     held_by,
+    host_times,
     max_attempts,
     object_reference,
     repeatable,
@@ -77,6 +78,7 @@ from acme.om.exec_relay.types.exec import (
     ExecRequest,
     ExecResult,
     ExecState,
+    ExecTimes,
     IssuedObjectPart,
     IssuedObjectUpload,
     ItemContent,
@@ -743,15 +745,22 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             # Once the session's key is gone, so is the text it sealed.
             if opened is not None:
                 texts.extend(part for part in PARTS.validate_json(opened) if part.seq > after_seq)
-        output = None
+        output = times = None
         if item.state is ExecState.DONE:
             # A reader whose next part the stream let go reads the output
             # whole, never its tail alone.
             if texts and texts[0].seq != after_seq + 1:
                 texts = []
             output = await self._output_of(ctx, item)
+            if item.settled_at is not None:
+                times = ExecTimes(
+                    created_at=item.created_at,
+                    claimed_at=item.claimed_at,
+                    settled_at=item.settled_at,
+                    host=item.host_times,
+                )
         return ExecProgress(
-            state=item.state, parts=tuple(texts), outcome=item.outcome, output=output
+            state=item.state, parts=tuple(texts), outcome=item.outcome, output=output, times=times
         )
 
     async def stop(
@@ -863,6 +872,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             item,
             now,
             state=ExecState.RUNNING,
+            claimed_at=now,
             claim=row.model_dump(mode="json"),
             lease_expires_at=row.lease_expires_at,
             request=request,
@@ -1010,7 +1020,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             result = result.model_copy(update={"output": None, "file": None})
         else:
             result = await self._landed(ctx, contents, result)
-        kept = ResultContent.model_validate(result.model_dump(exclude={"outcome"}))
+        kept = ResultContent.model_validate(result.model_dump(exclude={"outcome", "times"}))
         sealed = await self._seal.seal(
             ctx, item.agent_session_id, item.key, kept.model_dump_json().encode()
         )
@@ -1025,6 +1035,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
                 output=sealed,
                 result_sha256=crossing.sha256,
                 settled_at=now,
+                host_times=host_times(item, result.times, now),
                 claim=None,
                 lease_expires_at=None,
             )

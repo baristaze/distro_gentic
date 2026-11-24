@@ -32,6 +32,7 @@ from host_support import (
     docker_runs,
     probes,
 )
+from prometheus_client import REGISTRY
 
 from acme.apps.host import agent as host_agent
 from acme.apps.host import main as host_main
@@ -335,6 +336,84 @@ async def test_a_host_echoes_the_offset_it_read_from_and_a_read_from_the_start_c
     # sent: neither names an offset. The read past it is echoed.
     assert [read.get("offset") for read in wire.asked] == [None, 5]
     assert [answer.get("offset") for answer in wire.answered] == [None, 5]
+
+
+class Read:
+    """The runner's clock, noting each time it is read."""
+
+    def __init__(self) -> None:
+        self.reads: list[datetime] = []
+
+    def __call__(self) -> datetime:
+        now = datetime.now(UTC)
+        self.reads.append(now)
+        return now
+
+
+PHASES = ("queued", "detail", "start", "command", "store", "read")
+
+
+def observed(operation: str) -> dict[str, tuple[float, float]]:
+    """How many observations of each phase of `operation`, and of its
+    overhead, the runner's metrics hold, and their sum."""
+
+    def sample(name: str, labels: dict[str, str]) -> tuple[float, float]:
+        count = REGISTRY.get_sample_value(f"{name}_count", labels) or 0.0
+        return count, REGISTRY.get_sample_value(f"{name}_sum", labels) or 0.0
+
+    held = {
+        phase: sample("acme_exec_relay_phase_seconds", {"phase": phase, "operation": operation})
+        for phase in PHASES
+    }
+    held["overhead"] = sample("acme_exec_relay_overhead_seconds", {"operation": operation})
+    return held
+
+
+async def test_a_relayed_command_is_measured_through_every_phase_and_its_overhead_is_all_but_it(
+    api: Stack, tmp_path: Path
+) -> None:
+    wire = Crossed(api.transport)
+    relayed = await relay_to(api, tmp_path, wire=wire)
+    clock = Read()
+    runner = TransportRelayImpl(
+        lambda: api.container.managers.exec_relay,
+        lambda: RequestContext(request_id=new_id(), app=RUNNER),
+        first_poll=timedelta(milliseconds=5),
+        last_poll=timedelta(milliseconds=20),
+        clock=clock,
+    )
+    before = observed("run")
+    spec = command(relayed.epoch, "sleep", "0.3")
+    waiting = asyncio.ensure_future(runner.run(relayed.workspace, spec, seal=NO_SEAL))
+    (item_id,) = await claims(relayed.host, waiting)
+    assert (await waiting).exit_code == 0
+    # The host timed its parts by its own clock and sent them with its
+    # result: the command took what it slept.
+    (answered,) = wire.answered
+    times = answered["times"]
+    assert sorted(times) == ["command", "detail", "start"]
+    assert times["detail"] >= 0 and times["start"] >= 0 and 0.3 <= times["command"] < 3
+    progress = await api.container.managers.exec_relay.watch(
+        _request(), api.owner.org_id, item_id, -1
+    )
+    assert progress.times is not None and progress.times.host is not None
+    gained = {
+        name: (count - before[name][0], total - before[name][1])
+        for name, (count, total) in observed("run").items()
+    }
+    # One observation of each phase, the host's own as it timed them; and
+    # together they are the item's whole time, from its making to the read.
+    assert {name: count for name, (count, _) in gained.items()} == dict.fromkeys(gained, 1.0)
+    for phase in ("detail", "start", "command"):
+        assert gained[phase][1] == pytest.approx(times[phase])
+    sent_at, read_at = clock.reads[0], clock.reads[-1]
+    whole = (read_at - progress.times.created_at).total_seconds()
+    assert sum(gained[phase][1] for phase in PHASES) == pytest.approx(whole)
+    # The overhead is the time from the runner's send to its read, less the
+    # command's own.
+    overhead = (read_at - sent_at).total_seconds() - times["command"]
+    assert gained["overhead"][1] == pytest.approx(overhead)
+    assert gained["overhead"][1] < whole
 
 
 class Sized(httpx.AsyncBaseTransport):

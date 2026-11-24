@@ -20,6 +20,7 @@ from typing import Any, cast
 from uuid import UUID
 
 import pytest
+from prometheus_client import REGISTRY
 
 from acme.infra.agent_workspaces import (
     AgentWorkspace,
@@ -64,6 +65,7 @@ from acme.om.exec_relay.types.exec import (
     ExecItem,
     ExecOutcome,
     ExecOutput,
+    ExecPhase,
     ExecProgress,
     ExecResult,
     ExecState,
@@ -297,6 +299,7 @@ class Host:
         data: bytes | None = None,
         offset: int = 0,
         outcome: ExecOutcome | None = None,
+        times: Any = None,
     ) -> None:
         await exec_objects.finish(
             self.managers.exec_relay,
@@ -307,6 +310,7 @@ class Host:
             stdout=stdout,
             file=data,
             offset=offset,
+            times=times,
         )
 
 
@@ -367,6 +371,77 @@ async def test_a_relayed_call_runs_once_on_its_host_streamed_and_stored_under_it
     )
     assert recovered is not None and recovered.stdout == "building\ndeployed\n"
     assert await host.claim() is None and len(host.handed) == 1
+
+
+# A host's times are a measure alone: a result whose times are missing, are
+# no numbers, are below zero, are longer than the platform held the item,
+# or end past its deadline settles as it would without them, and records
+# no phase it cannot time.
+
+
+def counted(operation: str = "run") -> dict[str, float]:
+    """How many observations of each phase of `operation`, and of its
+    overhead, the metrics hold."""
+    counts = {
+        phase.value: REGISTRY.get_sample_value(
+            "acme_exec_relay_phase_seconds_count", {"phase": phase.value, "operation": operation}
+        )
+        or 0.0
+        for phase in ExecPhase
+    }
+    counts["overhead"] = (
+        REGISTRY.get_sample_value(
+            "acme_exec_relay_overhead_seconds_count", {"operation": operation}
+        )
+        or 0.0
+    )
+    return counts
+
+
+@pytest.mark.parametrize(
+    ("times", "seconds", "held"),
+    [
+        pytest.param(None, 30, 0, id="missing"),
+        pytest.param({"detail": -0.5, "start": 0, "command": 0.001}, 30, 0, id="negative"),
+        pytest.param({"detail": 0, "start": 0, "command": "fast"}, 30, 0, id="no-number"),
+        pytest.param({"detail": 0, "start": float("nan"), "command": 0}, 30, 0, id="not-finite"),
+        pytest.param("soon", 30, 0, id="no-times"),
+        pytest.param({"detail": 0, "start": 0, "command": 60}, 300, 0, id="longer-than-held"),
+        pytest.param({"detail": 0, "start": 0, "command": 0.25}, 0.2, 0.3, id="past-deadline"),
+    ],
+)
+async def test_a_hosts_bad_times_leave_its_result_as_it_was_and_time_no_phase_of_theirs(
+    wall: Wall, times: Any, seconds: float, held: float
+) -> None:
+    host = Host(wall, wall.holder)
+    spec = command(wall.epoch, seconds=seconds)
+    before = counted()
+
+    async def on_the_host() -> None:
+        row = await host.claim_soon()
+        await asyncio.sleep(held)
+        await host.finish(row, 0, "deployed\n", times=times)
+
+    ran, _ = await asyncio.gather(
+        transport(wall.managers).run(wall.workspace, spec, seal=NO_SEAL), on_the_host()
+    )
+    assert (ran.exit_code, ran.stdout, ran.timed_out) == (0, "deployed\n", False)
+    (row,) = host.handed
+    _, progress = await item_of(wall, row)
+    assert progress.state is ExecState.DONE and progress.times is not None
+    assert progress.times.claimed_at is not None and progress.times.host is None
+    # Its queue and its read are the platform's own, and are timed; its
+    # host's parts, its store, and its overhead are not.
+    gained = {name: count - before[name] for name, count in counted().items()}
+    assert gained == {
+        "queued": 1,
+        "detail": 0,
+        "start": 0,
+        "command": 0,
+        "store": 0,
+        "read": 1,
+        "overhead": 0,
+    }
 
 
 async def test_a_resumed_run_attaches_to_the_first_execution_and_never_starts_another(

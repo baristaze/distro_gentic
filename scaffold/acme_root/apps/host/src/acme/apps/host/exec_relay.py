@@ -20,7 +20,10 @@ runs through its own local transport, in the workspace it holds,
 prepared again first, on its base when it has one, so an instance that
 stopped since starts anew over its files. The output streams back a part
 at a time and the result is pushed once, each with the hash the host
-declares of the bytes it sends. From its claim until its result, its
+declares of the bytes it sends. The result carries how long the item's
+parts took here, by the host's own clock: from its claim to its detail's
+read, from there to its operation's start, and the operation, which the
+platform measures the relay by. From its claim until its result, its
 detail's read and its prepare included, the host renews its lease, and a
 stop from the control stream ends the command at once: the transport ends
 its whole process tree.
@@ -183,17 +186,35 @@ class Ended:
 @dataclass
 class Running:
     """One item while it is here: the operation in flight, what stopped it,
-    and what it printed so far, for the result a stop answers with."""
+    and what it printed so far, for the result a stop answers with; and
+    when, by this host's clock, it was claimed, its detail read, and its
+    operation started and ended."""
 
     operation: asyncio.Future[Ended] | None = None
     stopped: str | None = None
     held_until: float = 0.0  # when its lease ends, by this host's clock
     printed: dict[str, list[str]] = field(default_factory=lambda: {"stdout": [], "stderr": []})
+    claimed: float = field(default_factory=time.monotonic)
+    read: float | None = None
+    started: float | None = None
+    ended: float | None = None
 
     def lease_end(self) -> float:
         """When its lease ends as it was last renewed: what a transfer that
         outlasts one lease is tried again within."""
         return self.held_until
+
+    def times(self) -> dict[str, float] | None:
+        """How long each part of it took here, in seconds, which its result
+        carries: from its claim to its detail read, from that read to its
+        operation's start, and the operation. None when it never started."""
+        if self.read is None or self.started is None or self.ended is None:
+            return None
+        return {
+            "detail": self.read - self.claimed,
+            "start": self.started - self.read,
+            "command": self.ended - self.started,
+        }
 
 
 class ExecutorRelayImpl(ExecutorInterface):
@@ -315,6 +336,9 @@ class ExecutorRelayImpl(ExecutorInterface):
             if running.stopped == "revoke":
                 log.info("item %s: its lease was revoked, so nothing is pushed", item_id)
                 return
+            times = running.times()
+            if times is not None:
+                result["times"] = times
             await self._push(item_id, result, running.held_until)
         finally:
             renewal.cancel()
@@ -328,6 +352,7 @@ class ExecutorRelayImpl(ExecutorInterface):
         detail it was read by."""
         async with self._client() as client:
             detail = await client.exec_detail(item_id)
+        running.read = time.monotonic()
         spec = IsolationSpec.model_validate(detail.spec)
         reads = (detail.location,) if spec.mode is IsolationMode.HOST else ()
         differs = unlike(ask, spec, reads)
@@ -348,10 +373,12 @@ class ExecutorRelayImpl(ExecutorInterface):
             ended = Ended(_result(refused=(error.code, error.http_status), detail=error.message))
         else:
             if running.stopped is None:
+                running.started = time.monotonic()
                 running.operation = asyncio.ensure_future(
                     _operate(transport, self._objects, workspace, detail, parts.take)
                 )
                 await asyncio.wait({running.operation})
+                running.ended = time.monotonic()
                 ended = _ended(running.operation)
         await parts.flush()
         if ended is None:
@@ -413,8 +440,10 @@ class ExecutorRelayImpl(ExecutorInterface):
         and no transport. The server starts for the call, and a stop ends
         it with its process."""
         if running.stopped is None:
+            running.started = time.monotonic()
             running.operation = asyncio.ensure_future(self._answered(detail))
             await asyncio.wait({running.operation})
+            running.ended = time.monotonic()
             ended = _ended(running.operation)
             if ended is not None:
                 return ended

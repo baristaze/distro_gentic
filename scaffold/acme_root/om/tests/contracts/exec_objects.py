@@ -5,7 +5,9 @@ the URL its detail carries. Each goes as a host sends it, never through a
 service."""
 
 import base64
+import json
 from collections.abc import Sequence
+from typing import Any
 from uuid import UUID
 
 import httpx
@@ -101,9 +103,11 @@ async def finish(
     stderr: str = "",
     file: bytes | None = None,
     offset: int = 0,
+    times: Any = None,
 ) -> None:
     """How the item ended, pushed as a host pushes it: its output uploaded
-    first when it has one, and a read's file."""
+    first when it has one, and a read's file. `times` goes in the result's
+    JSON as it is, as a host's times do, whatever it holds."""
     detail = await relay.detail(_request(), host, item_id)
     output = None
     if detail.output is not None:
@@ -113,6 +117,8 @@ async def finish(
         outcome=outcome or ExecOutcome(exit_code=0), output=output, file=read, offset=offset
     )
     data = result.model_dump_json().encode()
+    if times is not None:
+        data = json.dumps({**json.loads(data), "times": times}).encode()
     await relay.push_result(_request(), host, item_id, declared(CrossingKind.RESULT, data), data)
 
 

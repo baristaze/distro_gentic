@@ -8,10 +8,18 @@ object's reference, its size, its digest, and that key."""
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from pydantic import ConfigDict, Field, TypeAdapter, model_validator
+from pydantic import (
+    ConfigDict,
+    Field,
+    TypeAdapter,
+    ValidationError,
+    ValidatorFunctionWrapHandler,
+    field_validator,
+    model_validator,
+)
 
 from acme.infra.agent_workspaces import IsolationSpec
 from acme.infra.transports import USER, FileEntry, SecretUse
@@ -222,12 +230,34 @@ class ResultContent(OmBase):
     file: StoredObject | None = None
 
 
+class HostTimes(OmBase):
+    """How long the host that ran an item took over each part of it, in
+    seconds by its own clock: from its claim to its read of the item's
+    detail, from that read to the command's start, the workspace's prepare
+    included, and the command itself."""
+
+    detail: float = Field(ge=0, allow_inf_nan=False)
+    start: float = Field(ge=0, allow_inf_nan=False)
+    command: float = Field(ge=0, allow_inf_nan=False)
+
+
 class ExecResult(ResultContent):
     """What a host pushes once an item ends, as it crosses the wall: how it
     ended, and what it says of it. What it printed and what it read are in
-    the objects it names, never here."""
+    the objects it names, never here. Its host's times, when it sends them,
+    are a measure alone: times that are not a number each, or are below
+    zero, read as none, and the result stands."""
 
     outcome: ExecOutcome
+    times: HostTimes | None = None
+
+    @field_validator("times", mode="wrap")
+    @classmethod
+    def _times_or_none(cls, value: Any, handler: ValidatorFunctionWrapHandler) -> Any:
+        try:
+            return handler(value)
+        except ValidationError:
+            return None
 
 
 class ExecOutput(OmBase):
@@ -275,6 +305,11 @@ class ExecItem(Identifiable, Trackable):
     output: bytes | None = Field(default=None, repr=False)  # the sealed `ResultContent`
     result_sha256: str | None = None  # the hash its result crossed with
     settled_at: datetime | None = None
+    # When a host's claim last took it, by the platform's clock, and the
+    # times its host sent with its result, kept only while they agree with
+    # that clock (`rules.host_times`).
+    claimed_at: datetime | None = None
+    host_times: HostTimes | None = None
     version: int = Field(default=1, ge=1)
 
 
@@ -300,14 +335,39 @@ PARTS: TypeAdapter[tuple[PartText, ...]] = TypeAdapter(tuple[PartText, ...])
 holds, sealed."""
 
 
+class ExecPhase(StrEnum):
+    """Where a relayed item's time goes, from its send to the runner's read
+    of how it ended."""
+
+    QUEUED = "queued"  # sent to claimed, the host's wake included
+    DETAIL = "detail"  # claimed to its host's read of its detail
+    START = "start"  # that read to the command's start, the prepare included
+    COMMAND = "command"  # the command, as its host timed it
+    STORE = "store"  # the command's end to its result stored, its uploads included
+    READ = "read"  # the result stored to the runner's read of it
+
+
+class ExecTimes(OmBase):
+    """When a done item was made, claimed, and settled, by the platform's
+    clock, and its host's own times while they agree with it: what the
+    runner reads its phases from (`rules.phases`)."""
+
+    created_at: datetime
+    claimed_at: datetime | None = None
+    settled_at: datetime
+    host: HostTimes | None = None
+
+
 class ExecProgress(OmBase):
     """What the runner reads of an item it waits on: its state, the parts
-    after the last it read, and its result once it is done."""
+    after the last it read, and its result and its times once it is
+    done."""
 
     state: ExecState
     parts: tuple[PartText, ...] = ()
     outcome: ExecOutcome | None = None
     output: ExecOutput | None = None
+    times: ExecTimes | None = None
 
 
 class ExecDetail(OmBase):
