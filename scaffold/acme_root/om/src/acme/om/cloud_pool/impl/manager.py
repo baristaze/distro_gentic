@@ -18,6 +18,12 @@ size. A start is inline for a session's prepare, bounded by the VMs' own
 boot bound, as the VM workspace provider's is; a warm VM starts in the
 background, since nothing waits on it. A cold start's boot, from its
 start to its host's enrollment, is a metric; a warm claim records none.
+Each claim counts once, by how it got its VM, at the moment it got it: a
+warm VM taken, a new one started, the session's own found running and
+sealed, or that one started again. A prepare asked again before the
+claim's prepare returned is the same claim, and counts none. The claim
+waits until the first command on its VM, which this process records as the
+transport says it starts.
 
 Every path that starts a VM has the one that lets it go: a session's
 run's end, its release after the grace, its purge, its tenant's purge,
@@ -38,6 +44,7 @@ its sweep removes them once the session has been idle past
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Self
 from uuid import UUID
@@ -53,7 +60,11 @@ from acme.infra.agent_workspaces import (
     VmSize,
 )
 from acme.infra.exceptions import InfraException
-from acme.infra.observability import CLOUD_POOL_BOOT_SECONDS
+from acme.infra.observability import (
+    CLOUD_POOL_BOOT_SECONDS,
+    CLOUD_POOL_CLAIMS,
+    CLOUD_POOL_FIRST_COMMAND_SECONDS,
+)
 from acme.infra.vms import SeedsInterface, VmsInterface, VmSpec, VmState
 from acme.om.agent_workspaces.placed import PlacedWorkspacesInterface
 from acme.om.base import EMPTY_UUID, OmBase, new_id, utcnow
@@ -74,7 +85,7 @@ from acme.om.cloud_pool.storage import CloudPoolStorageInterface
 from acme.om.cloud_pool.types.archive import PoolArchive
 from acme.om.cloud_pool.types.limits import MOST_VMS, Full, PoolLimits
 from acme.om.cloud_pool.types.sizes import SIZES, PoolSizes
-from acme.om.cloud_pool.types.vm import PoolVm
+from acme.om.cloud_pool.types.vm import ClaimSource, PoolVm
 from acme.om.context import Permission, RequestContext, TenantContext
 from acme.om.exceptions import InvalidCredential
 from acme.om.exec_relay.manager import ExecRelayManagerInterface
@@ -87,6 +98,22 @@ from acme.om.tenancy.rules import hash_token
 from acme.timing import Retries, RetryPolicy
 
 log = logging.getLogger(__name__)
+
+CLAIMS_KEPT = 10_000
+"""The most claims a process keeps waiting for their first command. A loop
+that runs none leaves its claim until its session's next, or its VM goes;
+past this many, the oldest goes unrecorded."""
+
+
+@dataclass
+class Claim:
+    """A claim this process made of a session's VM: how it got it, when,
+    and whether its prepare returned."""
+
+    source: ClaimSource
+    at: datetime
+    prepared: bool = False
+
 
 FULL_CAUSES = {
     Full.POOL: "no VM of the cloud pool is free yet",
@@ -218,6 +245,9 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         self._sleep = sleep
         self._clock = clock
         self._starting: set[asyncio.Task[None]] = set()
+        # Each claim this process made, by session, until its first command:
+        # its source, its moment, and whether its prepare returned.
+        self._claims: dict[UUID, Claim] = {}
 
     async def runs(self, spec: IsolationSpec) -> bool:
         return bool(self._options.image) and spec.mode is IsolationMode.VM
@@ -249,7 +279,10 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         if vm.sealed_at is None:
             await self._seeds.seal(vm.name)
             await self._storage.mark_sealed(vm.id, self._clock())
-        return await self._held(ctx, agent_session_id, spec, pool)
+        held = await self._held(ctx, agent_session_id, spec, pool)
+        if (claim := self._claims.get(agent_session_id)) is not None:
+            claim.prepared = True
+        return held
 
     async def archived(self, ctx: TenantContext, agent_session_id: UUID) -> None:
         ctx.require(Permission.WRITE)
@@ -384,6 +417,12 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         await self._refill()
         return acted
 
+    async def commanded(self, agent_session_id: UUID) -> None:
+        claim = self._claims.pop(agent_session_id, None)
+        if claim is not None:
+            waited = (self._clock() - claim.at).total_seconds()
+            CLOUD_POOL_FIRST_COMMAND_SECONDS.labels(source=claim.source.value).observe(waited)
+
     async def close(self) -> None:
         if self._starting:
             await asyncio.gather(*self._starting, return_exceptions=True)
@@ -431,6 +470,11 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
             )
         state = await self._vms.state(vm.name)
         if state is VmState.RUNNING:
+            # Unsealed, or under this process's claim whose prepare has not
+            # returned, it is that claim asked again, never another.
+            claim = self._claims.get(agent_session_id)
+            if vm.sealed_at is not None and (claim is None or claim.prepared):
+                self._claimed(agent_session_id, ClaimSource.HELD, self._clock())
             return vm
         if state is VmState.ABSENT:
             await self._let_go(ctx, vm)
@@ -441,13 +485,15 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
             )
         await self._retire(ctx, vm)
         key = new_key()
-        again = await self._storage.rekey(vm.id, hash_token(key), self._clock())
+        bound = self._clock()
+        again = await self._storage.rekey(vm.id, hash_token(key), bound)
         if again is None:
             raise IsolationRefused(f"session {agent_session_id}'s VM is gone", clears=True)
         await self._seeds.launch_seeded(
             vm.name, self._spec(spec), None, seed(self._options.api_url, key)
         )
         await self._storage.mark_started(vm.id, self._clock())
+        self._claimed(agent_session_id, ClaimSource.RESTARTED, bound)
         return again
 
     async def _start(
@@ -498,13 +544,25 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
             )
         if got.vm.id != vm.id:
             log.info("session %s claimed warm VM %s", agent_session_id, got.vm.name)
+            self._claimed(agent_session_id, ClaimSource.WARM, now)
             self._spawn(self._refill())
             return got.vm
         if got.displaced is not None:
             await self._displace(vm, got.displaced)
         await self._launch(vm, self._spec(spec), self._options.image, key)
+        self._claimed(agent_session_id, ClaimSource.NEW, now)
         log.info("session %s: VM %s started", agent_session_id, vm.name)
         return vm
+
+    def _claimed(self, agent_session_id: UUID, source: ClaimSource, at: datetime) -> None:
+        """A claim of the session's VM, counted once by how it got it, and
+        kept until the first command on it, which records its wait."""
+        CLOUD_POOL_CLAIMS.labels(source=source.value).inc()
+        self._claims.pop(agent_session_id, None)
+        self._claims[agent_session_id] = Claim(source=source, at=at)
+        while len(self._claims) > CLAIMS_KEPT:
+            # The oldest claim whose loop ran no command waits for none.
+            del self._claims[next(iter(self._claims))]
 
     async def _limits(self) -> PoolLimits:
         """The pool's limits as its operators last wrote them, else as its
@@ -577,6 +635,9 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         await self._retire(rctx, vm)
         await self._vms.destroy(vm.name)
         await self._storage.delete_vm(vm.id)
+        if vm.agent_session_id is not None:
+            # Its claim waits for no command any more.
+            self._claims.pop(vm.agent_session_id, None)
         log.info("VM %s of session %s let go", vm.name, vm.agent_session_id)
 
     async def _retire(self, rctx: RequestContext, vm: PoolVm) -> None:

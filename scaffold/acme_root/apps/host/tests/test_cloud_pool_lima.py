@@ -11,8 +11,9 @@ workspace's directory: packed in the VM and read out through the relay,
 each part sealed under the session's key in the bucket; then the VM
 goes, and no disk of it is kept. The next loop's VM boots the pool's
 image, and its new host takes the directory back: the same file, and
-no Docker image, which lived outside it. The host's environment holds
-nothing of the platform's. What a command printed, and every part,
+no Docker image, which lived outside it. Each VM is a claim counted once,
+whose wait ends at its first command, and the restore is timed. The
+host's environment holds nothing of the platform's. What a command printed, and every part,
 crosses the store, here the local impl's, served on this host's
 loopback beside the API, which the guest reaches the same way.
 
@@ -36,6 +37,7 @@ from typing import Any
 import pytest
 import uvicorn
 from host_support import Stack, postgres, stack
+from prometheus_client import REGISTRY
 from runner_support import TOOLS, answers, assistant, runs
 
 from acme.infra.agent_workspaces import (
@@ -217,6 +219,16 @@ async def runner(api: Stack, image: str, vms: VmsLimaImpl) -> AsyncIterator[Runn
     await container.storage.close()
 
 
+def sampled(name: str) -> float:
+    """A metric's value the process holds, every label together."""
+    return sum(
+        sample.value
+        for metric in REGISTRY.collect()
+        for sample in metric.samples
+        if sample.name == name
+    )
+
+
 def printed(model: ModelProviderScriptedImpl, call: int) -> str:
     """What the command printed, as the model read it on a call."""
     return repr(model.calls[call])
@@ -234,6 +246,9 @@ async def test_a_session_of_the_cloud_pool_keeps_its_files_sealed_across_loops(
     session = await managers.agents.start_agent_session(
         owner, Start(id=new_id(), kind=KIND.name, title="a VM of its own")
     )
+    claims = sampled("acme_cloud_pool_claims_total")
+    waits = sampled("acme_cloud_pool_first_command_seconds_count")
+    restores = sampled("acme_cloud_pool_restore_seconds_count")
     try:
         # The first loop: a VM from the pool's image, its host, and a
         # command that builds an image and runs a container of it.
@@ -247,6 +262,10 @@ async def test_a_session_of_the_cloud_pool_keeps_its_files_sealed_across_loops(
         digest = re.search(r"(state-[0-9a-f]{32})", state)
         assert digest is not None, state
         assert state.count(digest.group(1)) >= 2, "the file, and the container's copy of it"
+        assert sampled("acme_cloud_pool_claims_total") == claims + 1, "one claim, a new VM"
+        assert sampled("acme_cloud_pool_first_command_seconds_count") == waits + 1, (
+            "its wait ends at the first of its commands, through the runner's transport"
+        )
 
         # The loop's end kept the directory in sealed parts, and let the
         # VM go with no disk kept.
@@ -282,6 +301,11 @@ async def test_a_session_of_the_cloud_pool_keeps_its_files_sealed_across_loops(
         found = printed(model, len(model.calls) - 1)
         assert digest.group(1) in found, found
         assert "images-0" in found, "what lived outside the directory is the image's again"
+        claimed = sampled("acme_cloud_pool_claims_total") - claims
+        assert sampled("acme_cloud_pool_first_command_seconds_count") - waits == claimed, (
+            "each claim's wait, once"
+        )
+        assert sampled("acme_cloud_pool_restore_seconds_count") > restores, "the restore, timed"
 
         # The VM's host holds nothing of the platform's, and its key is
         # spent and gone from the seed.

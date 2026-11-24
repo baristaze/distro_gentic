@@ -61,12 +61,15 @@ defaults, and a busier system moves them.
 | `-sweep-duration` | a sweep pass took longer than 30 seconds |
 | `-work-backlog`, `-work-dead-letter` | a ready work item waited ten minutes; an item failed for good |
 | `-outbox-lag`, `-outbox-dead-letter` | the oldest pending outbox row is five minutes old; a row failed for good |
+| `-prompt-cache-read-share` | the prompt cache served less than half of settled model calls' prompt tokens, for three hours |
 | `-api-tasks-below-desired`, `-maintenance-tasks-below-desired`, `-agent-session-runner-tasks-below-desired` | a service runs fewer tasks than it wants |
 
 The work and outbox numbers come from the worker's own log line each
 sweep pass, turned into metrics by filters, since both live in
 Postgres. A worker that is not running writes no line, and the tasks
-alarm reports it.
+alarm reports it. The prompt cache's share comes the same way from the
+runner's line for each settled model call, which carries its token
+counts and no text of it.
 
 ```bash
 aws cloudwatch describe-alarms --alarm-name-prefix acme-staging- \

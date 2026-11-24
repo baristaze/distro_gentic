@@ -14,6 +14,7 @@ variables {
   cluster_name               = "acme-test"
   api_log_group_name         = "/acme/test/api"
   maintenance_log_group_name = "/acme/test/maintenance"
+  runner_log_group_name      = "/acme/test/agent-session-runner"
   queue_names                = ["acme-test-webhooks"]
   service_names              = ["api", "maintenance"]
 }
@@ -104,8 +105,8 @@ run "the_thresholds_are_the_defaults" {
   }
 
   assert {
-    condition     = length(output.alarm_names) == 15
-    error_message = "The environment declares fifteen alarms, the work backlog, the work dead letter, the outbox lag, and the outbox dead letter among them."
+    condition     = length(output.alarm_names) == 16
+    error_message = "The environment declares sixteen alarms, the work backlog, the work dead letter, the outbox lag, and the outbox dead letter among them."
   }
 }
 
