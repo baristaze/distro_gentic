@@ -5,40 +5,59 @@ included, stay on its GitHub release. Releases are tagged
 `vMAJOR.MINOR.PATCH`; see `CONTRIBUTING.md` for what bumps which
 number.
 
-## 0.32.0 (2026-11-23)
+## 0.33.0 (2026-11-24)
 
-The platform's base is the engine at v0.28.0, so a person's view of a
-session names the engine's notices and shows a failed call without the
-advice meant for the model; and the local stack runs the cloud pool on
-Lima. Minor, with three reversals named below.
-
-### Changed
-
-- The base moves to the engine's v0.28.0: a response's calls run one
-  after another in the order the model made them, a call that waits for
-  a person put off until the person decides; the step view gives a
-  failed call's text as the tool's own, without the advice the model
-  reads, and the CLI prints a notice the engine wrote as
-  `from the engine: ...`; the portal shows a failed call's answer as
-  the tool's own text. Reversal: a client that read the advice from a
-  failed call's `text` in the step view no longer finds it there
-  (#229).
+The platform's base is the engine at v0.29.0; a relayed call is woken
+as its result lands, measured by its phases, and carries a small
+payload inline; a closed pool VM resolves only the names it needs; the
+platform's kinds that reach their workspace first prepare it early.
+Minor, with one reversal named below.
 
 ### Added
 
-- The local stack runs the cloud pool on Lima: `make cloud-pool` names
-  or builds the pool's image and runs the runner on the host with the
-  pool on, and `make cloud-pool-session` starts one session in a VM.
-  `ACME_CLOUD_POOL_S3_ENDPOINT_URL` names the address a pool VM reaches
-  the store at, apart from the browser's, and the exec relay signs a
-  pool VM's links for it; every other host gets the browser's. The
-  local app containers take `ACME_KEYS_ROOT_KEY` from `.env`. The
-  pool's image installs ripgrep (#228).
+- A closed VM of the cloud pool resolves only the names it needs,
+  closed at the network: the pool's module puts a DNS Firewall that
+  fails closed on a network only the pool uses, allowing
+  `allowed_names` alone; an open-egress VM resolves other names
+  through public resolvers its egress reaches. ADR 2074 (#231).
+- The cloud pool counts its claims by source
+  (`acme_cloud_pool_claims_total`), times its restores by archive size
+  and a claim's wait until its prepare returns
+  (`acme_cloud_pool_claim_wait_seconds`), and the default alarm set
+  raises one when the prompt cache's read share of settled model calls
+  falls (#232, #241).
+- An exec item's time is measured by its phases
+  (`acme_exec_relay_phase_seconds`) and its overhead
+  (`acme_exec_relay_overhead_seconds`); the host sends its own times
+  in the result it already pushes, and pushes again without them if a
+  replica refuses them. A core migration keeps the item's claimed time
+  and the host's times (#233).
+- The software engineer (v9) and analysis (v5) prepare their
+  workspace as their run's first model call goes out; a kind kept by
+  snapshots that prepares early is refused at load (#241).
 
-### Removed
+### Changed
 
-- A tree's concurrency bound, which nothing held: the engine's
-  `TreeLimits.concurrency` and `AgentTree.concurrency`, and the
-  platform's bounds view's `tree.concurrency`. Reversals: a kind whose
-  tree names it no longer builds, and the bounds view no longer carries
-  it (#229).
+- The platform's base moves to the engine's v0.29.0: a model call's
+  time to its first token, a kind's early prepare (ADR 1048), and the
+  tree's dead concurrency column dropped. The platform's first own
+  migrations sit above the engine's new ones, so a database migrated
+  before the move is made anew (ADR 0102) (#238).
+- The runner reads an exec result as it lands, woken over the engine's
+  stream-appended topic; its poll is the fallback (#240).
+- A file or output of an exec item of 64 KiB or less rides in the item
+  or its result, sealed under the session's key; an exec claim carries
+  its item's detail; the exec wire is at version 4. The item records
+  whether its runner reads inline bytes, so a runner of the release
+  before reads its results during a roll. ADR 2076. Reversal: the rule
+  that no file and no output rides in an item or its result gives way
+  to the bound (#242).
+
+### Fixed
+
+- The spec says once how the runner reaches a VM of the cloud pool:
+  through the exec relay; the direct transport serves only a workspace
+  on the runner's own machine (#233).
+- A change to the cloud pool's launch template reaches the VMs started
+  after it: the template moves its default version with each apply
+  (#239).
